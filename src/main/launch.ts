@@ -11,6 +11,8 @@ import crypto from "node:crypto";
 import { getDataRoot, getAssetsRoot, getLibrariesRoot, getVersionsRoot } from "./paths";
 
 const running = new Map<string, any>(); // instanceId -> child process
+const launching = new Set<string>(); // instanceId currently in launcher bootstrap
+const cancelRequested = new Set<string>(); // stop requested before child process is available
 
 export type LaunchRuntimePrefs = {
   jvmArgs?: string;
@@ -125,23 +127,37 @@ async function runHookCommand(phase: "pre-launch" | "post-exit", command: string
 }
 
 export function isInstanceRunning(instanceId: string) {
-  return running.has(instanceId);
+  return running.has(instanceId) || launching.has(instanceId);
+}
+
+function killChildProcess(child: any) {
+  if (!child) return;
+  try {
+    if (process.platform === "win32") {
+      spawnSync("taskkill", ["/PID", String(child.pid), "/T", "/F"], { stdio: "ignore" });
+    } else {
+      child.kill("SIGTERM");
+    }
+  } catch {}
 }
 
 export function stopInstance(instanceId: string) {
   const p = running.get(instanceId);
-  if (!p) return false;
+  if (p) {
+    killChildProcess(p);
+    running.delete(instanceId);
+    launching.delete(instanceId);
+    cancelRequested.delete(instanceId);
+    return true;
+  }
 
-  try {
-    if (process.platform === "win32") {
-      spawnSync("taskkill", ["/PID", String(p.pid), "/T", "/F"], { stdio: "ignore" });
-    } else {
-      p.kill("SIGTERM");
-    }
-  } catch {}
+  // Launch is still resolving files/metadata. Mark cancellation and stop as soon as child exists.
+  if (launching.has(instanceId)) {
+    cancelRequested.add(instanceId);
+    return true;
+  }
 
-  running.delete(instanceId);
-  return true;
+  return false;
 }
 
 /**
@@ -302,6 +318,8 @@ async function launchResolved(
   onLog?.(`[auth] name=${authorization.name} uuid=${authorization.uuid} xuid=${authorization.meta?.xuid}`);
 
   const launcher = new Client();
+  launching.add(instance.id);
+  cancelRequested.delete(instance.id);
 
   const versionsDir = getVersionsRoot(); // dataRoot/versions
   const fabricId = `fabric-loader-${instance.fabricLoaderVersion}-${instance.mcVersion}`;
@@ -365,13 +383,33 @@ async function launchResolved(
   launcher.on("data", (e: any) => onLog?.(`${String(e)}`));
   launcher.on("progress", (e: any) => onLog?.(`[progress] ${JSON.stringify(e)}`));
 
-  const child = await launcher.launch(launchOpts);
+  let child: any;
+  try {
+    child = await launcher.launch(launchOpts);
+  } catch (err) {
+    launching.delete(instance.id);
+    cancelRequested.delete(instance.id);
+    throw err;
+  }
   if (!child) throw new Error("minecraft-launcher-core returned null process.");
 
+  // Stop was requested while launch bootstrap was running.
+  if (cancelRequested.has(instance.id)) {
+    onLog?.("[launcher] Stop requested during launch. Terminating process.");
+    killChildProcess(child);
+    launching.delete(instance.id);
+    cancelRequested.delete(instance.id);
+    return false;
+  }
+
   running.set(instance.id, child);
+  launching.delete(instance.id);
+  cancelRequested.delete(instance.id);
 
   child.on?.("close", () => {
     running.delete(instance.id);
+    launching.delete(instance.id);
+    cancelRequested.delete(instance.id);
     onLog?.("[launcher] Game exited");
 
     const postExit = String(runtimePrefs?.postExit ?? "").trim();
@@ -384,6 +422,8 @@ async function launchResolved(
 
   child.on?.("error", (err: any) => {
     running.delete(instance.id);
+    launching.delete(instance.id);
+    cancelRequested.delete(instance.id);
     onLog?.(`[launcher] Process error: ${String(err?.message ?? err)}`);
   });
 

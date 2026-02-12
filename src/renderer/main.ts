@@ -306,10 +306,36 @@ function renderLaunchDiagnosis(diag: any | null) {
 }
 
 async function runLaunchDiagnosis(instanceId: string | null) {
-  if (!instanceId) return;
+  if (!instanceId) return null;
   const diag = await window.api.launchDiagnose(instanceId, launchLogBuffer);
   renderLaunchDiagnosis(diag);
   appendLog(`[diagnostics] ${diag.summary}`);
+  return diag;
+}
+
+function describeRollbackReason(reason: string) {
+  if (reason === "instance-preset") return "instance preset apply";
+  if (reason === "mods-refresh") return "mods refresh";
+  if (reason === "packs-refresh") return "packs refresh";
+  return "manual change";
+}
+
+async function maybeOfferRollback(instanceId: string, diag: any | null) {
+  if (!diag || diag.severity !== "critical") return;
+  const latest = await window.api.rollbackGetLatest(instanceId);
+  if (!latest) return;
+
+  const stamp = new Date(Number(latest.createdAt || Date.now())).toLocaleString();
+  const reason = describeRollbackReason(String(latest.reason || ""));
+  const yes = confirm(
+    `A critical launch issue was detected.\n\nRollback to last-known-good snapshot from ${stamp} (${reason})?`
+  );
+  if (!yes) return;
+
+  await window.api.rollbackRestoreLatest(instanceId);
+  state.instances = await window.api.instancesList();
+  await renderInstances();
+  appendLog(`[rollback] Restored snapshot from ${stamp} (${reason}).`);
 }
 
 async function guarded(fn: () => Promise<void>) {
@@ -600,6 +626,15 @@ async function applyInstancePreset(instanceId: string, mcVersion: string, preset
 
   try {
     appendLog(`[preset] Selecting "${preset.name}" for instance ${instanceId}.`);
+    try {
+      await window.api.rollbackCreateSnapshot(
+        instanceId,
+        "instance-preset",
+        `Before applying preset ${preset.name}`
+      );
+    } catch (err: any) {
+      appendLog(`[rollback] Snapshot skipped: ${String(err?.message ?? err)}`);
+    }
 
     for (const mod of CATALOG) {
       const shouldEnable = !!mod.required || preset.enableMods.includes(mod.id);
@@ -1745,7 +1780,8 @@ btnPlayActive.onclick = () =>
       postExit: s.postExit
     });
     if (!launchRes?.ok) {
-      await runLaunchDiagnosis(inst.id);
+      const diag = await runLaunchDiagnosis(inst.id);
+      await maybeOfferRollback(inst.id, diag);
     }
   });
 
@@ -1843,6 +1879,11 @@ modalUpdateMods.onclick = () =>
     const inst = (state.instances?.instances ?? []).find((x: any) => x.id === editInstanceId) ?? null;
     if (!inst) return;
     setStatus("Resolving mods…");
+    try {
+      await window.api.rollbackCreateSnapshot(inst.id, "mods-refresh", "Before manual mods refresh");
+    } catch (err: any) {
+      appendLog(`[rollback] Snapshot skipped: ${String(err?.message ?? err)}`);
+    }
     await window.api.modsRefresh(inst.id, inst.mcVersion);
     await renderInstanceMods(inst.id);
     await renderLocalContent(inst.id);
@@ -1867,6 +1908,11 @@ modalUpdatePacks.onclick = () =>
     const inst = (state.instances?.instances ?? []).find((x: any) => x.id === editInstanceId) ?? null;
     if (!inst) return;
     setStatus("Resolving packs…");
+    try {
+      await window.api.rollbackCreateSnapshot(inst.id, "packs-refresh", "Before manual packs refresh");
+    } catch (err: any) {
+      appendLog(`[rollback] Snapshot skipped: ${String(err?.message ?? err)}`);
+    }
     await window.api.packsRefresh(inst.id, inst.mcVersion);
     await renderRecommendedPacks(inst.id);
     await renderLocalContent(inst.id);

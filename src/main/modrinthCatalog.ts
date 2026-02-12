@@ -26,7 +26,7 @@ export const CATALOG: CatalogMod[] = [
   { id: "reeses-sodium-options", name: "Reese's Sodium Options", source: { kind: "modrinth", projectId: "Bh37bMuy" } },
   { id: "dynamic-fps", name: "Dynamic FPS", source: { kind: "modrinth", projectId: "LQ3K71Q1" } },
   { id: "distanthorizons", name: "Distant Horizons", source: { kind: "modrinth", projectId: "uCdwusMi" } },
-  { id: "mod-menu", name: "Mod Menu", source: { kind: "modrinth", projectId: "mOgUt4GM" } },
+  { id: "mod-menu", name: "Mod Menu", required: true, source: { kind: "modrinth", projectId: "mOgUt4GM" } },
   { id: "iris", name: "Iris Shaders", source: { kind: "modrinth", projectId: "YL57xq9U" } },
   { id: "emf", name: "Entity Model Features", required: true, source: { kind: "modrinth", projectId: "4I1XuqiY" } },
   { id: "etf", name: "Entity Texture Features", required: true, source: { kind: "modrinth", projectId: "BVzZfTc1" } }

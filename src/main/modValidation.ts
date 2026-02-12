@@ -30,9 +30,18 @@ type ModMeta = {
   id: string | null;
   version: string | null;
   depends: Record<string, string>;
+  provides: string[];
+  source: "top" | "nested";
 };
 
 const PROVIDED_DEPENDENCIES = new Set(["minecraft", "fabricloader", "fabric", "java"]);
+
+function normalizeModId(id: string) {
+  return String(id || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[-_]/g, "");
+}
 
 const KNOWN_CONFLICTS: Array<{ a: string; b: string; reason: string }> = [
   { a: "sodium", b: "embeddium", reason: "Do not install both render engines together." },
@@ -41,22 +50,72 @@ const KNOWN_CONFLICTS: Array<{ a: string; b: string; reason: string }> = [
 ];
 
 function readFabricModJson(filePath: string): ModMeta {
-  const base: ModMeta = { file: filePath, id: null, version: null, depends: {} };
+  const base: ModMeta = { file: filePath, id: null, version: null, depends: {}, provides: [], source: "top" };
   try {
     const zip = new AdmZip(filePath);
     const e = zip.getEntry("fabric.mod.json");
     if (!e) return base;
     const raw = zip.readAsText(e);
     const parsed = JSON.parse(raw) as any;
+    const provides = Array.isArray(parsed?.provides)
+      ? parsed.provides.filter((x: any) => typeof x === "string")
+      : [];
     return {
       file: filePath,
       id: typeof parsed?.id === "string" ? parsed.id : null,
       version: typeof parsed?.version === "string" ? parsed.version : null,
-      depends: typeof parsed?.depends === "object" && parsed?.depends ? parsed.depends : {}
+      depends: typeof parsed?.depends === "object" && parsed?.depends ? parsed.depends : {},
+      provides,
+      source: "top"
     };
   } catch {
     return base;
   }
+}
+
+function parseFabricModJson(raw: string, fileLabel: string, source: "top" | "nested"): ModMeta {
+  const base: ModMeta = { file: fileLabel, id: null, version: null, depends: {}, provides: [], source };
+  try {
+    const parsed = JSON.parse(raw) as any;
+    const provides = Array.isArray(parsed?.provides)
+      ? parsed.provides.filter((x: any) => typeof x === "string")
+      : [];
+    return {
+      file: fileLabel,
+      id: typeof parsed?.id === "string" ? parsed.id : null,
+      version: typeof parsed?.version === "string" ? parsed.version : null,
+      depends: typeof parsed?.depends === "object" && parsed?.depends ? parsed.depends : {},
+      provides,
+      source
+    };
+  } catch {
+    return base;
+  }
+}
+
+function readAllFabricModJsons(filePath: string): ModMeta[] {
+  const out: ModMeta[] = [];
+  try {
+    const zip = new AdmZip(filePath);
+    const top = zip.getEntry("fabric.mod.json");
+    if (top) out.push(parseFabricModJson(zip.readAsText(top), filePath, "top"));
+
+    for (const ent of zip.getEntries()) {
+      if (ent.isDirectory) continue;
+      if (!ent.entryName.toLowerCase().endsWith(".jar")) continue;
+      try {
+        const nested = new AdmZip(ent.getData());
+        const nestedMod = nested.getEntry("fabric.mod.json");
+        if (!nestedMod) continue;
+        out.push(parseFabricModJson(nested.readAsText(nestedMod), `${filePath}#${ent.entryName}`, "nested"));
+      } catch {
+        // ignore unreadable nested jars
+      }
+    }
+  } catch {
+    // ignore broken jars
+  }
+  return out.length ? out : [{ file: filePath, id: null, version: null, depends: {}, provides: [], source: "top" }];
 }
 
 function parseNumericVersion(v: string): number[] | null {
@@ -170,10 +229,14 @@ export function validateInstanceMods(instanceId: string): ValidationResult {
     .filter((f) => f.endsWith(".jar"))
     .map((f) => path.join(modsDir, f));
 
-  const metas = files.map(readFabricModJson);
+  const metas = files.flatMap(readAllFabricModJsons);
   const issues: ValidationIssue[] = [];
 
-  const byId = new Map<string, ModMeta[]>();
+  // Real physical mod ids from jar metadata (used for duplicate detection).
+  const byPrimaryId = new Map<string, ModMeta[]>();
+  // Available ids including aliases/provides (used for dependency resolution).
+  const availableIds = new Set<string>();
+  const availableNormalized = new Set<string>();
   for (const m of metas) {
     if (!m.id) {
       issues.push({
@@ -185,10 +248,18 @@ export function validateInstanceMods(instanceId: string): ValidationResult {
       });
       continue;
     }
-    byId.set(m.id, [...(byId.get(m.id) || []), m]);
+    if (m.source === "top") {
+      byPrimaryId.set(m.id, [...(byPrimaryId.get(m.id) || []), m]);
+    }
+    availableIds.add(m.id);
+    availableNormalized.add(normalizeModId(m.id));
+    for (const alias of m.provides || []) {
+      availableIds.add(alias);
+      availableNormalized.add(normalizeModId(alias));
+    }
   }
 
-  for (const [id, list] of byId.entries()) {
+  for (const [id, list] of byPrimaryId.entries()) {
     if (list.length > 1) {
       issues.push({
         code: "duplicate-mod-id",
@@ -219,7 +290,8 @@ export function validateInstanceMods(instanceId: string): ValidationResult {
         continue;
       }
       if (PROVIDED_DEPENDENCIES.has(depId)) continue;
-      if (!byId.has(depId)) {
+      const depNorm = normalizeModId(depId);
+      if (!availableIds.has(depId) && !availableNormalized.has(depNorm)) {
         issues.push({
           code: "missing-dependency",
           severity: "critical",
@@ -232,7 +304,7 @@ export function validateInstanceMods(instanceId: string): ValidationResult {
     }
   }
 
-  const installedIds = new Set(Array.from(byId.keys()));
+  const installedIds = new Set(Array.from(byPrimaryId.keys()));
   for (const c of KNOWN_CONFLICTS) {
     if (installedIds.has(c.a) && installedIds.has(c.b)) {
       issues.push({
@@ -255,14 +327,22 @@ export function validateInstanceMods(instanceId: string): ValidationResult {
     });
   }
 
+  // Collapse duplicate issue rows that can happen when multiple jars surface the same dependency miss.
+  const uniq = new Map<string, ValidationIssue>();
+  for (const issue of issues) {
+    const key = `${issue.code}|${issue.title}|${issue.detail}`;
+    if (!uniq.has(key)) uniq.set(key, issue);
+  }
+  const dedupedIssues = Array.from(uniq.values());
+
   const summary: ValidationResult["summary"] =
-    issues.some((x) => x.severity === "critical")
+    dedupedIssues.some((x) => x.severity === "critical")
       ? "critical"
-      : issues.length
+      : dedupedIssues.length
         ? "warnings"
         : "no-issues";
 
-  return { summary, issues };
+  return { summary, issues: dedupedIssues };
 }
 
 export function fixDuplicateMods(instanceId: string) {

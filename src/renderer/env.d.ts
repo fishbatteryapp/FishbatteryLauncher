@@ -125,6 +125,18 @@ declare global {
         instanceId: string,
         action: "install-fabric-loader" | "refresh-mods" | "fix-duplicate-mods" | "none"
       ) => Promise<{ ok: boolean; message: string; removed?: string[] }>;
+      rollbackCreateSnapshot: (
+        instanceId: string,
+        reason: "instance-preset" | "mods-refresh" | "packs-refresh" | "manual",
+        note?: string
+      ) => Promise<any>;
+      rollbackGetLatest: (instanceId: string) => Promise<{
+        id: string;
+        createdAt: number;
+        reason: string;
+        note?: string;
+      } | null>;
+      rollbackRestoreLatest: (instanceId: string) => Promise<any>;
       updaterGetState: () => Promise<{
         status: "idle" | "checking" | "update-available" | "up-to-date" | "downloading" | "downloaded" | "error";
         currentVersion: string;

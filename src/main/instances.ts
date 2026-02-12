@@ -75,10 +75,20 @@ export function updateInstance(id: string, patch: Partial<InstanceConfig>) {
 
 export function removeInstance(id: string) {
   if (!id) throw new Error("removeInstance: id is missing");
+  const instanceDir = getInstanceDir(id);
+  const instancesRoot = path.resolve(getInstancesRoot());
+  const resolvedInstanceDir = path.resolve(instanceDir);
+
   const db = loadDb();
   db.instances = db.instances.filter((i) => i.id !== id);
   if (db.activeInstanceId === id) db.activeInstanceId = db.instances[0]?.id ?? null;
   saveDb(db);
+
+  // Remove the instance directory from disk as part of delete.
+  // Safety guard ensures we only delete inside the instances root.
+  if (resolvedInstanceDir.startsWith(instancesRoot + path.sep) && fs.existsSync(resolvedInstanceDir)) {
+    fs.rmSync(resolvedInstanceDir, { recursive: true, force: true });
+  }
 }
 
 function copyDirRecursive(src: string, dst: string) {

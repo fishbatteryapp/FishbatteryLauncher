@@ -29,6 +29,11 @@ import { exportInstanceToZip, importInstanceFromZip } from "./instanceTransfer";
 import { buildOptimizerPreview, applyOptimizer, restoreOptimizerDefaults } from "./optimizer";
 import { listBenchmarks, runBenchmark } from "./benchmark";
 import { fixDuplicateMods, validateInstanceMods } from "./modValidation";
+import {
+  createRollbackSnapshot,
+  getLatestRollbackSnapshot,
+  restoreLatestRollbackSnapshot
+} from "./rollback";
 import { applyLaunchDiagnosisFix, diagnoseLaunchLogs, type LaunchFixAction } from "./launchDiagnostics";
 import {
   exportServerProfile,
@@ -349,6 +354,24 @@ export function registerIpc() {
   ipcMain.handle("launch:applyFix", async (_e, instanceId: string, action: LaunchFixAction) => {
     if (!instanceId) throw new Error("launch:applyFix: instanceId missing");
     return applyLaunchDiagnosisFix(instanceId, action || "none");
+  });
+
+  // ---------- Rollback ----------
+  ipcMain.handle("rollback:createSnapshot", async (_e, instanceId: string, reason: string, note?: string) => {
+    if (!instanceId) throw new Error("rollback:createSnapshot: instanceId missing");
+    return createRollbackSnapshot(
+      instanceId,
+      (reason as "instance-preset" | "mods-refresh" | "packs-refresh" | "manual") || "manual",
+      note
+    );
+  });
+  ipcMain.handle("rollback:getLatest", async (_e, instanceId: string) => {
+    if (!instanceId) throw new Error("rollback:getLatest: instanceId missing");
+    return getLatestRollbackSnapshot(instanceId);
+  });
+  ipcMain.handle("rollback:restoreLatest", async (_e, instanceId: string) => {
+    if (!instanceId) throw new Error("rollback:restoreLatest: instanceId missing");
+    return restoreLatestRollbackSnapshot(instanceId);
   });
 
   // ---------- Optimizer ----------

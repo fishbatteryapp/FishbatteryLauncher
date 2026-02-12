@@ -81,6 +81,13 @@ contextBridge.exposeInMainWorld("api", {
     instanceId: string,
     action: "install-fabric-loader" | "refresh-mods" | "fix-duplicate-mods" | "none"
   ) => ipcRenderer.invoke("launch:applyFix", instanceId, action),
+  rollbackCreateSnapshot: (
+    instanceId: string,
+    reason: "instance-preset" | "mods-refresh" | "packs-refresh" | "manual",
+    note?: string
+  ) => ipcRenderer.invoke("rollback:createSnapshot", instanceId, reason, note),
+  rollbackGetLatest: (instanceId: string) => ipcRenderer.invoke("rollback:getLatest", instanceId),
+  rollbackRestoreLatest: (instanceId: string) => ipcRenderer.invoke("rollback:restoreLatest", instanceId),
 
   optimizerPreview: (profile: "conservative" | "balanced" | "aggressive") =>
     ipcRenderer.invoke("optimizer:preview", profile),
