@@ -131,7 +131,14 @@ const modrinthResultsLabel = $("modrinthResultsLabel");
 const modrinthSearchResults = $("modrinthSearchResults");
 const btnPickInstanceIcon = $("btnPickInstanceIcon");
 const btnClearInstanceIcon = $("btnClearInstanceIcon");
+const btnResetInstanceIconTransform = $("btnResetInstanceIconTransform");
 const instanceIconHint = $("instanceIconHint");
+const instanceIconScale = $("instanceIconScale") as HTMLInputElement;
+const instanceIconScaleValue = $("instanceIconScaleValue");
+const instanceIconOffsetX = $("instanceIconOffsetX") as HTMLInputElement;
+const instanceIconOffsetXValue = $("instanceIconOffsetXValue");
+const instanceIconOffsetY = $("instanceIconOffsetY") as HTMLInputElement;
+const instanceIconOffsetYValue = $("instanceIconOffsetYValue");
 const btnCreateImportNow = $("btnCreateImportNow");
 const createCustomFields = $("createCustomFields");
 const createFilterReleases = $("createFilterReleases");
@@ -185,6 +192,33 @@ let selectedModrinthPack: {
 let selectedProviderPack: { id: string; name: string; iconUrl?: string | null } | null = null;
 let selectedCreateIconPath: string | null = null;
 let clearExistingIconOnSave = false;
+let selectedIconScalePct = 100;
+let selectedIconOffsetXPct = 0;
+let selectedIconOffsetYPct = 0;
+
+function getSelectedIconTransformPayload() {
+  return {
+    scale: Math.max(0.2, Math.min(5, selectedIconScalePct / 100)),
+    offsetXPct: Math.max(-100, Math.min(100, selectedIconOffsetXPct)),
+    offsetYPct: Math.max(-100, Math.min(100, selectedIconOffsetYPct))
+  };
+}
+
+function renderIconTransformUi() {
+  instanceIconScale.value = String(selectedIconScalePct);
+  instanceIconScaleValue.textContent = `${selectedIconScalePct}%`;
+  instanceIconOffsetX.value = String(selectedIconOffsetXPct);
+  instanceIconOffsetXValue.textContent = `${selectedIconOffsetXPct}%`;
+  instanceIconOffsetY.value = String(selectedIconOffsetYPct);
+  instanceIconOffsetYValue.textContent = `${selectedIconOffsetYPct}%`;
+}
+
+function resetSelectedIconTransform() {
+  selectedIconScalePct = 100;
+  selectedIconOffsetXPct = 0;
+  selectedIconOffsetYPct = 0;
+  renderIconTransformUi();
+}
 
 // ---------------- Settings ----------------
 type InstancePresetId = "none" | "max-fps" | "shader-friendly" | "distant-horizons-worldgen";
@@ -2004,6 +2038,7 @@ async function renderInstances() {
       selectedCreateIconPath = null;
       clearExistingIconOnSave = false;
       instanceIconHint.textContent = "Keep existing icon unless you pick a new one.";
+      resetSelectedIconTransform();
       fillInstancePresetDropdown(i.instancePreset ?? "none");
       await fillInstanceAccountDropdown(i.accountId ?? null);
       await renderServerEntries(i.id);
@@ -2469,7 +2504,7 @@ btnCreateImportNow.onclick = () =>
     if (!res.ok || res.canceled) return;
     if (selectedCreateIconPath && res.instance?.id) {
       try {
-        await window.api.instancesSetIconFromFile(res.instance.id, selectedCreateIconPath);
+        await window.api.instancesSetIconFromFile(res.instance.id, selectedCreateIconPath, getSelectedIconTransformPayload());
       } catch (err: any) {
         appendLog(`[icon] Failed applying selected icon: ${String(err?.message ?? err)}`);
       }
@@ -2498,7 +2533,11 @@ btnProviderImportArchive.onclick = () =>
     if (res.result?.instance?.id) {
       if (selectedCreateIconPath) {
         try {
-          await window.api.instancesSetIconFromFile(res.result.instance.id, selectedCreateIconPath);
+          await window.api.instancesSetIconFromFile(
+            res.result.instance.id,
+            selectedCreateIconPath,
+            getSelectedIconTransformPayload()
+          );
         } catch (err: any) {
           appendLog(`[icon] Failed applying selected icon: ${String(err?.message ?? err)}`);
         }
@@ -2536,6 +2575,21 @@ btnClearInstanceIcon.onclick = () => {
   clearExistingIconOnSave = true;
   instanceIconHint.textContent = "Icon will be cleared on save.";
 };
+btnResetInstanceIconTransform.onclick = () => {
+  resetSelectedIconTransform();
+};
+instanceIconScale.oninput = () => {
+  selectedIconScalePct = Number(instanceIconScale.value || 100);
+  renderIconTransformUi();
+};
+instanceIconOffsetX.oninput = () => {
+  selectedIconOffsetXPct = Number(instanceIconOffsetX.value || 0);
+  renderIconTransformUi();
+};
+instanceIconOffsetY.oninput = () => {
+  selectedIconOffsetYPct = Number(instanceIconOffsetY.value || 0);
+  renderIconTransformUi();
+};
 
 btnCreate.onclick = async () => {
   modalMode = "create";
@@ -2557,6 +2611,7 @@ btnCreate.onclick = async () => {
   selectedProviderPack = null;
   selectedCreateIconPath = null;
   clearExistingIconOnSave = false;
+  resetSelectedIconTransform();
   instanceIconHint.textContent = "No custom icon selected.";
   modrinthSearchInput.value = "";
   modrinthSearchResults.innerHTML = "";
@@ -2606,7 +2661,11 @@ modalCreate.onclick = () =>
         if (!res.ok || res.canceled) return;
         if (selectedCreateIconPath && res.instance?.id) {
           try {
-            await window.api.instancesSetIconFromFile(res.instance.id, selectedCreateIconPath);
+            await window.api.instancesSetIconFromFile(
+              res.instance.id,
+              selectedCreateIconPath,
+              getSelectedIconTransformPayload()
+            );
           } catch (err: any) {
             appendLog(`[icon] Failed applying selected icon: ${String(err?.message ?? err)}`);
           }
@@ -2640,7 +2699,11 @@ modalCreate.onclick = () =>
             if (installed?.instance?.id) {
               if (selectedCreateIconPath) {
                 try {
-                  await window.api.instancesSetIconFromFile(installed.instance.id, selectedCreateIconPath);
+                  await window.api.instancesSetIconFromFile(
+                    installed.instance.id,
+                    selectedCreateIconPath,
+                    getSelectedIconTransformPayload()
+                  );
                 } catch (err: any) {
                   appendLog(`[icon] Failed applying selected icon: ${String(err?.message ?? err)}`);
                 }
@@ -2673,7 +2736,11 @@ modalCreate.onclick = () =>
             if (!res.ok || res.canceled) return;
             if (selectedCreateIconPath && res.result?.instance?.id) {
               try {
-                await window.api.instancesSetIconFromFile(res.result.instance.id, selectedCreateIconPath);
+                await window.api.instancesSetIconFromFile(
+                  res.result.instance.id,
+                  selectedCreateIconPath,
+                  getSelectedIconTransformPayload()
+                );
               } catch (err: any) {
                 appendLog(`[icon] Failed applying selected icon: ${String(err?.message ?? err)}`);
               }
@@ -2711,7 +2778,11 @@ modalCreate.onclick = () =>
         if (res.instance?.id) {
           if (selectedCreateIconPath) {
             try {
-              await window.api.instancesSetIconFromFile(res.instance.id, selectedCreateIconPath);
+              await window.api.instancesSetIconFromFile(
+                res.instance.id,
+                selectedCreateIconPath,
+                getSelectedIconTransformPayload()
+              );
             } catch (err: any) {
               appendLog(`[icon] Failed applying selected icon: ${String(err?.message ?? err)}`);
             }
@@ -2778,7 +2849,7 @@ modalCreate.onclick = () =>
 
       if (selectedCreateIconPath) {
         try {
-          await window.api.instancesSetIconFromFile(id, selectedCreateIconPath);
+          await window.api.instancesSetIconFromFile(id, selectedCreateIconPath, getSelectedIconTransformPayload());
         } catch (err: any) {
           appendLog(`[icon] Failed applying selected icon: ${String(err?.message ?? err)}`);
         }
@@ -2855,7 +2926,11 @@ modalCreate.onclick = () =>
 
       if (selectedCreateIconPath) {
         try {
-          await window.api.instancesSetIconFromFile(editInstanceId, selectedCreateIconPath);
+          await window.api.instancesSetIconFromFile(
+            editInstanceId,
+            selectedCreateIconPath,
+            getSelectedIconTransformPayload()
+          );
         } catch (err: any) {
           appendLog(`[icon] Failed applying selected icon: ${String(err?.message ?? err)}`);
         }

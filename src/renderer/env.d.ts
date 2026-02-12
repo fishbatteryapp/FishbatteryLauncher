@@ -17,7 +17,11 @@ declare global {
       instancesRemove: (id: string) => Promise<any>;
       instancesDuplicate: (id: string) => Promise<any>;
       instancesPickIcon: () => Promise<string | null>;
-      instancesSetIconFromFile: (id: string, filePath: string) => Promise<string>;
+      instancesSetIconFromFile: (
+        id: string,
+        filePath: string,
+        transform?: { scale?: number; offsetXPct?: number; offsetYPct?: number }
+      ) => Promise<string>;
       instancesSetIconFromUrl: (id: string, url: string) => Promise<string>;
       instancesSetIconFallback: (id: string, label: string, theme?: "green" | "blue") => Promise<string>;
       instancesGetIcon: (id: string) => Promise<string | null>;

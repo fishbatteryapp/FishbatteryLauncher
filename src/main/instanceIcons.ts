@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import fetch from "node-fetch";
+import { nativeImage } from "electron";
 import { getInstanceDir } from "./instances";
 
 const ALLOWED_EXT = new Set([".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"]);
@@ -18,6 +19,12 @@ function normalizeExt(name: string) {
   return ALLOWED_EXT.has(ext) ? ext : ".png";
 }
 
+export type InstanceIconTransform = {
+  scale?: number;
+  offsetXPct?: number;
+  offsetYPct?: number;
+};
+
 export function clearInstanceIcon(instanceId: string) {
   const p = iconPath(instanceId);
   if (fs.existsSync(p)) {
@@ -25,14 +32,39 @@ export function clearInstanceIcon(instanceId: string) {
   }
 }
 
-export function setInstanceIconFromFile(instanceId: string, sourcePath: string) {
+export function setInstanceIconFromFile(instanceId: string, sourcePath: string, transform?: InstanceIconTransform) {
   if (!sourcePath || !fs.existsSync(sourcePath)) throw new Error("Icon file not found");
   const ext = normalizeExt(sourcePath);
   if (!ALLOWED_EXT.has(ext)) throw new Error("Unsupported icon format");
 
+  const img = nativeImage.createFromPath(sourcePath);
+  if (img.isEmpty()) throw new Error("Could not decode icon image");
+  const sourceSize = img.getSize();
+  const srcW = Math.max(1, Number(sourceSize.width || 1));
+  const srcH = Math.max(1, Number(sourceSize.height || 1));
+  const target = 256;
+
+  const scale = Math.min(5, Math.max(0.2, Number(transform?.scale ?? 1)));
+  const offsetXPct = Math.min(100, Math.max(-100, Number(transform?.offsetXPct ?? 0)));
+  const offsetYPct = Math.min(100, Math.max(-100, Number(transform?.offsetYPct ?? 0)));
+
+  const coverScale = Math.max(target / srcW, target / srcH) * scale;
+  const cropW = Math.max(1, Math.min(srcW, Math.round(target / coverScale)));
+  const cropH = Math.max(1, Math.min(srcH, Math.round(target / coverScale)));
+
+  const maxShiftX = Math.max(0, (srcW - cropW) / 2);
+  const maxShiftY = Math.max(0, (srcH - cropH) / 2);
+  const shiftX = (offsetXPct / 100) * maxShiftX;
+  const shiftY = (offsetYPct / 100) * maxShiftY;
+  const cropX = Math.max(0, Math.min(srcW - cropW, Math.round(srcW / 2 - cropW / 2 + shiftX)));
+  const cropY = Math.max(0, Math.min(srcH - cropH, Math.round(srcH / 2 - cropH / 2 + shiftY)));
+
+  const cropped = img.crop({ x: cropX, y: cropY, width: cropW, height: cropH });
+  const resized = cropped.resize({ width: target, height: target, quality: "best" });
+
   const out = iconPath(instanceId);
   ensureDir(path.dirname(out));
-  fs.copyFileSync(sourcePath, out);
+  fs.writeFileSync(out, resized.toPNG());
   return out;
 }
 

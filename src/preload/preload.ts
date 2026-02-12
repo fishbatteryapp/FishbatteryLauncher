@@ -19,7 +19,11 @@ contextBridge.exposeInMainWorld("api", {
   instancesRemove: (id: string) => ipcRenderer.invoke("instances:remove", id),
   instancesDuplicate: (id: string) => ipcRenderer.invoke("instances:duplicate", id),
   instancesPickIcon: () => ipcRenderer.invoke("instances:pickIcon"),
-  instancesSetIconFromFile: (id: string, filePath: string) => ipcRenderer.invoke("instances:setIconFromFile", id, filePath),
+  instancesSetIconFromFile: (
+    id: string,
+    filePath: string,
+    transform?: { scale?: number; offsetXPct?: number; offsetYPct?: number }
+  ) => ipcRenderer.invoke("instances:setIconFromFile", id, filePath, transform),
   instancesSetIconFromUrl: (id: string, url: string) => ipcRenderer.invoke("instances:setIconFromUrl", id, url),
   instancesSetIconFallback: (id: string, label: string, theme?: "green" | "blue") =>
     ipcRenderer.invoke("instances:setIconFallback", id, label, theme),

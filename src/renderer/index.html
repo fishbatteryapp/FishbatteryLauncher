@@ -208,8 +208,27 @@
               <div class="row" style="justify-content:flex-start; gap:8px">
                 <button id="btnPickInstanceIcon" class="btn" type="button">Pick icon</button>
                 <button id="btnClearInstanceIcon" class="btn" type="button">Clear</button>
+                <button id="btnResetInstanceIconTransform" class="btn" type="button">Reset fit</button>
               </div>
               <div id="instanceIconHint" class="muted" style="font-size:12px; margin-top:6px">No custom icon selected.</div>
+              <div id="instanceIconTransformControls" style="margin-top:8px">
+                <div class="setHelp">Resize and reposition custom icon</div>
+                <div class="row" style="justify-content:flex-start; gap:8px; margin-top:6px">
+                  <label for="instanceIconScale" style="min-width:78px">Zoom</label>
+                  <input id="instanceIconScale" type="range" min="50" max="250" step="1" value="100" style="flex:1" />
+                  <span id="instanceIconScaleValue" class="muted" style="font-size:12px; min-width:48px">100%</span>
+                </div>
+                <div class="row" style="justify-content:flex-start; gap:8px; margin-top:4px">
+                  <label for="instanceIconOffsetX" style="min-width:78px">Position X</label>
+                  <input id="instanceIconOffsetX" type="range" min="-100" max="100" step="1" value="0" style="flex:1" />
+                  <span id="instanceIconOffsetXValue" class="muted" style="font-size:12px; min-width:48px">0%</span>
+                </div>
+                <div class="row" style="justify-content:flex-start; gap:8px; margin-top:4px">
+                  <label for="instanceIconOffsetY" style="min-width:78px">Position Y</label>
+                  <input id="instanceIconOffsetY" type="range" min="-100" max="100" step="1" value="0" style="flex:1" />
+                  <span id="instanceIconOffsetYValue" class="muted" style="font-size:12px; min-width:48px">0%</span>
+                </div>
+              </div>
             </div>
 
             <div class="field">

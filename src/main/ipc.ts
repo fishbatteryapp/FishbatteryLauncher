@@ -156,11 +156,19 @@ export function registerIpc() {
     return picked.filePaths[0];
   });
 
-  ipcMain.handle("instances:setIconFromFile", async (_e, instanceId: string, filePath: string) => {
+  ipcMain.handle(
+    "instances:setIconFromFile",
+    async (
+      _e,
+      instanceId: string,
+      filePath: string,
+      transform?: { scale?: number; offsetXPct?: number; offsetYPct?: number }
+    ) => {
     if (!instanceId) throw new Error("instances:setIconFromFile: instanceId missing");
     if (!filePath) throw new Error("instances:setIconFromFile: filePath missing");
-    return setInstanceIconFromFile(instanceId, filePath);
-  });
+      return setInstanceIconFromFile(instanceId, filePath, transform);
+    }
+  );
 
   ipcMain.handle("instances:setIconFromUrl", async (_e, instanceId: string, url: string) => {
     if (!instanceId) throw new Error("instances:setIconFromUrl: instanceId missing");
