@@ -56,3 +56,8 @@ If you find a bug, include steps to reproduce and the relevant logs.
 - `minecraft-launcher-core`
 - `msmc`
 - Modrinth API
+
+
+## License
+
+FishbatteryLauncher is licensed under the GNU General Public License v3.0.
