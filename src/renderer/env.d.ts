@@ -88,6 +88,11 @@ declare global {
           tags?: string[];
         }>;
       }>;
+      providerPacksInstall: (
+        provider: "atlauncher" | "ftb",
+        packId: string,
+        defaults?: { name?: string; accountId?: string | null; memoryMb?: number }
+      ) => Promise<{ instance: any; notes: string[] }>;
       packArchiveImport: (payload: {
         provider: "auto" | "curseforge" | "technic" | "atlauncher" | "ftb";
         defaults?: {

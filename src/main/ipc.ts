@@ -31,7 +31,7 @@ import { exportInstanceToZip, importInstanceFromZip } from "./instanceTransfer";
 import { checkInstanceLockfileDrift, generateInstanceLockfile } from "./instanceLockfile";
 import { installModrinthModpack, searchModrinthModpacks } from "./modrinthPacks";
 import { importPackArchive, type ProviderHint } from "./packArchiveImport";
-import { searchProviderPacks, type ExternalProvider } from "./providerPacks";
+import { installProviderPackFromSearch, searchProviderPacks, type ExternalProvider } from "./providerPacks";
 import {
   clearInstanceIcon,
   getInstanceIconDataUrl,
@@ -237,6 +237,31 @@ export function registerIpc() {
     }
     return searchProviderPacks(p, String(query ?? ""), Number(limit ?? 24));
   });
+
+  ipcMain.handle(
+    "providerPacks:install",
+    async (
+      _e,
+      provider: string,
+      packId: string,
+      defaults?: { name?: string; accountId?: string | null; memoryMb?: number }
+    ) => {
+      const p = String(provider || "").trim().toLowerCase() as ExternalProvider;
+      if (!["atlauncher", "ftb"].includes(p)) {
+        throw new Error(`providerPacks:install: unsupported provider ${provider}`);
+      }
+      if (!packId) throw new Error("providerPacks:install: packId missing");
+      return installProviderPackFromSearch({
+        provider: p,
+        packId: String(packId),
+        defaults: {
+          name: defaults?.name ? String(defaults.name) : undefined,
+          accountId: defaults?.accountId ?? null,
+          memoryMb: Number(defaults?.memoryMb || 6144)
+        }
+      });
+    }
+  );
 
   ipcMain.handle("lockfile:generate", async (_e, instanceId: string) => {
     if (!instanceId) throw new Error("lockfile:generate: instanceId missing");

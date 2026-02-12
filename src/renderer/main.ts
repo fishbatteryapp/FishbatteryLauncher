@@ -2164,7 +2164,7 @@ function setCreateSource(next: "custom" | "import" | "modrinth" | "curseforge" |
   createCustomFields.style.display = isCustom ? "" : "none";
   createProviderImport.style.display = isImport ? "" : "none";
   createProviderMarketplace.style.display = isMarket ? "" : "none";
-  const isArchiveProvider = next === "curseforge" || next === "technic" || next === "atlauncher" || next === "ftb";
+  const isArchiveProvider = next === "curseforge" || next === "technic";
   createModrinthPanel.style.display = next === "modrinth" ? "" : "none";
   createCurseForgePanel.style.display = isArchiveProvider ? "" : "none";
   if (modalMode === "edit") modalCreate.textContent = "Save";
@@ -2195,9 +2195,13 @@ function setCreateSource(next: "custom" | "import" | "modrinth" | "curseforge" |
   createSourceHint.textContent =
     next === "modrinth"
       ? "Search Modrinth and install directly to a new instance."
-      : "Select a provider archive (.zip/.mrpack) and import it into a new instance.";
+      : isArchiveProvider
+        ? "Select a provider archive (.zip/.mrpack) and import it into a new instance."
+        : "Search and install directly from provider catalog.";
   if (isArchiveProvider) {
-    providerArchiveHelp.textContent = `Import ${next === "atlauncher" ? "ATLauncher" : next.toUpperCase()} archive and create a new instance.`;
+    providerArchiveHelp.textContent = `Import ${next.toUpperCase()} archive and create a new instance.`;
+  }
+  if (next === "atlauncher" || next === "ftb") {
     void guarded(async () => {
       await runProviderSearch();
     });
@@ -2207,6 +2211,27 @@ function setCreateSource(next: "custom" | "import" | "modrinth" | "curseforge" |
       await runModrinthSearch();
     });
   }
+}
+
+function fallbackPackIconDataUrl(label: string, theme: "blue" | "green" = "blue") {
+  const text = String(label || "?")
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((x) => x[0]?.toUpperCase() || "")
+    .join("") || "?";
+  const colors =
+    theme === "green"
+      ? { a: "#0e3f2d", b: "#1d7d58", c: "#86efac" }
+      : { a: "#102a43", b: "#1f4f7a", c: "#bfdbfe" };
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96">` +
+    `<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">` +
+    `<stop offset="0%" stop-color="${colors.a}"/><stop offset="100%" stop-color="${colors.b}"/></linearGradient></defs>` +
+    `<rect width="96" height="96" rx="18" fill="url(#g)"/>` +
+    `<text x="50%" y="56%" dominant-baseline="middle" text-anchor="middle" font-family="Segoe UI, Arial" font-size="32" font-weight="700" fill="${colors.c}">${text}</text>` +
+    `</svg>`;
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 }
 
 async function runModrinthSearch() {
@@ -2227,10 +2252,10 @@ async function runModrinthSearch() {
     row.className = "modrinthResult";
 
     const img = document.createElement("img");
-    if (h.iconUrl) img.src = h.iconUrl;
+    const fallback = fallbackPackIconDataUrl(h.title, "blue");
+    img.src = h.iconUrl || fallback;
     img.onerror = () => {
-      img.removeAttribute("src");
-      img.style.opacity = "0.45";
+      if (img.src !== fallback) img.src = fallback;
     };
     row.appendChild(img);
 
@@ -2299,25 +2324,13 @@ async function runProviderSearch() {
     const row = document.createElement("div");
     row.className = "modrinthResult";
 
-    if (h.iconUrl) {
-      const img = document.createElement("img");
-      img.src = h.iconUrl;
-      img.onerror = () => {
-        img.removeAttribute("src");
-        img.style.display = "none";
-      };
-      row.appendChild(img);
-    } else {
-      const icon = document.createElement("div");
-      icon.className = "providerIcon";
-      icon.textContent = String(h.name || "?")
-        .split(/\s+/)
-        .filter(Boolean)
-        .slice(0, 2)
-        .map((x) => x[0]?.toUpperCase() || "")
-        .join("");
-      row.appendChild(icon);
-    }
+    const img = document.createElement("img");
+    const fallback = fallbackPackIconDataUrl(h.name, "blue");
+    img.src = h.iconUrl || fallback;
+    img.onerror = () => {
+      if (img.src !== fallback) img.src = fallback;
+    };
+    row.appendChild(img);
 
     const left = document.createElement("div");
     left.style.display = "flex";
@@ -2613,39 +2626,75 @@ modalCreate.onclick = () =>
         createSource === "ftb"
       ) {
         if (createSource !== "modrinth") {
-          const res = await window.api.packArchiveImport({
-            provider: createSource,
-            defaults: {
+          if (createSource === "atlauncher" || createSource === "ftb") {
+            if (!selectedProviderPack?.id) {
+              alert("Select a pack from search results first.");
+              return;
+            }
+            setStatus(`Installing ${selectedProviderPack.name}...`);
+            const installed = await window.api.providerPacksInstall(createSource, selectedProviderPack.id, {
               name: newName.value?.trim() || undefined,
-              mcVersion: newVersion.value || undefined,
               accountId: instanceAccount.value || null,
               memoryMb: Number(newMem.value || 6144)
+            });
+            if (installed?.instance?.id) {
+              if (selectedCreateIconPath) {
+                try {
+                  await window.api.instancesSetIconFromFile(installed.instance.id, selectedCreateIconPath);
+                } catch (err: any) {
+                  appendLog(`[icon] Failed applying selected icon: ${String(err?.message ?? err)}`);
+                }
+              } else if (selectedProviderPack?.iconUrl) {
+                try {
+                  await window.api.instancesSetIconFromUrl(installed.instance.id, selectedProviderPack.iconUrl);
+                } catch {
+                  await window.api.instancesSetIconFallback(installed.instance.id, selectedProviderPack.name || "Pack", "blue");
+                }
+              } else {
+                await window.api.instancesSetIconFallback(installed.instance.id, selectedProviderPack.name || "Pack", "blue");
+              }
             }
-          });
-          if (!res.ok || res.canceled) return;
-          if (selectedCreateIconPath && res.result?.instance?.id) {
-            try {
-              await window.api.instancesSetIconFromFile(res.result.instance.id, selectedCreateIconPath);
-            } catch (err: any) {
-              appendLog(`[icon] Failed applying selected icon: ${String(err?.message ?? err)}`);
+            setStatus("");
+            state.instances = await window.api.instancesList();
+            await renderInstances();
+            appendLog(`[provider] Installed ${createSource} pack "${installed.instance?.name}" (${(installed.notes || []).join(" | ")})`);
+            closeModal();
+            return;
+          } else {
+            const res = await window.api.packArchiveImport({
+              provider: createSource,
+              defaults: {
+                name: newName.value?.trim() || undefined,
+                mcVersion: newVersion.value || undefined,
+                accountId: instanceAccount.value || null,
+                memoryMb: Number(newMem.value || 6144)
+              }
+            });
+            if (!res.ok || res.canceled) return;
+            if (selectedCreateIconPath && res.result?.instance?.id) {
+              try {
+                await window.api.instancesSetIconFromFile(res.result.instance.id, selectedCreateIconPath);
+              } catch (err: any) {
+                appendLog(`[icon] Failed applying selected icon: ${String(err?.message ?? err)}`);
+              }
+            } else if (selectedProviderPack?.iconUrl && res.result?.instance?.id) {
+              try {
+                await window.api.instancesSetIconFromUrl(res.result.instance.id, selectedProviderPack.iconUrl);
+              } catch {
+                await window.api.instancesSetIconFallback(res.result.instance.id, selectedProviderPack.name || "Pack", "blue");
+              }
+            } else if (res.result?.instance?.id) {
+              await window.api.instancesSetIconFallback(res.result.instance.id, res.result.instance?.name || "Pack", "blue");
             }
-          } else if (selectedProviderPack?.iconUrl && res.result?.instance?.id) {
-            try {
-              await window.api.instancesSetIconFromUrl(res.result.instance.id, selectedProviderPack.iconUrl);
-            } catch {
-              await window.api.instancesSetIconFallback(res.result.instance.id, selectedProviderPack.name || "Pack", "blue");
-            }
-          } else if (res.result?.instance?.id) {
-            await window.api.instancesSetIconFallback(res.result.instance.id, res.result.instance?.name || "Pack", "blue");
+            setStatus("");
+            state.instances = await window.api.instancesList();
+            await renderInstances();
+            appendLog(
+              `[pack-import] ${createSource} -> ${res.result.detectedFormat}: "${res.result.instance?.name}" (${(res.result.notes || []).join(" | ")})`
+            );
+            closeModal();
+            return;
           }
-          setStatus("");
-          state.instances = await window.api.instancesList();
-          await renderInstances();
-          appendLog(
-            `[pack-import] ${createSource} -> ${res.result.detectedFormat}: "${res.result.instance?.name}" (${(res.result.notes || []).join(" | ")})`
-          );
-          closeModal();
-          return;
         }
         if (!selectedModrinthPack) {
           alert("Select a Modrinth pack first.");

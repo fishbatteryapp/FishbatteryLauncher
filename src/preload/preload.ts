@@ -32,6 +32,11 @@ contextBridge.exposeInMainWorld("api", {
   modrinthPacksInstall: (payload: any) => ipcRenderer.invoke("modrinthPacks:install", payload),
   providerPacksSearch: (provider: string, query: string, limit?: number) =>
     ipcRenderer.invoke("providerPacks:search", provider, query, limit),
+  providerPacksInstall: (
+    provider: "atlauncher" | "ftb",
+    packId: string,
+    defaults?: { name?: string; accountId?: string | null; memoryMb?: number }
+  ) => ipcRenderer.invoke("providerPacks:install", provider, packId, defaults),
   packArchiveImport: (payload: any) => ipcRenderer.invoke("packArchive:import", payload),
   lockfileGenerate: (instanceId: string) => ipcRenderer.invoke("lockfile:generate", instanceId),
   lockfileDrift: (instanceId: string) => ipcRenderer.invoke("lockfile:drift", instanceId),
