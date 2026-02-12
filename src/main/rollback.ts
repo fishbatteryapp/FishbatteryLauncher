@@ -14,8 +14,11 @@ type RollbackSnapshot = {
   note?: string;
   instance: {
     mcVersion: string;
-    loader: "vanilla" | "fabric";
+    loader: "vanilla" | "fabric" | "quilt" | "forge" | "neoforge";
     fabricLoaderVersion?: string;
+    quiltLoaderVersion?: string;
+    forgeVersion?: string;
+    neoforgeVersion?: string;
     memoryMb: number;
     jvmArgsOverride?: string | null;
     instancePreset?: string | null;
@@ -59,6 +62,9 @@ export function createRollbackSnapshot(instanceId: string, reason: RollbackReaso
       mcVersion: inst.mcVersion,
       loader: inst.loader,
       fabricLoaderVersion: inst.fabricLoaderVersion,
+      quiltLoaderVersion: inst.quiltLoaderVersion,
+      forgeVersion: inst.forgeVersion,
+      neoforgeVersion: inst.neoforgeVersion,
       memoryMb: inst.memoryMb,
       jvmArgsOverride: inst.jvmArgsOverride ?? null,
       instancePreset: inst.instancePreset ?? null
@@ -87,6 +93,9 @@ export async function restoreLatestRollbackSnapshot(instanceId: string) {
     mcVersion: latest.instance.mcVersion,
     loader: latest.instance.loader,
     fabricLoaderVersion: latest.instance.fabricLoaderVersion,
+    quiltLoaderVersion: latest.instance.quiltLoaderVersion,
+    forgeVersion: latest.instance.forgeVersion,
+    neoforgeVersion: latest.instance.neoforgeVersion,
     memoryMb: latest.instance.memoryMb,
     jvmArgsOverride: latest.instance.jvmArgsOverride ?? null,
     instancePreset: latest.instance.instancePreset ?? null

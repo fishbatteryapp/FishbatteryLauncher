@@ -4,9 +4,7 @@ import crypto from "node:crypto";
 import fetch from "node-fetch";
 import AdmZip from "adm-zip";
 import { createInstance, getInstanceDir, listInstances, type InstanceConfig } from "./instances";
-import { installFabricVersion } from "./fabricInstall";
-import { installVanillaVersion } from "./vanillaInstall";
-import { pickFabricLoader } from "./fabric";
+import { pickLoaderVersion, prepareLoaderInstall, type LoaderKind } from "./loaderSupport";
 
 type ModrinthSearchHit = {
   project_id: string;
@@ -114,9 +112,19 @@ function pickLoaderAndVersion(v: ModrinthVersion) {
 
   // common project IDs for loader deps in Modrinth metadata
   const fabricLoaderProject = "P7dR8mSH";
+  const quiltLoaderProject = "qvIfYCYJ";
   const minecraftVersion = v.game_versions?.[0] || "latest";
   if (v.loaders?.includes("fabric") || depMap.has(fabricLoaderProject)) {
     return { loader: "fabric" as const, mcVersion: minecraftVersion };
+  }
+  if (v.loaders?.includes("quilt") || depMap.has(quiltLoaderProject)) {
+    return { loader: "quilt" as const, mcVersion: minecraftVersion };
+  }
+  if (v.loaders?.includes("neoforge")) {
+    return { loader: "neoforge" as const, mcVersion: minecraftVersion };
+  }
+  if (v.loaders?.includes("forge")) {
+    return { loader: "forge" as const, mcVersion: minecraftVersion };
   }
   return { loader: "vanilla" as const, mcVersion: minecraftVersion };
 }
@@ -192,6 +200,9 @@ export async function installModrinthModpack(opts: {
   const instanceId = crypto.randomUUID();
   const instanceName = uniqueName(sanitizeName(opts.nameOverride || version.name || `Modpack ${projectId}`));
 
+  const loaderKind = loaderMeta.loader as LoaderKind;
+  const resolvedLoaderVersion = loaderKind === "vanilla" ? undefined : await pickLoaderVersion(loaderKind, loaderMeta.mcVersion);
+
   const cfg: Omit<InstanceConfig, "createdAt"> = {
     id: instanceId,
     name: instanceName,
@@ -199,26 +210,39 @@ export async function installModrinthModpack(opts: {
     mcVersion: loaderMeta.mcVersion,
     loader: loaderMeta.loader,
     fabricLoaderVersion: undefined,
+    quiltLoaderVersion: undefined,
+    forgeVersion: undefined,
+    neoforgeVersion: undefined,
     memoryMb: Number(opts.memoryMb || 6144),
     instancePreset: "none",
     jvmArgsOverride: null,
     optimizerBackup: null
   };
 
-  if (loaderMeta.loader === "fabric") {
-    cfg.fabricLoaderVersion = await pickFabricLoader(loaderMeta.mcVersion, true);
-  }
+  if (loaderKind === "fabric") cfg.fabricLoaderVersion = resolvedLoaderVersion;
+  if (loaderKind === "quilt") cfg.quiltLoaderVersion = resolvedLoaderVersion;
+  if (loaderKind === "forge") cfg.forgeVersion = resolvedLoaderVersion;
+  if (loaderKind === "neoforge") cfg.neoforgeVersion = resolvedLoaderVersion;
 
   const created = createInstance(cfg);
   const instanceDir = getInstanceDir(instanceId);
   ensureDir(instanceDir);
 
-  if (created.loader === "fabric") {
-    if (!created.fabricLoaderVersion) throw new Error("Unable to resolve Fabric loader for modpack");
-    await installFabricVersion(instanceId, created.mcVersion, created.fabricLoaderVersion);
-  } else {
-    await installVanillaVersion(created.mcVersion);
-  }
+  await prepareLoaderInstall({
+    instanceId,
+    mcVersion: created.mcVersion,
+    loader: created.loader,
+    loaderVersion:
+      created.loader === "fabric"
+        ? created.fabricLoaderVersion
+        : created.loader === "quilt"
+          ? created.quiltLoaderVersion
+          : created.loader === "forge"
+            ? created.forgeVersion
+            : created.loader === "neoforge"
+              ? created.neoforgeVersion
+              : undefined
+  });
 
   const packBuf = await downloadBuffer(file.url);
   if (file.hashes?.sha1) {

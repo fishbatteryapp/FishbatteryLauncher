@@ -38,8 +38,11 @@ export type InstanceLockfile = {
     id: string;
     name: string;
     mcVersion: string;
-    loader: "vanilla" | "fabric";
+    loader: "vanilla" | "fabric" | "quilt" | "forge" | "neoforge";
     fabricLoaderVersion?: string;
+    quiltLoaderVersion?: string;
+    forgeVersion?: string;
+    neoforgeVersion?: string;
     memoryMb: number;
     jvmArgsOverride?: string | null;
     instancePreset?: string | null;
@@ -248,6 +251,9 @@ export function generateInstanceLockfile(instanceId: string, opts?: { write?: bo
       mcVersion: inst.mcVersion,
       loader: inst.loader,
       fabricLoaderVersion: inst.fabricLoaderVersion,
+      quiltLoaderVersion: inst.quiltLoaderVersion,
+      forgeVersion: inst.forgeVersion,
+      neoforgeVersion: inst.neoforgeVersion,
       memoryMb: inst.memoryMb,
       jvmArgsOverride: inst.jvmArgsOverride ?? null,
       instancePreset: inst.instancePreset ?? null
@@ -270,6 +276,9 @@ export async function applyInstanceLockfile(instanceId: string, lockfileInput: I
     mcVersion: lockfile.instance.mcVersion,
     loader: lockfile.instance.loader,
     fabricLoaderVersion: lockfile.instance.fabricLoaderVersion,
+    quiltLoaderVersion: lockfile.instance.quiltLoaderVersion,
+    forgeVersion: lockfile.instance.forgeVersion,
+    neoforgeVersion: lockfile.instance.neoforgeVersion,
     memoryMb: Number(lockfile.instance.memoryMb || 4096),
     jvmArgsOverride: lockfile.instance.jvmArgsOverride ?? null,
     instancePreset: lockfile.instance.instancePreset ?? null

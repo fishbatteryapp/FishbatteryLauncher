@@ -80,6 +80,14 @@ contextBridge.exposeInMainWorld("api", {
   fabricPickLoader: (mcVersion: string) => ipcRenderer.invoke("fabric:pickLoader", mcVersion),
   fabricInstall: (instanceId: string, mcVersion: string, loaderVersion: string) =>
     ipcRenderer.invoke("fabric:install", instanceId, mcVersion, loaderVersion),
+  loaderPickVersion: (loader: "vanilla" | "fabric" | "quilt" | "forge" | "neoforge", mcVersion: string) =>
+    ipcRenderer.invoke("loader:pickVersion", loader, mcVersion),
+  loaderInstall: (
+    instanceId: string,
+    mcVersion: string,
+    loader: "vanilla" | "fabric" | "quilt" | "forge" | "neoforge",
+    loaderVersion?: string
+  ) => ipcRenderer.invoke("loader:install", instanceId, mcVersion, loader, loaderVersion),
   vanillaInstall: (mcVersion: string) => ipcRenderer.invoke("vanilla:install", mcVersion),
 
   // ✅ IDs only

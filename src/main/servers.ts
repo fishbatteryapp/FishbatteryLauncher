@@ -33,8 +33,11 @@ type ServerProfileManifest = {
   };
   instance: {
     mcVersion: string;
-    loader: "vanilla" | "fabric";
+    loader: "vanilla" | "fabric" | "quilt" | "forge" | "neoforge";
     fabricLoaderVersion?: string;
+    quiltLoaderVersion?: string;
+    forgeVersion?: string;
+    neoforgeVersion?: string;
     memoryMb: number;
     jvmArgsOverride?: string | null;
     instancePreset?: string | null;
@@ -186,6 +189,9 @@ export function exportServerProfile(instanceId: string, serverId: string, outZip
       mcVersion: inst.mcVersion,
       loader: inst.loader,
       fabricLoaderVersion: inst.fabricLoaderVersion,
+      quiltLoaderVersion: inst.quiltLoaderVersion,
+      forgeVersion: inst.forgeVersion,
+      neoforgeVersion: inst.neoforgeVersion,
       memoryMb: inst.memoryMb,
       jvmArgsOverride: inst.jvmArgsOverride ?? null,
       instancePreset: inst.instancePreset ?? null
@@ -254,6 +260,9 @@ export async function importServerProfile(instanceId: string, zipPath: string) {
     mcVersion: manifest.instance.mcVersion,
     loader: manifest.instance.loader,
     fabricLoaderVersion: manifest.instance.fabricLoaderVersion,
+    quiltLoaderVersion: manifest.instance.quiltLoaderVersion,
+    forgeVersion: manifest.instance.forgeVersion,
+    neoforgeVersion: manifest.instance.neoforgeVersion,
     memoryMb: Number(manifest.instance.memoryMb || 4096),
     jvmArgsOverride: manifest.instance.jvmArgsOverride ?? null,
     instancePreset: manifest.instance.instancePreset ?? null
@@ -308,6 +317,9 @@ export async function importServerProfile(instanceId: string, zipPath: string) {
       mcVersion: manifest.instance.mcVersion,
       loader: manifest.instance.loader,
       fabricLoaderVersion: manifest.instance.fabricLoaderVersion ?? null,
+      quiltLoaderVersion: manifest.instance.quiltLoaderVersion ?? null,
+      forgeVersion: manifest.instance.forgeVersion ?? null,
+      neoforgeVersion: manifest.instance.neoforgeVersion ?? null,
       enabledMods: manifest.enabledMods.length,
       enabledPacks: manifest.enabledPacks.length
     }

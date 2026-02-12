@@ -1981,8 +1981,17 @@ async function renderInstances() {
       newName.value = i.name ?? "";
       newMem.value = String(i.memoryMb ?? 4096);
       newVersion.value = i.mcVersion ?? "";
-      createLoaderType.value = i.loader === "vanilla" ? "vanilla" : "fabric";
-      createLoaderVersion.value = i.fabricLoaderVersion ?? "";
+      createLoaderType.value = i.loader ?? "fabric";
+      createLoaderVersion.value =
+        i.loader === "fabric"
+          ? i.fabricLoaderVersion ?? ""
+          : i.loader === "quilt"
+            ? i.quiltLoaderVersion ?? ""
+            : i.loader === "forge"
+              ? i.forgeVersion ?? ""
+              : i.loader === "neoforge"
+                ? i.neoforgeVersion ?? ""
+                : "";
       updateCreateLoaderUi();
       setCreateSource("custom");
       createSourceCustom.toggleAttribute("disabled", true);
@@ -2113,11 +2122,11 @@ function renderCreateFilterButtons() {
 }
 
 function updateCreateLoaderUi() {
-  const loader = createLoaderType.value;
-  if (loader === "fabric") {
+  const loader = String(createLoaderType.value || "fabric");
+  if (loader === "fabric" || loader === "quilt" || loader === "forge" || loader === "neoforge") {
     createLoaderVersion.disabled = false;
     createLoaderVersion.placeholder = "Auto (recommended)";
-    createLoaderHint.textContent = "Auto-picked for Fabric from official metadata.";
+    createLoaderHint.textContent = `Auto-picked for ${loader} from official metadata.`;
     return;
   }
 
@@ -2127,7 +2136,7 @@ function updateCreateLoaderUi() {
     createLoaderHint.textContent = "Vanilla instances do not require a loader version.";
     return;
   }
-  createLoaderHint.textContent = `${loader} support is planned. Select Fabric/Vanilla for now.`;
+  createLoaderHint.textContent = "Select a supported loader.";
 }
 
 function setCreateSource(next: "custom" | "import" | "modrinth" | "curseforge" | "technic" | "atlauncher" | "ftb") {
@@ -2687,8 +2696,8 @@ modalCreate.onclick = () =>
         alert("Select a Minecraft version first.");
         return;
       }
-      if (!["vanilla", "fabric"].includes(loader)) {
-        alert(`${loader} support is not implemented yet. Select Vanilla or Fabric for now.`);
+      if (!["vanilla", "fabric", "quilt", "forge", "neoforge"].includes(loader)) {
+        alert(`Unsupported loader: ${loader}`);
         return;
       }
 
@@ -2696,16 +2705,23 @@ modalCreate.onclick = () =>
         id,
         name: newName.value?.trim() || "New Instance",
         mcVersion,
-        loader: loader as "vanilla" | "fabric",
+        loader: loader as "vanilla" | "fabric" | "quilt" | "forge" | "neoforge",
         fabricLoaderVersion: undefined as string | undefined,
+        quiltLoaderVersion: undefined as string | undefined,
+        forgeVersion: undefined as string | undefined,
+        neoforgeVersion: undefined as string | undefined,
         memoryMb: Number(newMem.value || 4096),
         accountId: instanceAccount.value || null,
         instancePreset: selectedPreset
       };
 
-      if (loader === "fabric") {
-        setStatus("Resolving Fabric loader…");
-        cfg.fabricLoaderVersion = (createLoaderVersion.value || "").trim() || (await window.api.fabricPickLoader(mcVersion));
+      if (loader !== "vanilla") {
+        setStatus(`Resolving ${loader} loader…`);
+        const resolved = (createLoaderVersion.value || "").trim() || (await window.api.loaderPickVersion(loader as any, mcVersion)) || "";
+        if (loader === "fabric") cfg.fabricLoaderVersion = resolved;
+        if (loader === "quilt") cfg.quiltLoaderVersion = resolved;
+        if (loader === "forge") cfg.forgeVersion = resolved;
+        if (loader === "neoforge") cfg.neoforgeVersion = resolved;
       }
 
       setStatus("Creating instance…");
@@ -2721,13 +2737,21 @@ modalCreate.onclick = () =>
         await window.api.instancesSetIconFallback(id, cfg.name || "Instance", "green");
       }
 
-      if (loader === "fabric" && cfg.fabricLoaderVersion) {
-        setStatus("Installing Fabric…");
-        await window.api.fabricInstall(id, mcVersion, cfg.fabricLoaderVersion);
-      } else {
-        setStatus("Preparing Vanilla assets…");
-        await window.api.vanillaInstall(mcVersion);
-      }
+      setStatus(`Preparing ${loader}…`);
+      await window.api.loaderInstall(
+        id,
+        mcVersion,
+        loader as any,
+        loader === "fabric"
+          ? cfg.fabricLoaderVersion
+          : loader === "quilt"
+            ? cfg.quiltLoaderVersion
+            : loader === "forge"
+              ? cfg.forgeVersion
+              : loader === "neoforge"
+                ? cfg.neoforgeVersion
+                : undefined
+      );
 
       if (selectedPreset !== "none" && loader === "fabric") {
         await applyInstancePreset(id, mcVersion, selectedPreset);
@@ -2744,11 +2768,11 @@ modalCreate.onclick = () =>
       const selectedPreset = (instancePreset.value || "none") as InstancePresetId;
       const inst = (state.instances?.instances ?? []).find((x: any) => x.id === editInstanceId) ?? null;
       const nextLoaderRaw = String(createLoaderType.value || inst?.loader || "fabric");
-      if (!["vanilla", "fabric"].includes(nextLoaderRaw)) {
-        alert(`${nextLoaderRaw} support is not implemented yet. Select Vanilla or Fabric for now.`);
+      if (!["vanilla", "fabric", "quilt", "forge", "neoforge"].includes(nextLoaderRaw)) {
+        alert(`Unsupported loader: ${nextLoaderRaw}`);
         return;
       }
-      const nextLoader = nextLoaderRaw as "vanilla" | "fabric";
+      const nextLoader = nextLoaderRaw as "vanilla" | "fabric" | "quilt" | "forge" | "neoforge";
       const nextVersion = newVersion.value || inst?.mcVersion;
       if (!nextVersion) {
         alert("Select a Minecraft version first.");
@@ -2756,8 +2780,15 @@ modalCreate.onclick = () =>
       }
 
       let nextFabricLoaderVersion: string | undefined = undefined;
-      if (nextLoader === "fabric") {
-        nextFabricLoaderVersion = (createLoaderVersion.value || "").trim() || (await window.api.fabricPickLoader(nextVersion));
+      let nextQuiltLoaderVersion: string | undefined = undefined;
+      let nextForgeVersion: string | undefined = undefined;
+      let nextNeoForgeVersion: string | undefined = undefined;
+      if (nextLoader !== "vanilla") {
+        const resolved = (createLoaderVersion.value || "").trim() || (await window.api.loaderPickVersion(nextLoader as any, nextVersion)) || "";
+        if (nextLoader === "fabric") nextFabricLoaderVersion = resolved;
+        if (nextLoader === "quilt") nextQuiltLoaderVersion = resolved;
+        if (nextLoader === "forge") nextForgeVersion = resolved;
+        if (nextLoader === "neoforge") nextNeoForgeVersion = resolved;
       }
 
       await window.api.instancesUpdate(editInstanceId, {
@@ -2765,6 +2796,9 @@ modalCreate.onclick = () =>
         mcVersion: nextVersion,
         loader: nextLoader,
         fabricLoaderVersion: nextFabricLoaderVersion,
+        quiltLoaderVersion: nextQuiltLoaderVersion,
+        forgeVersion: nextForgeVersion,
+        neoforgeVersion: nextNeoForgeVersion,
         memoryMb: Number(newMem.value || 4096),
         accountId: instanceAccount.value || null,
         instancePreset: selectedPreset
@@ -2780,13 +2814,21 @@ modalCreate.onclick = () =>
         await window.api.instancesClearIcon(editInstanceId);
       }
 
-      if (nextLoader === "fabric" && nextFabricLoaderVersion) {
-        setStatus("Installing Fabric…");
-        await window.api.fabricInstall(editInstanceId, nextVersion, nextFabricLoaderVersion);
-      } else {
-        setStatus("Preparing Vanilla assets…");
-        await window.api.vanillaInstall(nextVersion);
-      }
+      setStatus(`Preparing ${nextLoader}…`);
+      await window.api.loaderInstall(
+        editInstanceId,
+        nextVersion,
+        nextLoader as any,
+        nextLoader === "fabric"
+          ? nextFabricLoaderVersion
+          : nextLoader === "quilt"
+            ? nextQuiltLoaderVersion
+            : nextLoader === "forge"
+              ? nextForgeVersion
+              : nextLoader === "neoforge"
+                ? nextNeoForgeVersion
+                : undefined
+      );
 
       if (inst && selectedPreset !== "none") {
         await applyInstancePreset(editInstanceId, nextVersion, selectedPreset);

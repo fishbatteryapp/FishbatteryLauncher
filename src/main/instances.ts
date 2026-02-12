@@ -10,11 +10,14 @@ export type InstanceConfig = {
   name: string;
   accountId?: string | null; // which account to launch with (default: active account)
   mcVersion: string;        // e.g. "1.21.4" or "25w06a"
-  loader: "vanilla" | "fabric";
+  loader: "vanilla" | "fabric" | "quilt" | "forge" | "neoforge";
   instancePreset?: string | null;
   jvmArgsOverride?: string | null;
   optimizerBackup?: { memoryMb: number; jvmArgsOverride?: string | null } | null;
   fabricLoaderVersion?: string;
+  quiltLoaderVersion?: string;
+  forgeVersion?: string;
+  neoforgeVersion?: string;
   memoryMb: number;         // e.g. 4096
   createdAt: number;
 };

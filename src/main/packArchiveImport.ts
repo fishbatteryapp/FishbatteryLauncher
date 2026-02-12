@@ -5,8 +5,7 @@ import AdmZip from "adm-zip";
 import fetch from "node-fetch";
 import { createInstance, getInstanceDir, listInstances, type InstanceConfig } from "./instances";
 import { installVanillaVersion } from "./vanillaInstall";
-import { installFabricVersion } from "./fabricInstall";
-import { pickFabricLoader } from "./fabric";
+import { pickLoaderVersion, prepareLoaderInstall, type LoaderKind } from "./loaderSupport";
 
 export type ProviderHint = "curseforge" | "technic" | "atlauncher" | "ftb" | "auto";
 
@@ -62,12 +61,17 @@ async function downloadBuffer(url: string): Promise<Buffer> {
   return Buffer.from(await r.arrayBuffer());
 }
 
-async function createBaseInstance(name: string, mcVersion: string, loader: "vanilla" | "fabric", opts: ImportPackOptions, notes: string[]) {
+async function createBaseInstance(name: string, mcVersion: string, loader: LoaderKind, opts: ImportPackOptions, notes: string[]) {
   const id = crypto.randomUUID();
   let fabricLoaderVersion: string | undefined = undefined;
-  if (loader === "fabric") {
-    fabricLoaderVersion = await pickFabricLoader(mcVersion, true);
-  }
+  let quiltLoaderVersion: string | undefined = undefined;
+  let forgeVersion: string | undefined = undefined;
+  let neoforgeVersion: string | undefined = undefined;
+  const loaderVersion = loader === "vanilla" ? undefined : await pickLoaderVersion(loader, mcVersion);
+  if (loader === "fabric") fabricLoaderVersion = loaderVersion;
+  if (loader === "quilt") quiltLoaderVersion = loaderVersion;
+  if (loader === "forge") forgeVersion = loaderVersion;
+  if (loader === "neoforge") neoforgeVersion = loaderVersion;
 
   const created = createInstance({
     id,
@@ -76,18 +80,26 @@ async function createBaseInstance(name: string, mcVersion: string, loader: "vani
     mcVersion,
     loader,
     fabricLoaderVersion,
+    quiltLoaderVersion,
+    forgeVersion,
+    neoforgeVersion,
     memoryMb: Number(opts.defaults?.memoryMb || 6144),
     instancePreset: "none",
     jvmArgsOverride: null,
     optimizerBackup: null
   });
 
-  if (created.loader === "fabric" && created.fabricLoaderVersion) {
-    await installFabricVersion(created.id, created.mcVersion, created.fabricLoaderVersion);
-    notes.push(`Installed Fabric ${created.fabricLoaderVersion}`);
-  } else {
+  if (created.loader === "vanilla") {
     await installVanillaVersion(created.mcVersion);
     notes.push("Prepared Vanilla base install");
+  } else {
+    await prepareLoaderInstall({
+      instanceId: created.id,
+      mcVersion: created.mcVersion,
+      loader: created.loader,
+      loaderVersion
+    });
+    notes.push(`Prepared ${created.loader} ${loaderVersion ?? "latest"} for ${created.mcVersion}`);
   }
 
   return created;
@@ -105,8 +117,12 @@ async function importModrinthArchive(zip: AdmZip, opts: ImportPackOptions): Prom
   }
 
   const mcVersion = String(idx?.dependencies?.minecraft || opts.defaults?.mcVersion || "latest");
-  const hasFabric = !!idx?.dependencies?.["fabric-loader"];
-  const loader: "vanilla" | "fabric" = hasFabric ? "fabric" : "vanilla";
+  const deps = idx?.dependencies ?? {};
+  const hasFabric = !!deps["fabric-loader"];
+  const hasQuilt = !!deps["quilt-loader"];
+  const hasNeoForge = !!deps["neoforge"] || !!deps["neoforge-loader"];
+  const hasForge = !!deps["forge-loader"] || !!deps["forge"];
+  const loader: LoaderKind = hasFabric ? "fabric" : hasQuilt ? "quilt" : hasNeoForge ? "neoforge" : hasForge ? "forge" : "vanilla";
   const name = opts.defaults?.name || "Modrinth Pack";
   const notes: string[] = [];
 
@@ -158,8 +174,10 @@ async function importCurseforgeArchive(zip: AdmZip, opts: ImportPackOptions): Pr
   const mcVersion = String(manifest?.minecraft?.version || opts.defaults?.mcVersion || "latest");
   const loaderIds = (manifest?.minecraft?.modLoaders || []).map((x: any) => String(x?.id || ""));
   const hasFabric = loaderIds.some((x: string) => x.startsWith("fabric-"));
-  const unsupported = loaderIds.find((x: string) => x.startsWith("forge-") || x.startsWith("neoforge-") || x.startsWith("quilt-"));
-  const loader: "vanilla" | "fabric" = hasFabric ? "fabric" : "vanilla";
+  const hasQuilt = loaderIds.some((x: string) => x.startsWith("quilt-"));
+  const hasNeoForge = loaderIds.some((x: string) => x.startsWith("neoforge-"));
+  const hasForge = loaderIds.some((x: string) => x.startsWith("forge-"));
+  const loader: LoaderKind = hasFabric ? "fabric" : hasQuilt ? "quilt" : hasNeoForge ? "neoforge" : hasForge ? "forge" : "vanilla";
   const notes: string[] = [];
   const name = opts.defaults?.name || String(manifest?.name || "CurseForge Pack");
 
@@ -187,10 +205,6 @@ async function importCurseforgeArchive(zip: AdmZip, opts: ImportPackOptions): Pr
     };
     fs.writeFileSync(path.join(instDir, "pack-import-report.json"), JSON.stringify(report, null, 2), "utf8");
     notes.push(`CurseForge manifest contains ${unresolvedFiles} mod references not auto-downloadable without provider API keys`);
-  }
-
-  if (unsupported) {
-    notes.push(`Detected unsupported loader target: ${unsupported}. Instance created with ${loader}.`);
   }
 
   return { instance: inst, detectedFormat: "curseforge", notes };

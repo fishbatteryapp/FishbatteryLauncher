@@ -21,6 +21,7 @@ import { listPacks, refreshPacksForInstance, setPackEnabled } from "./packs";
 import { pickFabricLoader } from "./fabric";
 import { installFabricVersion } from "./fabricInstall";
 import { installVanillaVersion } from "./vanillaInstall";
+import { pickLoaderVersion, prepareLoaderInstall, type LoaderKind } from "./loaderSupport";
 import { launchInstance, isInstanceRunning, stopInstance } from "./launch";
 import type { LaunchRuntimePrefs } from "./launch";
 import { registerContentIpc } from "./content";
@@ -360,6 +361,23 @@ export function registerIpc() {
     }
   );
 
+  // ---------- Generic loaders ----------
+  ipcMain.handle("loader:pickVersion", async (_e, loader: LoaderKind, mcVersion: string) => {
+    if (!loader) throw new Error("loader:pickVersion: loader missing");
+    if (!mcVersion) throw new Error("loader:pickVersion: mcVersion missing");
+    return pickLoaderVersion(loader, mcVersion);
+  });
+
+  ipcMain.handle(
+    "loader:install",
+    async (_e, instanceId: string, mcVersion: string, loader: LoaderKind, loaderVersion?: string) => {
+      if (!instanceId) throw new Error("loader:install: instanceId missing");
+      if (!mcVersion) throw new Error("loader:install: mcVersion missing");
+      if (!loader) throw new Error("loader:install: loader missing");
+      return prepareLoaderInstall({ instanceId, mcVersion, loader, loaderVersion });
+    }
+  );
+
   // ---------- Mods ----------
   ipcMain.handle("mods:list", async (_e, instanceId: string) => {
     if (!instanceId) throw new Error("mods:list: instanceId missing");
@@ -370,7 +388,7 @@ export function registerIpc() {
     if (!instanceId) throw new Error("mods:refresh: instanceId missing");
 
     let version = mcVersion;
-    let loader: "fabric" | "vanilla" | undefined = "fabric";
+    let loader: "fabric" | "vanilla" | "quilt" | "forge" | "neoforge" | undefined = "fabric";
 
     if (!version) {
       const db = listInstances();

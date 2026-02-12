@@ -207,6 +207,16 @@ declare global {
 
       fabricPickLoader: (mcVersion: string) => Promise<string>;
       fabricInstall: (instanceId: string, mcVersion: string, loaderVersion: string) => Promise<any>;
+      loaderPickVersion: (
+        loader: "vanilla" | "fabric" | "quilt" | "forge" | "neoforge",
+        mcVersion: string
+      ) => Promise<string | undefined>;
+      loaderInstall: (
+        instanceId: string,
+        mcVersion: string,
+        loader: "vanilla" | "fabric" | "quilt" | "forge" | "neoforge",
+        loaderVersion?: string
+      ) => Promise<any>;
       vanillaInstall: (mcVersion: string) => Promise<any>;
 
       // ✅ IDs only

@@ -12,9 +12,12 @@ type ExportManifest = {
   instance: {
     name: string;
     mcVersion: string;
-    loader: "vanilla" | "fabric";
+    loader: "vanilla" | "fabric" | "quilt" | "forge" | "neoforge";
     memoryMb: number;
     fabricLoaderVersion?: string;
+    quiltLoaderVersion?: string;
+    forgeVersion?: string;
+    neoforgeVersion?: string;
   };
 };
 
@@ -59,7 +62,10 @@ export function exportInstanceToZip(instanceId: string, outZipPath: string) {
       mcVersion: inst.mcVersion,
       loader: inst.loader,
       memoryMb: inst.memoryMb,
-      fabricLoaderVersion: inst.fabricLoaderVersion
+      fabricLoaderVersion: inst.fabricLoaderVersion,
+      quiltLoaderVersion: inst.quiltLoaderVersion,
+      forgeVersion: inst.forgeVersion,
+      neoforgeVersion: inst.neoforgeVersion
     }
   };
 
@@ -87,7 +93,7 @@ function parseManifest(zip: AdmZip): ExportManifest {
   if (parsed?.schemaVersion !== 1) throw new Error("Import failed: unsupported manifest schema");
   if (!parsed?.instance?.name) throw new Error("Import failed: manifest missing instance name");
   if (!parsed?.instance?.mcVersion) throw new Error("Import failed: manifest missing mcVersion");
-  if (!["vanilla", "fabric"].includes(parsed?.instance?.loader)) {
+  if (!["vanilla", "fabric", "quilt", "forge", "neoforge"].includes(parsed?.instance?.loader)) {
     throw new Error("Import failed: manifest has invalid loader");
   }
 
@@ -134,6 +140,9 @@ export async function importInstanceFromZip(zipPath: string): Promise<ImportInst
     loader: manifest.instance.loader,
     memoryMb: Number(manifest.instance.memoryMb || 4096),
     fabricLoaderVersion: manifest.instance.fabricLoaderVersion,
+    quiltLoaderVersion: manifest.instance.quiltLoaderVersion,
+    forgeVersion: manifest.instance.forgeVersion,
+    neoforgeVersion: manifest.instance.neoforgeVersion,
     accountId: null
   });
 

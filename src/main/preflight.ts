@@ -124,7 +124,7 @@ function validateInstancesMetadata(checks: PreflightCheck[]) {
 
     if (!inst?.name) issues.push(`Instance ${inst?.id ?? "unknown"} missing name.`);
     if (!inst?.mcVersion) issues.push(`Instance ${inst?.id ?? "unknown"} missing mcVersion.`);
-    if (inst?.loader !== "fabric" && inst?.loader !== "vanilla") {
+    if (!["fabric", "vanilla", "quilt", "forge", "neoforge"].includes(String(inst?.loader ?? ""))) {
       issues.push(`Instance ${inst?.id ?? "unknown"} has invalid loader.`);
     }
     if (!Number.isFinite(Number(inst?.memoryMb)) || Number(inst?.memoryMb) < 512) {

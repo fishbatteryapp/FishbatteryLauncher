@@ -7,6 +7,7 @@ import { StoredAccount, getAccountById } from "./accounts";
 import { ensureVanillaInstalled, getVanillaVersionJarPath } from "./vanillaInstall";
 import { pickFabricLoader } from "./fabric";
 import { installFabricVersion } from "./fabricInstall";
+import { pickLoaderVersion, prepareLoaderInstall, resolveForgeInstallerPath } from "./loaderSupport";
 import crypto from "node:crypto";
 import { getDataRoot, getAssetsRoot, getLibrariesRoot, getVersionsRoot } from "./paths";
 
@@ -327,6 +328,55 @@ async function launchResolved(
     }
   }
 
+  if (instance.loader === "quilt") {
+    if (!instance.quiltLoaderVersion) {
+      const resolved = await pickLoaderVersion("quilt", instance.mcVersion);
+      if (!resolved) throw new Error(`Unable to resolve Quilt loader for ${instance.mcVersion}`);
+      instance.quiltLoaderVersion = resolved;
+      updateInstance(instance.id, { quiltLoaderVersion: resolved });
+      onLog?.(`[quilt] Resolved loader version ${resolved} for ${instance.mcVersion}`);
+    }
+    onLog?.(`[quilt] Preparing Quilt loader ${instance.quiltLoaderVersion} for ${instance.mcVersion}…`);
+    await prepareLoaderInstall({
+      instanceId: instance.id,
+      mcVersion: instance.mcVersion,
+      loader: "quilt",
+      loaderVersion: instance.quiltLoaderVersion
+    });
+  }
+
+  if (instance.loader === "forge") {
+    if (!instance.forgeVersion) {
+      const resolved = await pickLoaderVersion("forge", instance.mcVersion);
+      if (!resolved) throw new Error(`Unable to resolve Forge version for ${instance.mcVersion}`);
+      instance.forgeVersion = resolved;
+      updateInstance(instance.id, { forgeVersion: resolved });
+      onLog?.(`[forge] Resolved version ${resolved} for ${instance.mcVersion}`);
+    }
+    await prepareLoaderInstall({
+      instanceId: instance.id,
+      mcVersion: instance.mcVersion,
+      loader: "forge",
+      loaderVersion: instance.forgeVersion
+    });
+  }
+
+  if (instance.loader === "neoforge") {
+    if (!instance.neoforgeVersion) {
+      const resolved = await pickLoaderVersion("neoforge", instance.mcVersion);
+      if (!resolved) throw new Error(`Unable to resolve NeoForge version for ${instance.mcVersion}`);
+      instance.neoforgeVersion = resolved;
+      updateInstance(instance.id, { neoforgeVersion: resolved });
+      onLog?.(`[neoforge] Resolved version ${resolved} for ${instance.mcVersion}`);
+    }
+    await prepareLoaderInstall({
+      instanceId: instance.id,
+      mcVersion: instance.mcVersion,
+      loader: "neoforge",
+      loaderVersion: instance.neoforgeVersion
+    });
+  }
+
   const authorization = buildMclcAuthorization(account);
   onLog?.(`[auth] name=${authorization.name} uuid=${authorization.uuid} xuid=${authorization.meta?.xuid}`);
 
@@ -336,6 +386,7 @@ async function launchResolved(
 
   const versionsDir = getVersionsRoot(); // dataRoot/versions
   const fabricId = `fabric-loader-${instance.fabricLoaderVersion}-${instance.mcVersion}`;
+  const quiltId = `quilt-loader-${instance.quiltLoaderVersion}-${instance.mcVersion}`;
 
   const version =
     instance.loader === "fabric"
@@ -343,14 +394,19 @@ async function launchResolved(
           number: instance.mcVersion,
           type: "release",
           custom: fabricId,
-
-          // ✅ IMPORTANT: tell MCLC where the custom version JSON actually is
           customVersion: path.join(versionsDir, fabricId, `${fabricId}.json`)
         }
-      : {
-          number: instance.mcVersion,
-          type: "release"
-        };
+      : instance.loader === "quilt"
+        ? {
+            number: instance.mcVersion,
+            type: "release",
+            custom: quiltId,
+            customVersion: path.join(versionsDir, quiltId, `${quiltId}.json`)
+          }
+        : {
+            number: instance.mcVersion,
+            type: "release"
+          };
 
   const assetsDir = getAssetsRoot();
   const javaExe = pickJavaExecutable(onLog);
@@ -382,6 +438,18 @@ async function launchResolved(
       versions: getVersionsRoot()
     }
   };
+
+  if (instance.loader === "forge") {
+    const installer = resolveForgeInstallerPath("forge", instance.forgeVersion);
+    if (!installer) throw new Error(`Forge installer not found for ${instance.forgeVersion ?? "unknown"}`);
+    launchOpts.forge = installer;
+    onLog?.(`[forge] Using installer ${installer}`);
+  } else if (instance.loader === "neoforge") {
+    const installer = resolveForgeInstallerPath("neoforge", instance.neoforgeVersion);
+    if (!installer) throw new Error(`NeoForge installer not found for ${instance.neoforgeVersion ?? "unknown"}`);
+    launchOpts.forge = installer;
+    onLog?.(`[neoforge] Using installer ${installer}`);
+  }
 
   const targetServer = parseServerAddress(String(runtimePrefs?.serverAddress ?? ""));
   if (targetServer) {
