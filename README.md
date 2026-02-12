@@ -60,4 +60,8 @@ If you find a bug, include steps to reproduce and the relevant logs.
 
 ## License
 
-FishbatteryLauncher is licensed under the GNU General Public License v3.0.
+FishbatteryLauncher  
+Copyright (C) 2026 Gudmundur Magnus Johannsson  
+
+Licensed under the GNU General Public License v3.0.
+
