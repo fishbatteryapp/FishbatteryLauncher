@@ -1,7 +1,7 @@
 {
   "name": "fishbattery-launcher",
   "productName": "fishbattery-launcher",
-  "version": "0.2.0-beta.7",
+  "version": "0.2.0",
   "private": true,
   "description": "Fishbattery launcher is an underwater-themed Fabric launcher with isolated instances and Modrinth mods.",
   "author": "Fishbattery",
@@ -64,7 +64,7 @@
     "publish": [
       {
         "provider": "github",
-        "owner": "fishbattery",
+        "owner": "fishbatteryapp",
         "repo": "FishbatteryLauncher"
       }
     ]

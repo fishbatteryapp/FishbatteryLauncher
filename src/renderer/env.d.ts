@@ -92,7 +92,13 @@ declare global {
       modsRefresh: (instanceId: string, mcVersion?: string) => Promise<any>;
       modsValidate: (instanceId: string) => Promise<{
         summary: "no-issues" | "warnings" | "critical";
-        issues: Array<{ code: string; severity: "warning" | "critical" | "ok"; title: string; detail: string }>;
+        issues: Array<{
+          code: string;
+          severity: "warning" | "critical" | "ok";
+          title: string;
+          detail: string;
+          modIds?: string[];
+        }>;
       }>;
       modsFixDuplicates: (instanceId: string) => Promise<{ removed: string[] }>;
 
