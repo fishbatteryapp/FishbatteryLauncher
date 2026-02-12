@@ -55,6 +55,8 @@ declare global {
           description: string;
           iconUrl: string | null;
           latestVersionId: string | null;
+          mcVersion: string | null;
+          loader: string | null;
         }>;
       }>;
       modrinthPacksInstall: (payload: {
@@ -64,6 +66,21 @@ declare global {
         accountId?: string | null;
         memoryMb?: number;
       }) => Promise<{ instance: any; version: { id: string; name: string; versionNumber: string } }>;
+      providerPacksSearch: (
+        provider: "curseforge" | "technic" | "atlauncher" | "ftb",
+        query: string,
+        limit?: number
+      ) => Promise<{
+        hits: Array<{
+          id: string;
+          provider: "curseforge" | "technic" | "atlauncher" | "ftb";
+          name: string;
+          description: string;
+          mcVersion: string;
+          loader: string;
+          tags?: string[];
+        }>;
+      }>;
       packArchiveImport: (payload: {
         provider: "auto" | "curseforge" | "technic" | "atlauncher" | "ftb";
         defaults?: {

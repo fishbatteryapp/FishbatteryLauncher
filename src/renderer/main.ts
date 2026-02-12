@@ -120,6 +120,10 @@ const createProviderMarketplaceHelp = $("createProviderMarketplaceHelp");
 const createModrinthPanel = $("createModrinthPanel");
 const createCurseForgePanel = $("createCurseForgePanel");
 const providerArchiveHelp = $("providerArchiveHelp");
+const providerSearchInput = $("providerSearchInput") as HTMLInputElement;
+const btnProviderSearch = $("btnProviderSearch");
+const providerResultsLabel = $("providerResultsLabel");
+const providerSearchResults = $("providerSearchResults");
 const btnProviderImportArchive = $("btnProviderImportArchive");
 const modrinthSearchInput = $("modrinthSearchInput") as HTMLInputElement;
 const btnModrinthSearch = $("btnModrinthSearch");
@@ -170,6 +174,7 @@ let createSource: "custom" | "import" | "modrinth" | "curseforge" | "technic" | 
 let createIncludeReleases = true;
 let createIncludeSnapshots = false;
 let selectedModrinthPack: { projectId: string; title: string; latestVersionId: string | null } | null = null;
+let selectedProviderPack: { id: string; name: string } | null = null;
 
 // ---------------- Settings ----------------
 type InstancePresetId = "none" | "max-fps" | "shader-friendly" | "distant-horizons-worldgen";
@@ -2150,6 +2155,9 @@ function setCreateSource(next: "custom" | "import" | "modrinth" | "curseforge" |
       : "Select a provider archive (.zip/.mrpack) and import it into a new instance.";
   if (isArchiveProvider) {
     providerArchiveHelp.textContent = `Import ${next === "atlauncher" ? "ATLauncher" : next.toUpperCase()} archive and create a new instance.`;
+    void guarded(async () => {
+      await runProviderSearch();
+    });
   }
   if (next === "modrinth" && !modrinthSearchResults.innerHTML) {
     void guarded(async () => {
@@ -2198,6 +2206,13 @@ async function runModrinthSearch() {
     desc.textContent = h.description || "No description.";
     left.appendChild(desc);
 
+    const meta = document.createElement("div");
+    meta.className = "setHelp";
+    const mc = h.mcVersion || "unknown MC";
+    const loader = h.loader || "unknown loader";
+    meta.textContent = `MC ${mc} • ${loader}`;
+    left.appendChild(meta);
+
     row.appendChild(left);
 
     const btn = document.createElement("button");
@@ -2215,6 +2230,81 @@ async function runModrinthSearch() {
     row.appendChild(btn);
 
     modrinthSearchResults.appendChild(row);
+  }
+}
+
+async function runProviderSearch() {
+  const provider =
+    createSource === "curseforge" || createSource === "technic" || createSource === "atlauncher" || createSource === "ftb"
+      ? createSource
+      : "curseforge";
+  const q = String(providerSearchInput.value || "").trim();
+  const isPopular = !q;
+  providerResultsLabel.textContent = isPopular ? "Popular packs" : `Search results for "${q}"`;
+  providerSearchResults.innerHTML = '<div class="muted" style="font-size:12px">Searching...</div>';
+
+  const data = await window.api.providerPacksSearch(provider, q, 24);
+  const hits = data?.hits ?? [];
+  if (!hits.length) {
+    providerSearchResults.innerHTML = '<div class="muted" style="font-size:12px">No packs found.</div>';
+    return;
+  }
+
+  providerSearchResults.innerHTML = "";
+  for (const h of hits) {
+    const row = document.createElement("div");
+    row.className = "modrinthResult";
+
+    const icon = document.createElement("div");
+    icon.className = "providerIcon";
+    icon.textContent = String(h.name || "?")
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((x) => x[0]?.toUpperCase() || "")
+      .join("");
+    row.appendChild(icon);
+
+    const left = document.createElement("div");
+    left.style.display = "flex";
+    left.style.flexDirection = "column";
+    left.style.flex = "1";
+
+    const title = document.createElement("div");
+    title.className = "setLabel";
+    title.textContent = h.name;
+    left.appendChild(title);
+
+    const desc = document.createElement("div");
+    desc.className = "setHelp";
+    desc.textContent = h.description || "No description.";
+    left.appendChild(desc);
+
+    const meta = document.createElement("div");
+    meta.className = "setHelp";
+    meta.textContent = `MC ${h.mcVersion} • ${h.loader}`;
+    left.appendChild(meta);
+
+    if (Array.isArray(h.tags) && h.tags.length) {
+      const tags = document.createElement("div");
+      tags.className = "setHelp";
+      tags.textContent = `Tags: ${h.tags.slice(0, 4).join(" • ")}`;
+      left.appendChild(tags);
+    }
+
+    row.appendChild(left);
+
+    const btn = document.createElement("button");
+    btn.className = "btn";
+    const selected = selectedProviderPack?.id === h.id;
+    btn.textContent = selected ? "Selected" : "Select";
+    btn.onclick = () => {
+      selectedProviderPack = { id: h.id, name: h.name };
+      void runProviderSearch();
+    };
+    row.appendChild(btn);
+
+    providerSearchResults.appendChild(row);
   }
 }
 
@@ -2297,6 +2387,15 @@ modrinthSearchInput.onkeydown = (e) => {
   e.preventDefault();
   void guarded(async () => runModrinthSearch());
 };
+btnProviderSearch.onclick = () =>
+  guarded(async () => {
+    await runProviderSearch();
+  });
+providerSearchInput.onkeydown = (e) => {
+  if (e.key !== "Enter") return;
+  e.preventDefault();
+  void guarded(async () => runProviderSearch());
+};
 btnCreateImportNow.onclick = () =>
   guarded(async () => {
     const res = await window.api.instancesImport();
@@ -2347,8 +2446,11 @@ btnCreate.onclick = async () => {
   updateCreateLoaderUi();
   setCreateSource("custom");
   selectedModrinthPack = null;
+  selectedProviderPack = null;
   modrinthSearchInput.value = "";
   modrinthSearchResults.innerHTML = "";
+  providerSearchInput.value = "";
+  providerSearchResults.innerHTML = "";
   createSourceCustom.removeAttribute("disabled");
   createSourceImport.removeAttribute("disabled");
   createSourceModrinth.removeAttribute("disabled");

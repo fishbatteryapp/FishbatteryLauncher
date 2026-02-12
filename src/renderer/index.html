@@ -185,6 +185,12 @@
                   <div class="setHelp" id="providerArchiveHelp">
                     Import provider archive to create a new instance.
                   </div>
+                  <div class="row" style="gap:8px; justify-content:flex-start; margin-top:8px">
+                    <input id="providerSearchInput" class="setControl" placeholder="Search packs..." style="min-width:260px; flex:1; max-width:none" />
+                    <button id="btnProviderSearch" class="btn" type="button">Search</button>
+                  </div>
+                  <div id="providerResultsLabel" class="setHelp" style="margin-top:8px">Popular packs</div>
+                  <div id="providerSearchResults" style="margin-top:10px; max-height:210px; overflow:auto"></div>
                   <div class="row" style="margin-top:10px; justify-content:flex-start">
                     <button id="btnProviderImportArchive" class="btn" type="button">Import pack archive</button>
                   </div>

@@ -144,13 +144,32 @@ export async function searchModrinthModpacks(query: string, limit = 24) {
   const index = q ? "relevance" : "downloads";
   const url = `https://api.modrinth.com/v2/search?query=${encodeURIComponent(q)}&limit=${Math.max(1, Math.min(50, limit))}&index=${index}&facets=${facets}`;
   const data = await fetchJson<ModrinthSearchResponse>(url);
+  const rawHits = data.hits || [];
+  const enriched = await Promise.all(
+    rawHits.map(async (h) => {
+      let mcVersion: string | null = null;
+      let loader: string | null = null;
+      if (h.latest_version) {
+        try {
+          const v = await fetchJson<ModrinthVersion>(`https://api.modrinth.com/v2/version/${encodeURIComponent(h.latest_version)}`);
+          mcVersion = Array.isArray(v.game_versions) && v.game_versions.length ? String(v.game_versions[0]) : null;
+          loader = Array.isArray(v.loaders) && v.loaders.length ? String(v.loaders[0]) : null;
+        } catch {
+          // keep nulls when metadata endpoint fails
+        }
+      }
+      return { h, mcVersion, loader };
+    })
+  );
   return {
-    hits: (data.hits || []).map((h) => ({
+    hits: enriched.map(({ h, mcVersion, loader }) => ({
       projectId: h.project_id,
       title: h.title,
       description: h.description || "",
       iconUrl: h.icon_url || null,
-      latestVersionId: h.latest_version || null
+      latestVersionId: h.latest_version || null,
+      mcVersion,
+      loader
     }))
   };
 }

@@ -30,6 +30,7 @@ import { exportInstanceToZip, importInstanceFromZip } from "./instanceTransfer";
 import { checkInstanceLockfileDrift, generateInstanceLockfile } from "./instanceLockfile";
 import { installModrinthModpack, searchModrinthModpacks } from "./modrinthPacks";
 import { importPackArchive, type ProviderHint } from "./packArchiveImport";
+import { searchProviderPacks, type ExternalProvider } from "./providerPacks";
 import { buildOptimizerPreview, applyOptimizer, restoreOptimizerDefaults } from "./optimizer";
 import { listBenchmarks, runBenchmark } from "./benchmark";
 import { fixDuplicateMods, validateInstanceMods } from "./modValidation";
@@ -179,6 +180,14 @@ export function registerIpc() {
     });
 
     return { ok: true as const, canceled: false as const, result };
+  });
+
+  ipcMain.handle("providerPacks:search", async (_e, provider: string, query: string, limit?: number) => {
+    const p = String(provider || "").trim().toLowerCase() as ExternalProvider;
+    if (!["curseforge", "technic", "atlauncher", "ftb"].includes(p)) {
+      throw new Error("providerPacks:search: invalid provider");
+    }
+    return searchProviderPacks(p, String(query ?? ""), Number(limit ?? 24));
   });
 
   ipcMain.handle("lockfile:generate", async (_e, instanceId: string) => {
