@@ -27,6 +27,7 @@ import { registerContentIpc } from "./content";
 import { exportDiagnosticsZip } from "./diagnostics";
 import { getLastPreflightChecks, runPreflightChecks } from "./preflight";
 import { exportInstanceToZip, importInstanceFromZip } from "./instanceTransfer";
+import { checkInstanceLockfileDrift, generateInstanceLockfile } from "./instanceLockfile";
 import { buildOptimizerPreview, applyOptimizer, restoreOptimizerDefaults } from "./optimizer";
 import { listBenchmarks, runBenchmark } from "./benchmark";
 import { fixDuplicateMods, validateInstanceMods } from "./modValidation";
@@ -128,8 +129,23 @@ export function registerIpc() {
       return { ok: false as const, canceled: true as const };
     }
 
-    const imported = importInstanceFromZip(picked.filePaths[0]);
-    return { ok: true as const, canceled: false as const, instance: imported };
+    const imported = await importInstanceFromZip(picked.filePaths[0]);
+    return { ok: true as const, canceled: false as const, ...imported };
+  });
+
+  ipcMain.handle("lockfile:generate", async (_e, instanceId: string) => {
+    if (!instanceId) throw new Error("lockfile:generate: instanceId missing");
+    const lockfile = generateInstanceLockfile(instanceId, { write: true });
+    return {
+      generatedAt: lockfile.generatedAt,
+      artifacts: lockfile.artifacts.length,
+      notes: lockfile.notes
+    };
+  });
+
+  ipcMain.handle("lockfile:drift", async (_e, instanceId: string) => {
+    if (!instanceId) throw new Error("lockfile:drift: instanceId missing");
+    return checkInstanceLockfileDrift(instanceId);
   });
 
   // ---------- Per-instance servers / server profiles ----------
@@ -192,7 +208,7 @@ export function registerIpc() {
       return { ok: false as const, canceled: true as const };
     }
 
-    const result = importServerProfile(instanceId, picked.filePaths[0]);
+    const result = await importServerProfile(instanceId, picked.filePaths[0]);
     const mcVersion = result?.applied?.mcVersion;
     const loader = result?.applied?.loader;
     if (mcVersion) {

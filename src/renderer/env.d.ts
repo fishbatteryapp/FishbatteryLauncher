@@ -22,9 +22,44 @@ declare global {
         | { ok: false; canceled: true }
       >;
       instancesImport: () => Promise<
-        | { ok: true; canceled: false; instance: any }
+        | {
+            ok: true;
+            canceled: false;
+            instance: any;
+            lockfileApplied: boolean;
+            lockfileResult: {
+              appliedMods: number;
+              appliedPacks: number;
+              issues: string[];
+              drift: {
+                clean: boolean;
+                checkedAt: string;
+                issues: Array<{
+                  id: string;
+                  category: "mod" | "pack";
+                  severity: "warning" | "critical";
+                  message: string;
+                }>;
+              };
+            } | null;
+          }
         | { ok: false; canceled: true }
       >;
+      lockfileGenerate: (instanceId: string) => Promise<{
+        generatedAt: string;
+        artifacts: number;
+        notes: string[];
+      }>;
+      lockfileDrift: (instanceId: string) => Promise<{
+        clean: boolean;
+        checkedAt: string;
+        issues: Array<{
+          id: string;
+          category: "mod" | "pack";
+          severity: "warning" | "critical";
+          message: string;
+        }>;
+      }>;
       serversList: (instanceId: string) => Promise<{
         preferredServerId: string | null;
         servers: Array<{

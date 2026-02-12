@@ -21,6 +21,8 @@ contextBridge.exposeInMainWorld("api", {
   instancesOpenFolder: (id: string) => ipcRenderer.invoke("instances:openFolder", id),
   instancesExport: (id: string) => ipcRenderer.invoke("instances:export", id),
   instancesImport: () => ipcRenderer.invoke("instances:import"),
+  lockfileGenerate: (instanceId: string) => ipcRenderer.invoke("lockfile:generate", instanceId),
+  lockfileDrift: (instanceId: string) => ipcRenderer.invoke("lockfile:drift", instanceId),
   serversList: (instanceId: string) => ipcRenderer.invoke("servers:list", instanceId),
   serversUpsert: (instanceId: string, entry: any) => ipcRenderer.invoke("servers:upsert", instanceId, entry),
   serversRemove: (instanceId: string, serverId: string) =>

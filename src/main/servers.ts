@@ -5,6 +5,7 @@ import AdmZip from "adm-zip";
 import { getInstanceDir, listInstances, updateInstance } from "./instances";
 import { loadModsState, saveModsState } from "./mods";
 import { loadPacksState, savePacksState } from "./packs";
+import { applyInstanceLockfile, generateInstanceLockfile, type InstanceLockfile } from "./instanceLockfile";
 import { readJsonFile, writeJsonFile } from "./store";
 
 export type InstanceServerEntry = {
@@ -199,6 +200,8 @@ export function exportServerProfile(instanceId: string, serverId: string, outZip
 
   const zip = new AdmZip();
   zip.addFile("server-profile.json", Buffer.from(JSON.stringify(manifest, null, 2), "utf8"));
+  const lockfile = generateInstanceLockfile(instanceId, { write: true });
+  zip.addFile("instance.lock.json", Buffer.from(JSON.stringify(lockfile, null, 2), "utf8"));
 
   const cfgDir = path.join(getInstanceDir(instanceId), "config");
   addDirToZip(zip, cfgDir, "config");
@@ -230,11 +233,22 @@ function parseServerProfile(zip: AdmZip): ServerProfileManifest {
   return parsed as ServerProfileManifest;
 }
 
-export function importServerProfile(instanceId: string, zipPath: string) {
+function readOptionalLockfileFromZip(zip: AdmZip): InstanceLockfile | null {
+  const entry = zip.getEntry("instance.lock.json");
+  if (!entry) return null;
+  try {
+    return JSON.parse(zip.readAsText(entry)) as InstanceLockfile;
+  } catch {
+    return null;
+  }
+}
+
+export async function importServerProfile(instanceId: string, zipPath: string) {
   if (!fs.existsSync(zipPath)) throw new Error("Import failed: zip file not found");
 
   const zip = new AdmZip(zipPath);
   const manifest = parseServerProfile(zip);
+  const lockfile = readOptionalLockfileFromZip(zip);
 
   updateInstance(instanceId, {
     mcVersion: manifest.instance.mcVersion,
@@ -288,7 +302,7 @@ export function importServerProfile(instanceId: string, zipPath: string) {
     fs.writeFileSync(outPath, entry.getData());
   }
 
-  return {
+  const out: any = {
     server,
     applied: {
       mcVersion: manifest.instance.mcVersion,
@@ -298,4 +312,10 @@ export function importServerProfile(instanceId: string, zipPath: string) {
       enabledPacks: manifest.enabledPacks.length
     }
   };
+
+  if (lockfile) {
+    out.lockfile = await applyInstanceLockfile(instanceId, lockfile);
+  }
+
+  return out;
 }

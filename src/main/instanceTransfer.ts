@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import AdmZip from "adm-zip";
 import { createInstance, getInstanceDir, InstanceConfig, listInstances } from "./instances";
+import { applyInstanceLockfile, generateInstanceLockfile, type ApplyLockfileResult, type InstanceLockfile } from "./instanceLockfile";
 
 type ExportManifest = {
   schemaVersion: 1;
@@ -64,6 +65,8 @@ export function exportInstanceToZip(instanceId: string, outZipPath: string) {
 
   const zip = new AdmZip();
   zip.addFile("manifest.json", Buffer.from(JSON.stringify(manifest, null, 2), "utf8"));
+  const lockfile = generateInstanceLockfile(instanceId, { write: true });
+  zip.addFile("instance.lock.json", Buffer.from(JSON.stringify(lockfile, null, 2), "utf8"));
   zip.addLocalFolder(instanceDir, "instance");
 
   fs.mkdirSync(path.dirname(outZipPath), { recursive: true });
@@ -91,11 +94,31 @@ function parseManifest(zip: AdmZip): ExportManifest {
   return parsed as ExportManifest;
 }
 
-export function importInstanceFromZip(zipPath: string): InstanceConfig {
+type ImportInstanceResult = {
+  instance: InstanceConfig;
+  lockfileApplied: boolean;
+  lockfileResult: ApplyLockfileResult | null;
+};
+
+function readOptionalLockfileFromZip(zip: AdmZip): InstanceLockfile | null {
+  const rootEntry = zip.getEntry("instance.lock.json");
+  const nestedEntry = zip.getEntry("instance/instance.lock.json");
+  const entry = rootEntry || nestedEntry;
+  if (!entry) return null;
+
+  try {
+    return JSON.parse(zip.readAsText(entry)) as InstanceLockfile;
+  } catch {
+    return null;
+  }
+}
+
+export async function importInstanceFromZip(zipPath: string): Promise<ImportInstanceResult> {
   if (!fs.existsSync(zipPath)) throw new Error("Import failed: zip file not found");
 
   const zip = new AdmZip(zipPath);
   const manifest = parseManifest(zip);
+  const lockfile = readOptionalLockfileFromZip(zip);
 
   const prefix = "instance/";
   const hasInstanceFiles = zip.getEntries().some((e) => !e.isDirectory && e.entryName.startsWith(prefix));
@@ -127,5 +150,14 @@ export function importInstanceFromZip(zipPath: string): InstanceConfig {
     fs.writeFileSync(outPath, entry.getData());
   }
 
-  return created;
+  let lockfileResult: ApplyLockfileResult | null = null;
+  if (lockfile) {
+    lockfileResult = await applyInstanceLockfile(newId, lockfile);
+  }
+
+  return {
+    instance: created,
+    lockfileApplied: !!lockfile,
+    lockfileResult
+  };
 }

@@ -1034,6 +1034,48 @@ function renderSettingsPanels() {
 
     diagWrap.appendChild(btnDiagnostics);
     settingsPanelInstall.appendChild(diagWrap);
+
+    const activeInstanceId = state.instances?.activeInstanceId ?? null;
+    const activeInstance = (state.instances?.instances ?? []).find((x: any) => x.id === activeInstanceId) ?? null;
+
+    const lockWrap = document.createElement("div");
+    lockWrap.className = "row";
+    lockWrap.style.justifyContent = "flex-start";
+    lockWrap.style.gap = "8px";
+    lockWrap.style.marginTop = "8px";
+
+    const btnGenLock = document.createElement("button");
+    btnGenLock.className = "btn";
+    btnGenLock.textContent = "Refresh lockfile";
+    btnGenLock.disabled = !activeInstance;
+    btnGenLock.onclick = () =>
+      guarded(async () => {
+        if (!activeInstance) return;
+        const res = await window.api.lockfileGenerate(activeInstance.id);
+        appendLog(`[lockfile] Generated for ${activeInstance.name}: ${res.artifacts} artifacts @ ${res.generatedAt}`);
+      });
+
+    const btnCheckLock = document.createElement("button");
+    btnCheckLock.className = "btn";
+    btnCheckLock.textContent = "Check lock drift";
+    btnCheckLock.disabled = !activeInstance;
+    btnCheckLock.onclick = () =>
+      guarded(async () => {
+        if (!activeInstance) return;
+        const drift = await window.api.lockfileDrift(activeInstance.id);
+        if (drift.clean) {
+          appendLog("[lockfile] Drift check: clean.");
+          alert("Lockfile drift check: clean.");
+          return;
+        }
+        const summary = drift.issues.map((x) => `${x.id}: ${x.message}`).join("\n");
+        appendLog(`[lockfile] Drift check found ${drift.issues.length} issue(s).`);
+        alert(`Lockfile drift detected (${drift.issues.length}):\n${summary}`);
+      });
+
+    lockWrap.appendChild(btnGenLock);
+    lockWrap.appendChild(btnCheckLock);
+    settingsPanelInstall.appendChild(lockWrap);
   }
 
   // Window
@@ -2024,6 +2066,17 @@ btnImport.onclick = () =>
     state.instances = await window.api.instancesList();
     await renderInstances();
     appendLog(`[instance] Imported "${res.instance?.name ?? "instance"}"`);
+    if (res.lockfileApplied) {
+      appendLog(
+        `[lockfile] Applied during import: ${res.lockfileResult?.appliedMods ?? 0} mods, ${res.lockfileResult?.appliedPacks ?? 0} packs.`
+      );
+      if (res.lockfileResult?.issues?.length) {
+        appendLog(`[lockfile] Apply issues: ${res.lockfileResult.issues.join(" | ")}`);
+      }
+      if (res.lockfileResult?.drift && !res.lockfileResult.drift.clean) {
+        appendLog(`[lockfile] Drift after import: ${res.lockfileResult.drift.issues.map((x) => `${x.id}: ${x.message}`).join(" | ")}`);
+      }
+    }
   });
 
 modalClose.onclick = closeModal;
@@ -2244,6 +2297,14 @@ btnImportServerProfile.onclick = () =>
     await renderInstances();
     await renderServerEntries(editInstanceId);
     appendLog(`[server-profile] Imported profile for ${res.result?.server?.name ?? "server"}.`);
+    if (res.result?.lockfile) {
+      appendLog(
+        `[lockfile] Applied from server profile: ${res.result.lockfile.appliedMods} mods, ${res.result.lockfile.appliedPacks} packs.`
+      );
+      if (res.result.lockfile.issues?.length) {
+        appendLog(`[lockfile] Server profile lock issues: ${res.result.lockfile.issues.join(" | ")}`);
+      }
+    }
   });
 
 modalUpdateMods.onclick = () =>
