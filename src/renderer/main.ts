@@ -86,6 +86,7 @@ const resourcepacksList = $("resourcepacksList");
 const shaderpacksList = $("shaderpacksList");
 
 const instanceAccount = $("instanceAccount") as HTMLSelectElement;
+const instancePreset = $("instancePreset") as HTMLSelectElement;
 
 let state: any = {
   versions: [],
@@ -117,6 +118,17 @@ let promptedUpdateVersion: string | null = null;
 let promptedInstallVersion: string | null = null;
 
 // ---------------- Settings ----------------
+type InstancePresetId = "none" | "max-fps" | "shader-friendly" | "distant-horizons-worldgen";
+
+type InstancePreset = {
+  id: Exclude<InstancePresetId, "none">;
+  name: string;
+  description: string;
+  memoryMb: number;
+  enableMods: string[];
+  enablePacks: string[];
+};
+
 type AppSettings = {
   theme: "ocean" | "dark" | "oled";
   blur: boolean; // maps to :root[data-glass="1"]
@@ -147,6 +159,72 @@ const defaultSettings: AppSettings = {
   jvmArgs: "",
   preLaunch: "",
   postExit: ""
+};
+
+const INSTANCE_PRESETS: Record<Exclude<InstancePresetId, "none">, InstancePreset> = {
+  "max-fps": {
+    id: "max-fps",
+    name: "Max FPS",
+    description: "Prioritizes frame rate and frametime stability with low-overhead visual defaults.",
+    memoryMb: 4096,
+    enableMods: [
+      "sodium",
+      "lithium",
+      "ferrite-core",
+      "indium",
+      "immediatelyfast",
+      "entityculling",
+      "modernfix",
+      "noisium",
+      "c2me",
+      "starlight",
+      "sodium-extra",
+      "reeses-sodium-options",
+      "dynamic-fps"
+    ],
+    enablePacks: ["fast-better-grass", "better-leaves"]
+  },
+  "shader-friendly": {
+    id: "shader-friendly",
+    name: "Shader Friendly",
+    description: "Keeps shader compatibility/performance balance and enables a curated shader stack.",
+    memoryMb: 6144,
+    enableMods: [
+      "sodium",
+      "lithium",
+      "ferrite-core",
+      "indium",
+      "immediatelyfast",
+      "entityculling",
+      "iris",
+      "sodium-extra",
+      "reeses-sodium-options",
+      "dynamic-fps"
+    ],
+    enablePacks: ["complementary-reimagined", "dramatic-skys", "xalis-enchanted-books", "fresh-animations"]
+  },
+  "distant-horizons-worldgen": {
+    id: "distant-horizons-worldgen",
+    name: "Distant Horizons Worldgen Mode",
+    description: "Optimized for long-distance terrain generation and traversal-heavy worlds.",
+    memoryMb: 8192,
+    enableMods: [
+      "sodium",
+      "lithium",
+      "ferrite-core",
+      "indium",
+      "immediatelyfast",
+      "entityculling",
+      "modernfix",
+      "noisium",
+      "c2me",
+      "starlight",
+      "sodium-extra",
+      "reeses-sodium-options",
+      "distanthorizons"
+    ],
+    enablePacks: ["fast-better-grass", "better-leaves"]
+  }
 };
 
 function getSettings(): AppSettings {
@@ -431,6 +509,88 @@ function updaterStatusText(s: UpdaterUiState) {
   if (s.status === "downloading") return `Downloading update... ${Number(s.progressPercent ?? 0).toFixed(1)}%`;
   if (s.status === "downloaded") return `Update downloaded: v${s.latestVersion ?? "unknown"}`;
   return "Updater error.";
+}
+
+function allInstancePresetIds(): InstancePresetId[] {
+  return ["none", ...Object.keys(INSTANCE_PRESETS)] as InstancePresetId[];
+}
+
+function fillInstancePresetDropdown(selectedId: string | null) {
+  instancePreset.innerHTML = "";
+
+  const none = document.createElement("option");
+  none.value = "none";
+  none.textContent = "None (Custom)";
+  instancePreset.appendChild(none);
+
+  for (const id of Object.keys(INSTANCE_PRESETS) as Array<Exclude<InstancePresetId, "none">>) {
+    const p = INSTANCE_PRESETS[id];
+    const opt = document.createElement("option");
+    opt.value = id;
+    opt.textContent = p.name;
+    instancePreset.appendChild(opt);
+  }
+
+  const safe = allInstancePresetIds().includes((selectedId ?? "none") as InstancePresetId)
+    ? (selectedId ?? "none")
+    : "none";
+  instancePreset.value = safe;
+}
+
+async function applyInstancePreset(instanceId: string, mcVersion: string, presetId: InstancePresetId) {
+  if (presetId === "none") return;
+  const preset = INSTANCE_PRESETS[presetId];
+  if (!preset) return;
+
+  setStatus(`Applying instance preset "${preset.name}"...`);
+
+  try {
+    appendLog(`[preset] Selecting "${preset.name}" for instance ${instanceId}.`);
+
+    for (const mod of CATALOG) {
+      const shouldEnable = !!mod.required || preset.enableMods.includes(mod.id);
+      try {
+        await window.api.modsSetEnabled(instanceId, mod.id, shouldEnable);
+      } catch (err: any) {
+        appendLog(`[preset] Failed toggling mod ${mod.id}: ${String(err?.message ?? err)}`);
+      }
+    }
+
+    for (const pack of PACK_CATALOG) {
+      const shouldEnable = !!pack.required || preset.enablePacks.includes(pack.id);
+      try {
+        await window.api.packsSetEnabled(instanceId, pack.id, shouldEnable);
+      } catch (err: any) {
+        appendLog(`[preset] Failed toggling pack ${pack.id}: ${String(err?.message ?? err)}`);
+      }
+    }
+
+    await window.api.instancesUpdate(instanceId, { memoryMb: preset.memoryMb, instancePreset: presetId });
+
+    // Resolve and install only enabled entries.
+    await window.api.modsRefresh(instanceId, mcVersion);
+    await window.api.packsRefresh(instanceId, mcVersion);
+
+    const afterMods = await window.api.modsList(instanceId);
+    const afterPacks = await window.api.packsList(instanceId);
+
+    for (const mod of afterMods?.mods ?? []) {
+      const shouldEnable = !!mod.required || preset.enableMods.includes(mod.id);
+      if (shouldEnable && mod.status !== "ok") {
+        appendLog(`[preset] Mod unavailable for ${mcVersion}: ${mod.name ?? mod.id} (${mod.status})`);
+      }
+    }
+    for (const pack of afterPacks?.items ?? []) {
+      const shouldEnable = !!pack.required || preset.enablePacks.includes(pack.id);
+      if (shouldEnable && pack.status !== "ok") {
+        appendLog(`[preset] Pack unavailable for ${mcVersion}: ${pack.name ?? pack.id} (${pack.status})`);
+      }
+    }
+
+    appendLog(`[preset] Applied instance preset "${preset.name}" to ${mcVersion}.`);
+  } finally {
+    setStatus("");
+  }
 }
 
 function renderSettingsPanels() {
@@ -1002,6 +1162,7 @@ async function renderInstances() {
       newName.value = i.name ?? "";
       newMem.value = String(i.memoryMb ?? 4096);
       newVersion.value = i.mcVersion ?? "";
+      fillInstancePresetDropdown(i.instancePreset ?? "none");
       await fillInstanceAccountDropdown(i.accountId ?? null);
       openModal();
     };
@@ -1117,6 +1278,7 @@ btnCreate.onclick = async () => {
   modalTitle.textContent = "Create an instance";
   newName.value = "";
   newMem.value = String(getSettings().defaultMemoryMb ?? 4096);
+  fillInstancePresetDropdown("none");
 
   newVersion.innerHTML = "";
   const s = getSettings();
@@ -1150,6 +1312,7 @@ modalCreate.onclick = () =>
     if (modalMode === "create") {
       const id = crypto.randomUUID();
       const mcVersion = newVersion.value;
+      const selectedPreset = (instancePreset.value || "none") as InstancePresetId;
 
       // ✅ Resolve Fabric loader version up-front (so instance config is complete)
       setStatus("Resolving Fabric loader…");
@@ -1162,7 +1325,8 @@ modalCreate.onclick = () =>
         loader: "fabric",
         fabricLoaderVersion,
         memoryMb: Number(newMem.value || 4096),
-        accountId: instanceAccount.value || null
+        accountId: instanceAccount.value || null,
+        instancePreset: selectedPreset
       };
 
       setStatus("Creating instance…");
@@ -1172,6 +1336,10 @@ modalCreate.onclick = () =>
       setStatus("Installing Fabric…");
       await window.api.fabricInstall(id, mcVersion, fabricLoaderVersion);
 
+      if (selectedPreset !== "none") {
+        await applyInstancePreset(id, mcVersion, selectedPreset);
+      }
+
       setStatus("");
       state.instances = await window.api.instancesList();
       await renderInstances();
@@ -1180,11 +1348,17 @@ modalCreate.onclick = () =>
     }
 
     if (modalMode === "edit" && editInstanceId) {
+      const selectedPreset = (instancePreset.value || "none") as InstancePresetId;
+      const inst = (state.instances?.instances ?? []).find((x: any) => x.id === editInstanceId) ?? null;
       await window.api.instancesUpdate(editInstanceId, {
         name: newName.value?.trim() || "Instance",
         memoryMb: Number(newMem.value || 4096),
-        accountId: instanceAccount.value || null
+        accountId: instanceAccount.value || null,
+        instancePreset: selectedPreset
       });
+      if (inst && selectedPreset !== "none") {
+        await applyInstancePreset(editInstanceId, inst.mcVersion, selectedPreset);
+      }
       state.instances = await window.api.instancesList();
       await renderInstances();
       closeModal();

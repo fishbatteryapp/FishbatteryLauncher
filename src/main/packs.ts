@@ -89,6 +89,10 @@ export async function setPackEnabled(instanceId: string, packId: string, enabled
   if (!res || res.status !== "ok") return;
 
   const dir = ensurePackDir(instanceId, pack.kind);
+  if (!enabled) {
+    cleanOldFilesForCatalogId(dir, packId);
+    return;
+  }
 
   const upstream =
     res.upstreamFileName ??
@@ -106,7 +110,7 @@ export async function setPackEnabled(instanceId: string, packId: string, enabled
   const cachedPath = cacheName ? path.join(cacheDir, cacheName) : null;
 
   cleanOldFilesForCatalogId(dir, packId);
-  const target = path.join(dir, targetFileName(packId, upstream, enabled));
+  const target = path.join(dir, targetFileName(packId, upstream, true));
 
   if (cachedPath && fs.existsSync(cachedPath) && fs.statSync(cachedPath).size > 0) {
     fs.copyFileSync(cachedPath, target);
@@ -169,6 +173,7 @@ export async function refreshPacksForInstance(opts: {
 
   for (const pack of PACK_CATALOG) {
     const enabled = !!state.enabled[pack.id] || !!pack.required;
+    const dir = ensurePackDir(instanceId, pack.kind);
 
     const base: ResolvedPack = {
       catalogId: pack.id,
@@ -178,6 +183,12 @@ export async function refreshPacksForInstance(opts: {
       mcVersion,
       lastCheckedAt: Date.now()
     };
+
+    if (!enabled) {
+      cleanOldFilesForCatalogId(dir, pack.id);
+      state.resolved[pack.id] = { ...base, status: "unavailable" };
+      continue;
+    }
 
     try {
       const resolved = await resolveLatestModrinth({
@@ -205,10 +216,9 @@ export async function refreshPacksForInstance(opts: {
       const cachedPath = path.join(cacheDir, cacheName);
       fs.writeFileSync(cachedPath, buf);
 
-      const dir = ensurePackDir(instanceId, pack.kind);
       cleanOldFilesForCatalogId(dir, pack.id);
 
-      const placedName = targetFileName(pack.id, resolved.fileName, enabled);
+      const placedName = targetFileName(pack.id, resolved.fileName, true);
       const placedPath = path.join(dir, placedName);
       fs.copyFileSync(cachedPath, placedPath);
 

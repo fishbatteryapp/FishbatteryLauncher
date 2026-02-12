@@ -11,6 +11,7 @@ export type InstanceConfig = {
   accountId?: string | null; // which account to launch with (default: active account)
   mcVersion: string;        // e.g. "1.21.4" or "25w06a"
   loader: "vanilla" | "fabric";
+  instancePreset?: string | null;
   fabricLoaderVersion?: string;
   memoryMb: number;         // e.g. 4096
   createdAt: number;

@@ -19,7 +19,13 @@ export type CatalogPack = {
  * 3) Add it here
  */
 export const PACK_CATALOG: CatalogPack[] = [
-  // Example (replace projectId with the real one from Modrinth):
   { id: "fresh-animations", name: "Fresh Animations", kind: "resourcepack", source: { kind: "modrinth", projectId: "50dA9Sha" } },
-  { id: "complementary", name: "Complementary Reimagined", kind: "shaderpack", source: { kind: "modrinth", projectId: "HVnmMxH1" } },
+  { id: "f8thful", name: "F8thful", kind: "resourcepack", source: { kind: "modrinth", projectId: "ZrW0og1b" } },
+  { id: "better-leaves", name: "Better Leaves", kind: "resourcepack", source: { kind: "modrinth", projectId: "uvpymuxq" } },
+  { id: "fast-better-grass", name: "Fast Better Grass", kind: "resourcepack", source: { kind: "modrinth", projectId: "dspVZXKP" } },
+  { id: "dramatic-skys", name: "Dramatic Skys", kind: "resourcepack", source: { kind: "modrinth", projectId: "2YyNMled" } },
+  { id: "xalis-enchanted-books", name: "Xali's Enchanted Books", kind: "resourcepack", source: { kind: "modrinth", projectId: "ZpBKASR2" } },
+  { id: "complementary-reimagined", name: "Complementary Reimagined", kind: "shaderpack", source: { kind: "modrinth", projectId: "HVnmMxH1" } },
+  { id: "complementary-unbound", name: "Complementary Unbound", kind: "shaderpack", source: { kind: "modrinth", projectId: "R6NEzAwj" } },
+  { id: "photon-shader", name: "Photon Shader", kind: "shaderpack", source: { kind: "modrinth", projectId: "lLqFfGNs" } }
 ];

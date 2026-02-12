@@ -89,6 +89,10 @@ export async function setModEnabled(instanceId: string, modId: string, enabled: 
     if (!res || res.status !== "ok") return;
 
     const modsDir = ensureModsDir(instanceId);
+    if (!enabled) {
+      cleanOldFilesForCatalogId(modsDir, modId);
+      return;
+    }
 
     // Determine upstream filename for clean naming.
     const upstream =
@@ -109,7 +113,7 @@ export async function setModEnabled(instanceId: string, modId: string, enabled: 
 
     cleanOldFilesForCatalogId(modsDir, modId);
 
-    const target = path.join(modsDir, targetFileName(modId, upstream, enabled));
+    const target = path.join(modsDir, targetFileName(modId, upstream, true));
 
     if (cachedPath && fs.existsSync(cachedPath) && fs.statSync(cachedPath).size > 0) {
       fs.copyFileSync(cachedPath, target);
@@ -150,11 +154,24 @@ export async function refreshModsForInstance(opts: { instanceId: string; mcVersi
   const state = loadModsState(instanceId);
   const modsDir = ensureModsDir(instanceId);
   const cacheDir = getModCacheDir();
+  fs.mkdirSync(cacheDir, { recursive: true });
 
   const resolved: Record<string, ResolvedMod> = {};
 
   for (const mod of CATALOG) {
     const shouldEnable = mod.required ? true : !!state.enabled[mod.id];
+    if (!shouldEnable) {
+      resolved[mod.id] = {
+        catalogId: mod.id,
+        enabled: false,
+        status: "unavailable",
+        mcVersion: opts.mcVersion,
+        loader: "fabric",
+        lastCheckedAt: Date.now()
+      };
+      cleanOldFilesForCatalogId(modsDir, mod.id);
+      continue;
+    }
 
     try {
       const r = await resolveLatestModrinth({
@@ -193,7 +210,7 @@ export async function refreshModsForInstance(opts: { instanceId: string; mcVersi
       // clean older versions for this mod installed by us
       cleanOldFilesForCatalogId(modsDir, mod.id);
 
-      const target = path.join(modsDir, targetFileName(mod.id, r.fileName, shouldEnable));
+      const target = path.join(modsDir, targetFileName(mod.id, r.fileName, true));
       fs.copyFileSync(cachedPath, target);
 
       resolved[mod.id] = {
