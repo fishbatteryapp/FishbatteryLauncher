@@ -1310,6 +1310,37 @@ function getModCompatibilityReason(mod: any, mcVersion: string) {
   return `Compatibility check failed for Minecraft ${mcVersion}.`;
 }
 
+function validationIssueSuggestions(issue: any) {
+  const code = String(issue?.code || "");
+  const mods = Array.isArray(issue?.modIds) ? issue.modIds : [];
+  if (code === "duplicate-mod-id") {
+    return ["Use \"Fix duplicates\" to remove older duplicate jars."];
+  }
+  if (code === "missing-dependency") {
+    const dep = mods[1];
+    return [
+      dep ? `Install/resolve dependency: ${dep}.` : "Resolve missing dependencies with mod refresh.",
+      "Click \"Refresh mods\" to pull compatible dependency versions."
+    ];
+  }
+  if (code === "incompatible-minecraft") {
+    return [
+      "Switch to a compatible Minecraft version or refresh to compatible builds.",
+      "Try an instance preset combo known for this version."
+    ];
+  }
+  if (code === "known-conflict") {
+    return [
+      "Disable one side of the conflict pair.",
+      "Use suggested preset combo to avoid conflicting stacks."
+    ];
+  }
+  if (code === "loader-mismatch") {
+    return ["Remove non-Fabric jars from the mods folder."];
+  }
+  return [];
+}
+
 async function renderCompatibilityGuidance(instanceId: string | null) {
   modalCompatGuidance.innerHTML = "";
   if (!instanceId) return;
@@ -1382,6 +1413,99 @@ async function renderCompatibilityGuidance(instanceId: string | null) {
   valCard.appendChild(valLeft);
   valCard.appendChild(valActions);
   modalCompatGuidance.appendChild(valCard);
+
+  if ((validation.issues ?? []).length) {
+    for (const issue of validation.issues) {
+      const row = document.createElement("div");
+      row.className = "setRow";
+      row.style.marginBottom = "8px";
+
+      const left = document.createElement("div");
+      left.style.display = "flex";
+      left.style.flexDirection = "column";
+
+      const title = document.createElement("div");
+      title.className = "setLabel";
+      title.textContent = `${issue.severity === "critical" ? "Critical" : "Warning"}: ${issue.title}`;
+
+      const detail = document.createElement("div");
+      detail.className = "setHelp";
+      detail.textContent = issue.detail || "";
+
+      left.appendChild(title);
+      left.appendChild(detail);
+
+      if (Array.isArray(issue.modIds) && issue.modIds.length) {
+        const rel = document.createElement("div");
+        rel.className = "setHelp";
+        rel.textContent =
+          issue.code === "missing-dependency" && issue.modIds.length >= 2
+            ? `Dependency path: ${issue.modIds[0]} -> ${issue.modIds[1]}`
+            : issue.code === "known-conflict" && issue.modIds.length >= 2
+              ? `Conflict path: ${issue.modIds[0]} x ${issue.modIds[1]}`
+              : `Affected mods: ${issue.modIds.join(", ")}`;
+        left.appendChild(rel);
+      }
+
+      const suggestions = validationIssueSuggestions(issue);
+      if (suggestions.length) {
+        const sug = document.createElement("div");
+        sug.className = "setHelp";
+        sug.textContent = `Suggested: ${suggestions.join(" ")}`;
+        left.appendChild(sug);
+      }
+
+      if (Array.isArray(issue.modIds) && issue.modIds.length) {
+        const alt = MOD_ALTERNATIVES[issue.modIds[0]];
+        if (alt?.length) {
+          const altLine = document.createElement("div");
+          altLine.className = "setHelp";
+          altLine.textContent = `Alternatives: ${alt.join(" | ")}`;
+          left.appendChild(altLine);
+        }
+      }
+
+      const right = document.createElement("div");
+      right.className = "row";
+      right.style.justifyContent = "flex-end";
+      right.style.gap = "8px";
+
+      if (issue.code === "duplicate-mod-id") {
+        const btn = document.createElement("button");
+        btn.className = "btn";
+        btn.textContent = "Fix duplicates";
+        btn.onclick = () =>
+          guarded(async () => {
+            const r = await window.api.modsFixDuplicates(instanceId);
+            appendLog(`[validation] Removed duplicate jars: ${r.removed.join(", ") || "none"}`);
+            await renderCompatibilityGuidance(instanceId);
+            await renderInstanceMods(instanceId);
+            await renderLocalContent(instanceId);
+          });
+        right.appendChild(btn);
+      } else if (
+        issue.code === "missing-dependency" ||
+        issue.code === "incompatible-minecraft" ||
+        issue.code === "loader-mismatch"
+      ) {
+        const btn = document.createElement("button");
+        btn.className = "btn";
+        btn.textContent = "Refresh mods";
+        btn.onclick = () =>
+          guarded(async () => {
+            await window.api.modsRefresh(instanceId, inst.mcVersion);
+            await renderCompatibilityGuidance(instanceId);
+            await renderInstanceMods(instanceId);
+            await renderLocalContent(instanceId);
+          });
+        right.appendChild(btn);
+      }
+
+      row.appendChild(left);
+      row.appendChild(right);
+      modalCompatGuidance.appendChild(row);
+    }
+  }
 
   for (const id of Object.keys(INSTANCE_PRESETS) as Array<Exclude<InstancePresetId, "none">>) {
     const preset = INSTANCE_PRESETS[id];
