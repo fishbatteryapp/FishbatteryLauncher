@@ -58,6 +58,9 @@ export type LockfileDriftIssue = {
 export type LockfileDriftReport = {
   clean: boolean;
   checkedAt: string;
+  lockfilePresent: boolean;
+  expectedArtifacts: number;
+  stateExpectedArtifacts: number;
   issues: LockfileDriftIssue[];
 };
 
@@ -435,11 +438,29 @@ export async function applyInstanceLockfile(instanceId: string, lockfileInput: I
 
 export function checkInstanceLockfileDrift(instanceId: string, lockfileInput?: InstanceLockfile): LockfileDriftReport {
   const lockfile = lockfileInput ? validateLockfile(lockfileInput) : readInstanceLockfile(instanceId);
+  const modsState = loadModsState(instanceId);
+  const packsState = loadPacksState(instanceId);
+  const stateExpectedArtifacts =
+    Object.values(modsState.resolved || {}).filter((x) => x?.enabled && x?.status === "ok").length +
+    Object.values(packsState.resolved || {}).filter((x) => x?.enabled && x?.status === "ok").length;
+
   if (!lockfile) {
+    const issues: LockfileDriftIssue[] = [];
+    if (stateExpectedArtifacts > 0) {
+      issues.push({
+        id: "lockfile",
+        category: "mod",
+        severity: "critical",
+        message: "Missing instance.lock.json for this instance"
+      });
+    }
     return {
-      clean: true,
+      clean: issues.length === 0,
       checkedAt: new Date().toISOString(),
-      issues: []
+      lockfilePresent: false,
+      expectedArtifacts: 0,
+      stateExpectedArtifacts,
+      issues
     };
   }
 
@@ -447,6 +468,16 @@ export function checkInstanceLockfileDrift(instanceId: string, lockfileInput?: I
   const modsDir = ensureModsDir(instanceId);
   const packsResourceDir = ensurePackDir(instanceId, "resourcepack");
   const packsShaderDir = ensurePackDir(instanceId, "shaderpack");
+  const expectedArtifacts = lockfile.artifacts.filter((x) => x.enabled && x.status === "ok").length;
+
+  if (expectedArtifacts === 0 && stateExpectedArtifacts > 0) {
+    issues.push({
+      id: "lockfile",
+      category: "mod",
+      severity: "warning",
+      message: "Lockfile has no enabled resolved artifacts. Refresh lockfile after mods/packs refresh."
+    });
+  }
 
   for (const entry of lockfile.artifacts) {
     if (!entry.enabled || entry.status !== "ok") continue;
@@ -500,6 +531,9 @@ export function checkInstanceLockfileDrift(instanceId: string, lockfileInput?: I
   return {
     clean: issues.length === 0,
     checkedAt: new Date().toISOString(),
+    lockfilePresent: true,
+    expectedArtifacts,
+    stateExpectedArtifacts,
     issues
   };
 }

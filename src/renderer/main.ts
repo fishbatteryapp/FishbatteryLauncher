@@ -1050,9 +1050,17 @@ function renderSettingsPanels() {
     btnGenLock.disabled = !activeInstance;
     btnGenLock.onclick = () =>
       guarded(async () => {
-        if (!activeInstance) return;
-        const res = await window.api.lockfileGenerate(activeInstance.id);
-        appendLog(`[lockfile] Generated for ${activeInstance.name}: ${res.artifacts} artifacts @ ${res.generatedAt}`);
+        const latest = await window.api.instancesList();
+        state.instances = latest;
+        const latestActiveId = latest?.activeInstanceId ?? null;
+        const latestActive = (latest?.instances ?? []).find((x: any) => x.id === latestActiveId) ?? null;
+        if (!latestActive) {
+          alert("No active instance selected.");
+          renderSettingsPanels();
+          return;
+        }
+        const res = await window.api.lockfileGenerate(latestActive.id);
+        appendLog(`[lockfile] Generated for ${latestActive.name}: ${res.artifacts} artifacts @ ${res.generatedAt}`);
       });
 
     const btnCheckLock = document.createElement("button");
@@ -1061,8 +1069,16 @@ function renderSettingsPanels() {
     btnCheckLock.disabled = !activeInstance;
     btnCheckLock.onclick = () =>
       guarded(async () => {
-        if (!activeInstance) return;
-        const drift = await window.api.lockfileDrift(activeInstance.id);
+        const latest = await window.api.instancesList();
+        state.instances = latest;
+        const latestActiveId = latest?.activeInstanceId ?? null;
+        const latestActive = (latest?.instances ?? []).find((x: any) => x.id === latestActiveId) ?? null;
+        if (!latestActive) {
+          alert("No active instance selected.");
+          renderSettingsPanels();
+          return;
+        }
+        const drift = await window.api.lockfileDrift(latestActive.id);
         if (drift.clean) {
           appendLog("[lockfile] Drift check: clean.");
           alert("Lockfile drift check: clean.");
