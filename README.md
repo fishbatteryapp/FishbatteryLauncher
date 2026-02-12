@@ -1,33 +1,58 @@
-# Your Launcher (baseline)
+# Fishbattery Launcher
 
-Electron + TypeScript Minecraft launcher scaffold:
-- Isolated instances per profile
-- Microsoft account login (multi-account) via msmc
-- Version selector for all Mojang versions including snapshots
-- Fabric profile install via Fabric Meta
-- Pre-chosen mod catalog sourced from Modrinth
-- Mods auto-resolve per selected Minecraft version, show Unavailable if none
-- Launch + logs via minecraft-launcher-core
+Fishbattery Launcher is an underwater-themed Minecraft launcher focused on a simple setup, isolated game instances, and curated Fabric mods.
 
-## Requirements
-- Node.js 18+ (recommended 20+)
-- A legit Minecraft Java Edition account
+## What it does
+- Sign in with your Microsoft Minecraft account (supports multiple accounts)
+- Browse and launch vanilla versions, including snapshots
+- Install and launch Fabric profiles
+- Use a curated Modrinth mod catalog
+- Automatically resolve mod compatibility for your selected Minecraft version
+- Keep each profile isolated with its own game files (mods, saves, assets, etc.)
+- View launch logs directly from the launcher
 
-## Run
+## Quick start
+### Requirements
+- Node.js 18+ (Node.js 20+ recommended)
+- A legitimate Minecraft Java Edition account
+
+### Run locally
 ```bash
 npm install
 npm run dev
 ```
 
-## Where data is stored
-Electron userData folder:
-- Windows: %APPDATA%/your-launcher
-- macOS: ~/Library/Application Support/your-launcher
-- Linux: ~/.config/your-launcher
+## Build a distributable
+```bash
+npm run dist
+```
 
-Each instance has its own isolated game dir (versions, libraries, assets, mods, saves, etc).
+Output files are generated in the `release/` folder.
 
-## Edit the mod list
-`src/main/modrinthCatalog.ts`
+## Data location
+Launcher data is stored in Electron's `userData` directory:
+- Windows: `%APPDATA%/your-launcher`
+- macOS: `~/Library/Application Support/your-launcher`
+- Linux: `~/.config/your-launcher`
 
-Project IDs are Modrinth project IDs (not slugs).
+## Customize the mod list
+Edit:
+- `src/main/modrinthCatalog.ts`
+
+Use Modrinth project IDs (not slugs).
+
+## Troubleshooting
+- Login issues: confirm your Microsoft account owns Minecraft Java Edition.
+- Launch failures: verify internet connection and check the launcher logs.
+- Mod availability: some mods only support specific Minecraft versions.
+
+## Contributing
+Issues and pull requests are welcome.
+If you find a bug, include steps to reproduce and the relevant logs.
+
+## Tech stack
+- Electron
+- TypeScript
+- `minecraft-launcher-core`
+- `msmc`
+- Modrinth API
