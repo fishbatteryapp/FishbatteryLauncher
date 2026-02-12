@@ -86,6 +86,10 @@ declare global {
       updaterCheck: () => Promise<boolean>;
       updaterDownload: () => Promise<boolean>;
       updaterInstall: () => Promise<boolean>;
+      diagnosticsExport: () => Promise<
+        | { ok: true; canceled: false; path: string }
+        | { ok: false; canceled: true }
+      >;
 
       onLaunchLog: (cb: (line: string) => void) => void;
       onUpdaterEvent: (cb: (evt: any) => void) => void;

@@ -69,6 +69,7 @@ contextBridge.exposeInMainWorld("api", {
   updaterCheck: () => ipcRenderer.invoke("updater:check"),
   updaterDownload: () => ipcRenderer.invoke("updater:download"),
   updaterInstall: () => ipcRenderer.invoke("updater:install"),
+  diagnosticsExport: () => ipcRenderer.invoke("diagnostics:export"),
 
   onLaunchLog: (cb: (line: string) => void) => {
     ipcRenderer.removeAllListeners("launch:log");

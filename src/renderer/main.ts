@@ -569,6 +569,26 @@ function renderSettingsPanels() {
     actions.appendChild(btnDownload);
     actions.appendChild(btnInstall);
     settingsPanelInstall.appendChild(actions);
+
+    const diagWrap = document.createElement("div");
+    diagWrap.className = "row";
+    diagWrap.style.justifyContent = "flex-start";
+    diagWrap.style.gap = "8px";
+    diagWrap.style.marginTop = "10px";
+
+    const btnDiagnostics = document.createElement("button");
+    btnDiagnostics.className = "btn";
+    btnDiagnostics.textContent = "Export diagnostics";
+    btnDiagnostics.onclick = () =>
+      guarded(async () => {
+        const res = await window.api.diagnosticsExport();
+        if (!res.ok || res.canceled) return;
+        appendLog(`[diagnostics] Exported: ${res.path}`);
+        alert(`Diagnostics exported:\n${res.path}`);
+      });
+
+    diagWrap.appendChild(btnDiagnostics);
+    settingsPanelInstall.appendChild(diagWrap);
   }
 
   // Window

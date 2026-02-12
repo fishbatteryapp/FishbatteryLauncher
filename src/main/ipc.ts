@@ -1,4 +1,5 @@
-import { ipcMain, shell } from "electron";
+import { BrowserWindow, app, dialog, ipcMain, shell } from "electron";
+import path from "node:path";
 import { listAllVersions } from "./versions";
 import {
   addMicrosoftAccountInteractive,
@@ -23,6 +24,7 @@ import { installVanillaVersion } from "./vanillaInstall";
 import { launchInstance, isInstanceRunning, stopInstance } from "./launch";
 import type { LaunchRuntimePrefs } from "./launch";
 import { registerContentIpc } from "./content";
+import { exportDiagnosticsZip } from "./diagnostics";
 import {
   checkForUpdates,
   downloadUpdate,
@@ -208,6 +210,26 @@ export function registerIpc() {
   ipcMain.handle("updater:check", async () => checkForUpdates());
   ipcMain.handle("updater:download", async () => downloadUpdate());
   ipcMain.handle("updater:install", async () => quitAndInstallUpdate());
+
+  // ---------- Diagnostics ----------
+  ipcMain.handle("diagnostics:export", async (e) => {
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const defaultPath = path.join(app.getPath("downloads"), `fishbattery-diagnostics-${stamp}.zip`);
+    const owner = BrowserWindow.fromWebContents(e.sender) ?? undefined;
+
+    const picked = await dialog.showSaveDialog(owner, {
+      title: "Export Diagnostics",
+      defaultPath,
+      filters: [{ name: "Zip archive", extensions: ["zip"] }]
+    });
+
+    if (picked.canceled || !picked.filePath) {
+      return { ok: false, canceled: true as const };
+    }
+
+    const outPath = exportDiagnosticsZip(picked.filePath);
+    return { ok: true, canceled: false as const, path: outPath };
+  });
 
   // ---------- Local Content (manual uploads) ----------
   registerContentIpc();
