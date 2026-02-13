@@ -46,12 +46,14 @@ const launchDiagnosisDetails = $("launchDiagnosisDetails");
 
 // Settings nav + panels
 const settingsTabGeneral = $("settingsTabGeneral");
+const settingsTabTheme = $("settingsTabTheme");
 const settingsTabInstall = $("settingsTabInstall");
 const settingsTabWindow = $("settingsTabWindow");
 const settingsTabJava = $("settingsTabJava");
 const settingsTabHooks = $("settingsTabHooks");
 
 const settingsPanelGeneral = $("settingsPanelGeneral");
+const settingsPanelTheme = $("settingsPanelTheme");
 const settingsPanelInstall = $("settingsPanelInstall");
 const settingsPanelWindow = $("settingsPanelWindow");
 const settingsPanelJava = $("settingsPanelJava");
@@ -332,6 +334,9 @@ type InstancePreset = {
 type AppSettings = {
   theme: "ocean" | "dark" | "oled";
   blur: boolean; // maps to :root[data-glass="1"]
+  accentColor: string;
+  surfaceAlpha: number;
+  customBackgroundDataUrl: string;
   updateChannel: "stable" | "beta";
   showSnapshots: boolean;
   autoUpdateMods: boolean;
@@ -349,6 +354,9 @@ const SETTINGS_KEY = "fishbattery.settings";
 const defaultSettings: AppSettings = {
   theme: "ocean",
   blur: true,
+  accentColor: "#3ddc84",
+  surfaceAlpha: 88,
+  customBackgroundDataUrl: "",
   updateChannel: "stable",
   showSnapshots: false,
   autoUpdateMods: true,
@@ -505,7 +513,25 @@ const MOD_ALTERNATIVES: Record<string, string[]> = {
 
 function getSettings(): AppSettings {
   try {
-    return { ...defaultSettings, ...(JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}") || {}) };
+    const raw = { ...defaultSettings, ...(JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}") || {}) };
+    const accentColor =
+      typeof raw.accentColor === "string" && /^#[0-9a-fA-F]{6}$/.test(raw.accentColor)
+        ? raw.accentColor
+        : defaultSettings.accentColor;
+    const surfaceAlpha = Math.max(
+      70,
+      Math.min(98, Number.isFinite(Number(raw.surfaceAlpha)) ? Number(raw.surfaceAlpha) : defaultSettings.surfaceAlpha)
+    );
+    const customBackgroundDataUrl =
+      typeof raw.customBackgroundDataUrl === "string" && /^data:image\//.test(raw.customBackgroundDataUrl)
+        ? raw.customBackgroundDataUrl
+        : "";
+    return {
+      ...raw,
+      accentColor,
+      surfaceAlpha,
+      customBackgroundDataUrl
+    };
   } catch {
     return { ...defaultSettings };
   }
@@ -513,14 +539,47 @@ function getSettings(): AppSettings {
 
 function setSettings(patch: Partial<AppSettings>) {
   const next = { ...getSettings(), ...patch };
-  localStorage.setItem(SETTINGS_KEY, JSON.stringify(next));
+  try {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(next));
+  } catch (err: any) {
+    alert(`Could not save setting: ${String(err?.message ?? err)}`);
+    return;
+  }
   applySettingsToDom(next);
+}
+
+function hexToRgbTriplet(hex: string) {
+  const m = String(hex || "").trim().match(/^#?([a-fA-F0-9]{6})$/);
+  if (!m) return "61,220,132";
+  const v = m[1];
+  const r = parseInt(v.slice(0, 2), 16);
+  const g = parseInt(v.slice(2, 4), 16);
+  const b = parseInt(v.slice(4, 6), 16);
+  return `${r},${g},${b}`;
 }
 
 function applySettingsToDom(s: AppSettings) {
   // Your CSS expects these
   document.documentElement.dataset.theme = s.theme;
   document.documentElement.dataset.glass = s.blur ? "1" : "0";
+  document.documentElement.style.setProperty("--accent", s.accentColor || "#3ddc84");
+  document.documentElement.style.setProperty("--accent-rgb", hexToRgbTriplet(s.accentColor || "#3ddc84"));
+  const alpha = Math.max(70, Math.min(98, Number(s.surfaceAlpha || 88)));
+  document.documentElement.style.setProperty("--surface-alpha", String(alpha / 100));
+
+  if (s.customBackgroundDataUrl) {
+    document.body.style.backgroundImage = `linear-gradient(rgba(7, 12, 18, .68), rgba(7, 12, 18, .68)), url("${s.customBackgroundDataUrl}")`;
+    document.body.style.backgroundSize = "cover";
+    document.body.style.backgroundPosition = "center";
+    document.body.style.backgroundRepeat = "no-repeat";
+    document.body.style.backgroundAttachment = "fixed";
+  } else {
+    document.body.style.backgroundImage = "";
+    document.body.style.backgroundSize = "";
+    document.body.style.backgroundPosition = "";
+    document.body.style.backgroundRepeat = "";
+    document.body.style.backgroundAttachment = "";
+  }
 }
 
 // ---------------- Utilities ----------------
@@ -869,6 +928,31 @@ function makeTextarea(value: string, placeholder: string, onChange: (v: string) 
   return ta;
 }
 
+async function pickImageAsDataUrl(): Promise<string | null> {
+  return new Promise((resolve) => {
+    const inp = document.createElement("input");
+    inp.type = "file";
+    inp.accept = "image/png,image/jpeg,image/webp,image/gif";
+    inp.onchange = () => {
+      const file = inp.files?.[0];
+      if (!file) {
+        resolve(null);
+        return;
+      }
+      if (file.size > 4 * 1024 * 1024) {
+        alert("Image is too large. Please choose one smaller than 4 MB.");
+        resolve(null);
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : null);
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(file);
+    };
+    inp.click();
+  });
+}
+
 function updaterStatusText(s: UpdaterUiState) {
   const msg = s.message?.trim();
   if (msg) return msg;
@@ -1072,28 +1156,6 @@ function renderSettingsPanels() {
   settingsPanelGeneral.appendChild(makeH3("General"));
 
   {
-    const { row } = makeRow("Theme", "Changes the overall look (CSS themes).");
-    const sel = makeSelect(
-      [
-        { value: "ocean", label: "Ocean" },
-        { value: "dark", label: "Dark" },
-        { value: "oled", label: "OLED" }
-      ],
-      s.theme,
-      (v) => setSettings({ theme: v as AppSettings["theme"] })
-    );
-    row.appendChild(sel);
-    settingsPanelGeneral.appendChild(row);
-  }
-
-  {
-    const { row } = makeRow("Glass blur", "Enable/disable blur on panels (performance vs style).");
-    const sw = makeSwitch(s.blur, (v) => setSettings({ blur: v }));
-    row.appendChild(sw);
-    settingsPanelGeneral.appendChild(row);
-  }
-
-  {
     const { row } = makeRow("Show snapshots", "Include snapshot versions in the version dropdown.");
     const sw = makeSwitch(s.showSnapshots, (v) =>
       guarded(async () => {
@@ -1123,6 +1185,166 @@ function renderSettingsPanels() {
     (inp as any).step = "256";
     row.appendChild(inp);
     settingsPanelGeneral.appendChild(row);
+  }
+
+  // Theme
+  clearPanel(settingsPanelTheme);
+  settingsPanelTheme.appendChild(makeH3("Theme"));
+
+  {
+    const { row } = makeRow("Base style", "Changes the overall look.");
+    const sel = makeSelect(
+      [
+        { value: "ocean", label: "Ocean" },
+        { value: "dark", label: "Dark" },
+        { value: "oled", label: "Ultra-dark OLED" }
+      ],
+      s.theme,
+      (v) => setSettings({ theme: v as AppSettings["theme"] })
+    );
+    row.appendChild(sel);
+    settingsPanelTheme.appendChild(row);
+  }
+
+  {
+    const { row } = makeRow("Theme preset", "Quick apply of curated presets. Premium presets are locked.");
+    const wrap = document.createElement("div");
+    wrap.className = "row";
+    wrap.style.justifyContent = "flex-end";
+
+    const preset = makeSelect(
+      [
+        { value: "none", label: "Custom" },
+        { value: "ocean-default", label: "Ocean Default" },
+        { value: "deep-ocean", label: "Deep Ocean" },
+        { value: "premium-neon", label: "Neon Storm (Premium)" },
+        { value: "premium-aurora", label: "Aurora Glass (Premium)" }
+      ],
+      "none",
+      (v) => {
+        if (v.startsWith("premium-")) {
+          alert("Premium theme preset (locked).");
+          return;
+        }
+        if (v === "ocean-default") {
+          setSettings({
+            theme: "ocean",
+            accentColor: "#3ddc84",
+            surfaceAlpha: 88,
+            blur: true
+          });
+          return;
+        }
+        if (v === "deep-ocean") {
+          setSettings({
+            theme: "dark",
+            accentColor: "#4ac8ff",
+            surfaceAlpha: 82,
+            blur: true
+          });
+        }
+      }
+    );
+    wrap.appendChild(preset);
+    row.appendChild(wrap);
+    settingsPanelTheme.appendChild(row);
+  }
+
+  {
+    const { row } = makeRow("Accent color", "Used for highlights and primary accents.");
+    const inp = document.createElement("input");
+    inp.type = "color";
+    inp.className = "setControl";
+    inp.style.width = "140px";
+    inp.value = /^#[0-9a-fA-F]{6}$/.test(s.accentColor) ? s.accentColor : "#3ddc84";
+    inp.oninput = () => setSettings({ accentColor: inp.value });
+    row.appendChild(inp);
+    settingsPanelTheme.appendChild(row);
+  }
+
+  {
+    const { row } = makeRow("Panel transparency", "Controls panel opacity without reducing readability.");
+    const wrap = document.createElement("div");
+    wrap.className = "row";
+    wrap.style.justifyContent = "flex-end";
+    wrap.style.minWidth = "280px";
+
+    const range = document.createElement("input");
+    range.type = "range";
+    range.min = "70";
+    range.max = "98";
+    range.step = "1";
+    range.value = String(s.surfaceAlpha ?? 88);
+    range.style.width = "220px";
+
+    const value = document.createElement("span");
+    value.className = "muted";
+    value.style.fontSize = "12px";
+    value.style.minWidth = "48px";
+    value.textContent = `${range.value}%`;
+
+    range.oninput = () => {
+      const n = Math.max(70, Math.min(98, Number(range.value || 88)));
+      value.textContent = `${n}%`;
+      setSettings({ surfaceAlpha: n });
+    };
+
+    wrap.appendChild(range);
+    wrap.appendChild(value);
+    row.appendChild(wrap);
+    settingsPanelTheme.appendChild(row);
+  }
+
+  {
+    const { row } = makeRow("Background blur", "Enable or disable blur on cards and dialogs.");
+    const sw = makeSwitch(s.blur, (v) => setSettings({ blur: v }));
+    row.appendChild(sw);
+    settingsPanelTheme.appendChild(row);
+  }
+
+  {
+    const { row } = makeRow("Custom background", "Use your own background image behind the launcher.");
+    const wrap = document.createElement("div");
+    wrap.className = "row";
+    wrap.style.justifyContent = "flex-end";
+
+    const pick = document.createElement("button");
+    pick.className = "btn";
+    pick.textContent = s.customBackgroundDataUrl ? "Replace image" : "Choose image";
+    pick.onclick = () =>
+      guarded(async () => {
+        const dataUrl = await pickImageAsDataUrl();
+        if (!dataUrl) return;
+        setSettings({ customBackgroundDataUrl: dataUrl });
+      });
+
+    const clear = document.createElement("button");
+    clear.className = "btn";
+    clear.textContent = "Clear";
+    clear.disabled = !s.customBackgroundDataUrl;
+    clear.onclick = () => setSettings({ customBackgroundDataUrl: "" });
+
+    wrap.appendChild(pick);
+    wrap.appendChild(clear);
+    row.appendChild(wrap);
+    settingsPanelTheme.appendChild(row);
+  }
+
+  {
+    const { row } = makeRow("Reset theme", "Restore theme settings to defaults.");
+    const btn = document.createElement("button");
+    btn.className = "btn";
+    btn.textContent = "Reset to defaults";
+    btn.onclick = () =>
+      setSettings({
+        theme: defaultSettings.theme,
+        blur: defaultSettings.blur,
+        accentColor: defaultSettings.accentColor,
+        surfaceAlpha: defaultSettings.surfaceAlpha,
+        customBackgroundDataUrl: defaultSettings.customBackgroundDataUrl
+      });
+    row.appendChild(btn);
+    settingsPanelTheme.appendChild(row);
   }
 
   // Install (updater)
@@ -1423,9 +1645,10 @@ function renderSettingsPanels() {
   }
 }
 
-function setSettingsTab(tab: "general" | "install" | "window" | "java" | "hooks") {
+function setSettingsTab(tab: "general" | "theme" | "install" | "window" | "java" | "hooks") {
   const btns: Record<string, HTMLElement> = {
     general: settingsTabGeneral,
+    theme: settingsTabTheme,
     install: settingsTabInstall,
     window: settingsTabWindow,
     java: settingsTabJava,
@@ -1434,6 +1657,7 @@ function setSettingsTab(tab: "general" | "install" | "window" | "java" | "hooks"
 
   const panels: Record<string, HTMLElement> = {
     general: settingsPanelGeneral,
+    theme: settingsPanelTheme,
     install: settingsPanelInstall,
     window: settingsPanelWindow,
     java: settingsPanelJava,
@@ -1447,6 +1671,7 @@ function setSettingsTab(tab: "general" | "install" | "window" | "java" | "hooks"
 }
 
 settingsTabGeneral.onclick = () => setSettingsTab("general");
+settingsTabTheme.onclick = () => setSettingsTab("theme");
 settingsTabInstall.onclick = () => setSettingsTab("install");
 settingsTabWindow.onclick = () => setSettingsTab("window");
 settingsTabJava.onclick = () => setSettingsTab("java");
