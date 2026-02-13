@@ -945,6 +945,12 @@ pre{
   --font-ui: "Minecraft UI", "Minecraftia", "Press Start 2P", "Consolas", monospace;
 }
 
+:root[data-font="pixel"] *,
+:root[data-font="pixel"] *::before,
+:root[data-font="pixel"] *::after{
+  font-family: var(--font-ui) !important;
+}
+
 :root[data-font="pixel"] body{
   font-size: 12px;
   letter-spacing: .15px;
