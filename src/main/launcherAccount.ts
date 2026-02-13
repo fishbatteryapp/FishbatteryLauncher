@@ -76,6 +76,7 @@ const PATH_LOGIN = getApiPath("FISHBATTERY_ACCOUNT_LOGIN_PATH", "/v1/auth/login"
 const PATH_LOGOUT = getApiPath("FISHBATTERY_ACCOUNT_LOGOUT_PATH", "/v1/auth/logout");
 const PATH_SESSION = getApiPath("FISHBATTERY_ACCOUNT_SESSION_PATH", "/v1/auth/session");
 const PATH_SWITCH = getApiPath("FISHBATTERY_ACCOUNT_SWITCH_PATH", "/v1/auth/switch");
+const PATH_PROFILE_UPDATE = getApiPath("FISHBATTERY_ACCOUNT_PROFILE_UPDATE_PATH", "/v1/account/profile");
 const PATH_GOOGLE_DESKTOP_START = getApiPath(
   "FISHBATTERY_ACCOUNT_GOOGLE_DESKTOP_START_PATH",
   "/v1/auth/google/desktop/start"
@@ -155,7 +156,7 @@ function loadSession(): LauncherSession | null {
 async function requestAuth(
   path: string,
   init: {
-    method: "GET" | "POST";
+    method: "GET" | "POST" | "PATCH";
     body?: Record<string, unknown>;
     accessToken?: string;
   }
@@ -293,6 +294,32 @@ export async function logoutLauncherAccount(): Promise<LauncherAccountState> {
   const db: LauncherAccountDb = { activeAccountId: null, accounts: [], updatedAt: Date.now() };
   writeDb(db);
   return stateFromDb(db);
+}
+
+export async function updateLauncherAccountProfile(
+  patch: { displayName?: string; avatarUrl?: string | null }
+): Promise<LauncherAccountState> {
+  const session = loadSession();
+  if (!session?.accessToken) throw new Error("Not signed in.");
+
+  const body: Record<string, unknown> = {};
+  if (Object.prototype.hasOwnProperty.call(patch, "displayName")) {
+    const displayName = String(patch.displayName || "").trim();
+    if (!displayName) throw new Error("Display name is required.");
+    body.displayName = displayName;
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, "avatarUrl")) {
+    const avatar = patch.avatarUrl == null ? null : String(patch.avatarUrl).trim();
+    body.avatarUrl = avatar || null;
+  }
+  if (!Object.keys(body).length) throw new Error("No profile changes provided.");
+
+  const response = await requestAuth(PATH_PROFILE_UPDATE, {
+    method: "PATCH",
+    body,
+    accessToken: session.accessToken
+  });
+  return applyAuthResponse(response, session.accountId ?? null);
 }
 
 export async function getLauncherAccountState(): Promise<LauncherAccountState> {

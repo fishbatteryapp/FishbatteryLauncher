@@ -15,6 +15,7 @@ import {
   loginLauncherAccount,
   logoutLauncherAccount,
   registerLauncherAccount,
+  updateLauncherAccountProfile,
   switchLauncherAccount
 } from "./launcherAccount";
 import {
@@ -416,6 +417,10 @@ export function registerIpc() {
   ipcMain.handle("launcherAccount:googleLogin", async () => loginLauncherAccountWithGoogleDesktop());
   ipcMain.handle("launcherAccount:switch", async (_e, accountId: string) => switchLauncherAccount(accountId));
   ipcMain.handle("launcherAccount:logout", async () => logoutLauncherAccount());
+  ipcMain.handle(
+    "launcherAccount:updateProfile",
+    async (_e, patch: { displayName?: string; avatarUrl?: string | null }) => updateLauncherAccountProfile(patch)
+  );
 
   // ---------- Versions ----------
   ipcMain.handle("versions:list", async () => listAllVersions());

@@ -2533,6 +2533,11 @@ type LauncherAuthFormResult = {
   displayName?: string;
 } | null;
 
+type LauncherProfileFormResult = {
+  displayName: string;
+  avatarUrl: string | null;
+} | null;
+
 async function openLauncherAuthDialog(mode: "login" | "register"): Promise<LauncherAuthFormResult> {
   return new Promise((resolve) => {
     const backdrop = document.createElement("div");
@@ -2636,6 +2641,119 @@ async function openLauncherAuthDialog(mode: "login" | "register"): Promise<Launc
     };
 
     emailField.input.focus();
+  });
+}
+
+async function openLauncherProfileDialog(current: {
+  displayName?: string | null;
+  avatarUrl?: string | null;
+}): Promise<LauncherProfileFormResult> {
+  return new Promise((resolve) => {
+    const backdrop = document.createElement("div");
+    backdrop.style.position = "fixed";
+    backdrop.style.inset = "0";
+    backdrop.style.background = "rgba(5, 12, 22, 0.72)";
+    backdrop.style.display = "grid";
+    backdrop.style.placeItems = "center";
+    backdrop.style.zIndex = "99999";
+
+    const panel = document.createElement("div");
+    panel.style.width = "min(500px, calc(100vw - 24px))";
+    panel.style.padding = "14px";
+    panel.style.borderRadius = "14px";
+    panel.style.border = "1px solid var(--line)";
+    panel.style.background = "var(--panel)";
+    panel.style.boxShadow = "0 16px 50px rgba(0,0,0,.45)";
+
+    const title = document.createElement("h3");
+    title.textContent = "Launcher account settings";
+    title.style.margin = "0 0 10px";
+
+    const makeInput = (labelText: string, type = "text", placeholder = "") => {
+      const wrap = document.createElement("label");
+      wrap.style.display = "grid";
+      wrap.style.gap = "6px";
+      wrap.style.marginBottom = "10px";
+      const label = document.createElement("span");
+      label.textContent = labelText;
+      label.style.fontSize = "12px";
+      label.className = "muted";
+      const input = document.createElement("input");
+      input.type = type;
+      input.placeholder = placeholder;
+      input.className = "input";
+      wrap.append(label, input);
+      return { wrap, input };
+    };
+
+    const displayNameField = makeInput("Display name", "text", "Fishbattery");
+    const avatarField = makeInput("Profile picture URL", "url", "https://...");
+    displayNameField.input.value = String(current.displayName || "").trim();
+    avatarField.input.value = String(current.avatarUrl || "").trim();
+
+    const hint = document.createElement("div");
+    hint.className = "muted";
+    hint.style.fontSize = "12px";
+    hint.style.marginBottom = "8px";
+    hint.textContent = "Avatar URL supports http(s) links and data:image/* base64 URLs.";
+
+    panel.append(title, displayNameField.wrap, avatarField.wrap, hint);
+
+    const actions = document.createElement("div");
+    actions.style.display = "flex";
+    actions.style.justifyContent = "flex-end";
+    actions.style.gap = "8px";
+    actions.style.marginTop = "4px";
+
+    const clearAvatarBtn = document.createElement("button");
+    clearAvatarBtn.className = "btn";
+    clearAvatarBtn.textContent = "Clear picture";
+
+    const cancelBtn = document.createElement("button");
+    cancelBtn.className = "btn";
+    cancelBtn.textContent = "Cancel";
+
+    const saveBtn = document.createElement("button");
+    saveBtn.className = "btn ok";
+    saveBtn.textContent = "Save";
+
+    actions.append(clearAvatarBtn, cancelBtn, saveBtn);
+    panel.appendChild(actions);
+    backdrop.appendChild(panel);
+    document.body.appendChild(backdrop);
+
+    const cleanup = () => {
+      backdrop.remove();
+      document.removeEventListener("keydown", onEsc);
+    };
+    const finish = (value: LauncherProfileFormResult) => {
+      cleanup();
+      resolve(value);
+    };
+    const onEsc = (ev: KeyboardEvent) => {
+      if (ev.key === "Escape") finish(null);
+    };
+    document.addEventListener("keydown", onEsc);
+
+    backdrop.addEventListener("click", (ev) => {
+      if (ev.target === backdrop) finish(null);
+    });
+
+    clearAvatarBtn.onclick = () => {
+      avatarField.input.value = "";
+    };
+    cancelBtn.onclick = () => finish(null);
+    saveBtn.onclick = () => {
+      const displayName = displayNameField.input.value.trim();
+      const avatarUrlRaw = avatarField.input.value.trim();
+      if (!displayName) {
+        alert("Display name is required.");
+        return;
+      }
+      finish({ displayName, avatarUrl: avatarUrlRaw || null });
+    };
+
+    displayNameField.input.focus();
   });
 }
 
@@ -2854,6 +2972,25 @@ async function renderAccounts() {
     });
   };
 
+  const btnLauncherSettings = document.createElement("button");
+  btnLauncherSettings.className = "btn";
+  btnLauncherSettings.textContent = "Account settings";
+  btnLauncherSettings.onclick = () => {
+    void runLauncherAccountAction(async () => {
+      const values = await openLauncherProfileDialog({
+        displayName: launcherState?.activeAccount?.displayName,
+        avatarUrl: launcherState?.activeAccount?.avatarUrl ?? null
+      });
+      if (!values) return;
+      state.launcherAccount = await window.api.launcherAccountUpdateProfile({
+        displayName: values.displayName,
+        avatarUrl: values.avatarUrl
+      });
+      await renderAccounts();
+      accountDropdown.classList.remove("open");
+    });
+  };
+
   if (launcherState?.configured === false) {
     const warn = document.createElement("div");
     warn.style.padding = "2px 12px 10px";
@@ -2867,6 +3004,10 @@ async function renderAccounts() {
     launcherActionRow.appendChild(btnLauncherGoogle);
     accountItems.appendChild(launcherActionRow);
   } else {
+    launcherActionRow.appendChild(btnLauncherSettings);
+    launcherActionRow.appendChild(btnLauncherLogout);
+    accountItems.appendChild(launcherActionRow);
+
     const launcherAccounts = Array.isArray(launcherState?.accounts) ? launcherState.accounts : [launcherActive];
     for (const a of launcherAccounts) {
       const item = document.createElement("div");

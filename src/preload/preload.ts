@@ -20,6 +20,8 @@ contextBridge.exposeInMainWorld("api", {
   launcherAccountGoogleLogin: () => ipcRenderer.invoke("launcherAccount:googleLogin"),
   launcherAccountSwitch: (accountId: string) => ipcRenderer.invoke("launcherAccount:switch", accountId),
   launcherAccountLogout: () => ipcRenderer.invoke("launcherAccount:logout"),
+  launcherAccountUpdateProfile: (patch: { displayName?: string; avatarUrl?: string | null }) =>
+    ipcRenderer.invoke("launcherAccount:updateProfile", patch),
 
   instancesList: () => ipcRenderer.invoke("instances:list"),
   instancesCreate: (cfg: any) => ipcRenderer.invoke("instances:create", cfg),

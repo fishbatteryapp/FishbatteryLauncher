@@ -76,6 +76,18 @@ declare global {
         updatedAt: number | null;
         error: string | null;
       }>;
+      launcherAccountUpdateProfile: (patch: {
+        displayName?: string;
+        avatarUrl?: string | null;
+      }) => Promise<{
+        configured: boolean;
+        signedIn: boolean;
+        activeAccountId: string | null;
+        activeAccount: any;
+        accounts: any[];
+        updatedAt: number | null;
+        error: string | null;
+      }>;
 
       instancesList: () => Promise<any>;
       instancesCreate: (cfg: any) => Promise<any>;
