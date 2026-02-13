@@ -331,11 +331,67 @@ type InstancePreset = {
   variants: Partial<Record<LoaderKind, InstancePresetVariant>>;
 };
 
+type ThemeId =
+  | "ocean"
+  | "dark"
+  | "oled"
+  | "system-default"
+  | "windows-xp"
+  | "minecraft-grass-block"
+  | "end-dimension"
+  | "nether-core"
+  | "ice-frost"
+  | "prism-style"
+  | "creeper-mode"
+  | "retro-2000s"
+  | "rgb-gamer"
+  | "glass-modern-w11"
+  | "console-mode"
+  | "dynamic-accent"
+  | "time-of-day"
+  | "biome-plains"
+  | "biome-desert"
+  | "biome-jungle"
+  | "biome-snow"
+  | "biome-cherry-grove"
+  | "developer-mode"
+  | "minimal-bw";
+
+const THEME_OPTIONS: Array<{ value: ThemeId; label: string }> = [
+  { value: "ocean", label: "Ocean" },
+  { value: "dark", label: "Dark" },
+  { value: "oled", label: "OLED" },
+  { value: "system-default", label: "System Default" },
+  { value: "windows-xp", label: "Windows XP" },
+  { value: "minecraft-grass-block", label: "Minecraft Grass Block" },
+  { value: "end-dimension", label: "End Dimension" },
+  { value: "nether-core", label: "Nether Core" },
+  { value: "ice-frost", label: "Ice / Frost" },
+  { value: "prism-style", label: "Prism Style (Minimal Flat)" },
+  { value: "creeper-mode", label: "Creeper Mode" },
+  { value: "retro-2000s", label: "Retro 2000s" },
+  { value: "rgb-gamer", label: "RGB Gamer" },
+  { value: "glass-modern-w11", label: "Glass (Modern Windows 11)" },
+  { value: "console-mode", label: "Console Mode" },
+  { value: "dynamic-accent", label: "Dynamic Accent Theme" },
+  { value: "time-of-day", label: "Time-of-Day Theme" },
+  { value: "biome-plains", label: "Biome: Plains" },
+  { value: "biome-desert", label: "Biome: Desert" },
+  { value: "biome-jungle", label: "Biome: Jungle" },
+  { value: "biome-snow", label: "Biome: Snow" },
+  { value: "biome-cherry-grove", label: "Biome: Cherry Grove" },
+  { value: "developer-mode", label: "Developer Mode" },
+  { value: "minimal-bw", label: "Minimal B&W" }
+];
+
 type AppSettings = {
-  theme: "ocean" | "dark" | "oled";
+  theme: ThemeId;
   blur: boolean; // maps to :root[data-glass="1"]
   accentColor: string;
   surfaceAlpha: number;
+  cornerRadius: number;
+  borderThickness: number;
+  pixelFont: boolean;
   customBackgroundDataUrl: string;
   updateChannel: "stable" | "beta";
   showSnapshots: boolean;
@@ -356,6 +412,9 @@ const defaultSettings: AppSettings = {
   blur: true,
   accentColor: "#3ddc84",
   surfaceAlpha: 88,
+  cornerRadius: 12,
+  borderThickness: 1,
+  pixelFont: false,
   customBackgroundDataUrl: "",
   updateChannel: "stable",
   showSnapshots: false,
@@ -526,11 +585,23 @@ function getSettings(): AppSettings {
       typeof raw.customBackgroundDataUrl === "string" && /^data:image\//.test(raw.customBackgroundDataUrl)
         ? raw.customBackgroundDataUrl
         : "";
+    const cornerRadius = Math.max(
+      8,
+      Math.min(22, Number.isFinite(Number(raw.cornerRadius)) ? Number(raw.cornerRadius) : defaultSettings.cornerRadius)
+    );
+    const borderThickness = Math.max(
+      1,
+      Math.min(3, Number.isFinite(Number(raw.borderThickness)) ? Number(raw.borderThickness) : defaultSettings.borderThickness)
+    );
+    const pixelFont = !!raw.pixelFont;
     return {
       ...raw,
       accentColor,
       surfaceAlpha,
-      customBackgroundDataUrl
+      customBackgroundDataUrl,
+      cornerRadius,
+      borderThickness,
+      pixelFont
     };
   } catch {
     return { ...defaultSettings };
@@ -558,14 +629,52 @@ function hexToRgbTriplet(hex: string) {
   return `${r},${g},${b}`;
 }
 
+function getSystemAccentColor() {
+  if (navigator.platform.toLowerCase().includes("win")) return "#4cc2ff";
+  if (navigator.platform.toLowerCase().includes("mac")) return "#5ac8fa";
+  return "#50d1b8";
+}
+
+function resolveEffectiveTheme(theme: ThemeId): Exclude<ThemeId, "system-default" | "time-of-day"> {
+  if (theme === "system-default") {
+    const dark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+    return dark ? "dark" : "ice-frost";
+  }
+  if (theme === "time-of-day") {
+    const hour = new Date().getHours();
+    if (hour >= 0 && hour < 5) return "oled";
+    if (hour >= 5 && hour < 12) return "ice-frost";
+    if (hour >= 12 && hour < 18) return "prism-style";
+    if (hour >= 18 && hour < 22) return "dark";
+    return "oled";
+  }
+  return theme;
+}
+
 function applySettingsToDom(s: AppSettings) {
-  // Your CSS expects these
-  document.documentElement.dataset.theme = s.theme;
+  const effectiveTheme = resolveEffectiveTheme(s.theme);
+
+  document.documentElement.dataset.theme = effectiveTheme;
+  document.documentElement.dataset.themeSource = s.theme;
+  document.documentElement.dataset.font = effectiveTheme === "minecraft-grass-block" && s.pixelFont ? "pixel" : "default";
   document.documentElement.dataset.glass = s.blur ? "1" : "0";
-  document.documentElement.style.setProperty("--accent", s.accentColor || "#3ddc84");
-  document.documentElement.style.setProperty("--accent-rgb", hexToRgbTriplet(s.accentColor || "#3ddc84"));
+  document.documentElement.style.setProperty("--r12", `${Math.max(8, Math.min(22, s.cornerRadius || 12))}px`);
+  document.documentElement.style.setProperty("--r16", `${Math.max(12, Math.min(28, (s.cornerRadius || 12) + 4))}px`);
+  document.documentElement.style.setProperty("--stroke-w", `${Math.max(1, Math.min(3, s.borderThickness || 1))}px`);
   const alpha = Math.max(70, Math.min(98, Number(s.surfaceAlpha || 88)));
   document.documentElement.style.setProperty("--surface-alpha", String(alpha / 100));
+
+  if (s.theme === "dynamic-accent") {
+    document.documentElement.style.setProperty("--accent", s.accentColor || "#3ddc84");
+    document.documentElement.style.setProperty("--accent-rgb", hexToRgbTriplet(s.accentColor || "#3ddc84"));
+  } else if (s.theme === "system-default") {
+    const accent = getSystemAccentColor();
+    document.documentElement.style.setProperty("--accent", accent);
+    document.documentElement.style.setProperty("--accent-rgb", hexToRgbTriplet(accent));
+  } else {
+    document.documentElement.style.removeProperty("--accent");
+    document.documentElement.style.removeProperty("--accent-rgb");
+  }
 
   if (s.customBackgroundDataUrl) {
     document.body.style.backgroundImage = `linear-gradient(rgba(7, 12, 18, .68), rgba(7, 12, 18, .68)), url("${s.customBackgroundDataUrl}")`;
@@ -1194,11 +1303,7 @@ function renderSettingsPanels() {
   {
     const { row } = makeRow("Base style", "Changes the overall look.");
     const sel = makeSelect(
-      [
-        { value: "ocean", label: "Ocean" },
-        { value: "dark", label: "Dark" },
-        { value: "oled", label: "Ultra-dark OLED" }
-      ],
+      THEME_OPTIONS,
       s.theme,
       (v) => setSettings({ theme: v as AppSettings["theme"] })
     );
@@ -1207,51 +1312,15 @@ function renderSettingsPanels() {
   }
 
   {
-    const { row } = makeRow("Theme preset", "Quick apply of curated presets. Premium presets are locked.");
-    const wrap = document.createElement("div");
-    wrap.className = "row";
-    wrap.style.justifyContent = "flex-end";
-
-    const preset = makeSelect(
-      [
-        { value: "none", label: "Custom" },
-        { value: "ocean-default", label: "Ocean Default" },
-        { value: "deep-ocean", label: "Deep Ocean" },
-        { value: "premium-neon", label: "Neon Storm (Premium)" },
-        { value: "premium-aurora", label: "Aurora Glass (Premium)" }
-      ],
-      "none",
-      (v) => {
-        if (v.startsWith("premium-")) {
-          alert("Premium theme preset (locked).");
-          return;
-        }
-        if (v === "ocean-default") {
-          setSettings({
-            theme: "ocean",
-            accentColor: "#3ddc84",
-            surfaceAlpha: 88,
-            blur: true
-          });
-          return;
-        }
-        if (v === "deep-ocean") {
-          setSettings({
-            theme: "dark",
-            accentColor: "#4ac8ff",
-            surfaceAlpha: 82,
-            blur: true
-          });
-        }
-      }
+    const { row } = makeRow(
+      "Theme behavior",
+      'System Default follows OS dark/light preference. Time-of-Day switches automatically through the day.'
     );
-    wrap.appendChild(preset);
-    row.appendChild(wrap);
     settingsPanelTheme.appendChild(row);
   }
 
   {
-    const { row } = makeRow("Accent color", "Used for highlights and primary accents.");
+    const { row } = makeRow("Accent color", "Used by Dynamic Accent theme (and as fallback in System Default).");
     const inp = document.createElement("input");
     inp.type = "color";
     inp.className = "setControl";
@@ -1259,6 +1328,85 @@ function renderSettingsPanels() {
     inp.value = /^#[0-9a-fA-F]{6}$/.test(s.accentColor) ? s.accentColor : "#3ddc84";
     inp.oninput = () => setSettings({ accentColor: inp.value });
     row.appendChild(inp);
+    settingsPanelTheme.appendChild(row);
+  }
+
+  {
+    const dynamicActive = s.theme === "dynamic-accent";
+    const { row } = makeRow("Corner radius", "Dynamic Accent only: adjusts overall roundness.");
+    const wrap = document.createElement("div");
+    wrap.className = "row";
+    wrap.style.justifyContent = "flex-end";
+    wrap.style.minWidth = "280px";
+
+    const range = document.createElement("input");
+    range.type = "range";
+    range.min = "8";
+    range.max = "22";
+    range.step = "1";
+    range.value = String(s.cornerRadius ?? 12);
+    range.style.width = "220px";
+    range.disabled = !dynamicActive;
+
+    const value = document.createElement("span");
+    value.className = "muted";
+    value.style.fontSize = "12px";
+    value.style.minWidth = "48px";
+    value.textContent = `${range.value}px`;
+
+    range.oninput = () => {
+      const n = Math.max(8, Math.min(22, Number(range.value || 12)));
+      value.textContent = `${n}px`;
+      setSettings({ cornerRadius: n });
+    };
+
+    wrap.appendChild(range);
+    wrap.appendChild(value);
+    row.appendChild(wrap);
+    settingsPanelTheme.appendChild(row);
+  }
+
+  {
+    const dynamicActive = s.theme === "dynamic-accent";
+    const { row } = makeRow("Border thickness", "Dynamic Accent only: controls border weight.");
+    const wrap = document.createElement("div");
+    wrap.className = "row";
+    wrap.style.justifyContent = "flex-end";
+    wrap.style.minWidth = "280px";
+
+    const range = document.createElement("input");
+    range.type = "range";
+    range.min = "1";
+    range.max = "3";
+    range.step = "1";
+    range.value = String(s.borderThickness ?? 1);
+    range.style.width = "220px";
+    range.disabled = !dynamicActive;
+
+    const value = document.createElement("span");
+    value.className = "muted";
+    value.style.fontSize = "12px";
+    value.style.minWidth = "48px";
+    value.textContent = `${range.value}px`;
+
+    range.oninput = () => {
+      const n = Math.max(1, Math.min(3, Number(range.value || 1)));
+      value.textContent = `${n}px`;
+      setSettings({ borderThickness: n });
+    };
+
+    wrap.appendChild(range);
+    wrap.appendChild(value);
+    row.appendChild(wrap);
+    settingsPanelTheme.appendChild(row);
+  }
+
+  {
+    const grassActive = s.theme === "minecraft-grass-block";
+    const { row } = makeRow("Pixel font", "Minecraft Grass Block theme: optional pixel-style UI font.");
+    const sw = makeSwitch(s.pixelFont, (v) => setSettings({ pixelFont: v }));
+    (sw.querySelector("input") as HTMLInputElement).disabled = !grassActive;
+    row.appendChild(sw);
     settingsPanelTheme.appendChild(row);
   }
 
@@ -1341,6 +1489,9 @@ function renderSettingsPanels() {
         blur: defaultSettings.blur,
         accentColor: defaultSettings.accentColor,
         surfaceAlpha: defaultSettings.surfaceAlpha,
+        cornerRadius: defaultSettings.cornerRadius,
+        borderThickness: defaultSettings.borderThickness,
+        pixelFont: defaultSettings.pixelFont,
         customBackgroundDataUrl: defaultSettings.customBackgroundDataUrl
       });
     row.appendChild(btn);
@@ -3957,3 +4108,18 @@ setSettingsTab("general");
 renderIconTransformUi();
 setIconPreviewSource(null);
 refreshAll();
+
+if (window.matchMedia) {
+  const media = window.matchMedia("(prefers-color-scheme: dark)");
+  const rerenderThemeFromSystem = () => {
+    const s = getSettings();
+    if (s.theme === "system-default" || s.theme === "time-of-day") {
+      applySettingsToDom(s);
+    }
+  };
+  if (typeof media.addEventListener === "function") {
+    media.addEventListener("change", rerenderThemeFromSystem);
+  } else if (typeof media.addListener === "function") {
+    media.addListener(rerenderThemeFromSystem);
+  }
+}

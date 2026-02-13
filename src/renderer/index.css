@@ -3,25 +3,34 @@
   --panel-rgb: 15, 20, 27;
   --surface-alpha: .88;
   --panel: rgba(var(--panel-rgb), var(--surface-alpha));
+  --bg-layer-1: radial-gradient(1000px 700px at 20% -10%, rgba(0, 180, 255, .14), transparent 55%);
+  --bg-layer-2: radial-gradient(900px 700px at 110% 20%, rgba(var(--accent-rgb), .10), transparent 55%);
+  --bg-layer-3: radial-gradient(900px 700px at 40% 120%, rgba(0, 140, 255, .08), transparent 60%);
   --border: #1c2430;
   --border2: #263244;
   --text: #e9eef5;
   --muted: #93a4bd;
   --accent: #3ddc84;
   --accent-rgb: 61, 220, 132;
+  --stroke-w: 1px;
   --danger: #ff5d6c;
   --shadow: 0 10px 30px rgba(0,0,0,.35);
   --r12: 12px;
   --r16: 16px;
+  --font-ui: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, "Noto Sans", sans-serif;
 }
 
 *{ box-sizing: border-box; }
 
 body{
   margin: 0;
-  background: var(--bg);
+  background:
+    var(--bg-layer-1),
+    var(--bg-layer-2),
+    var(--bg-layer-3),
+    var(--bg);
   color: var(--text);
-  font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, "Noto Sans", sans-serif;
+  font-family: var(--font-ui);
 }
 
 /* Layout */
@@ -559,45 +568,326 @@ pre{
 .muted{ color: var(--muted); }
 .row{ display:flex; gap: 10px; align-items:center; flex-wrap: wrap; }
 
-/* ---- Fishbattery ocean theming ---- */
+.search,
+.brand,
+.sidebarFooter,
+.btn,
+.iconBtn,
+.accountBtn,
+.dropdown,
+.card,
+.logs,
+.modal,
+.popover,
+.settingsNav,
+.settingsPanel,
+.setRow,
+.setControl,
+.badge,
+.tab,
+.filterToggle,
+.modrinthResult{
+  border-width: var(--stroke-w);
+}
+
+/* ---- Theme engine ---- */
 
 :root[data-theme="ocean"]{
   --bg: #07131b;
   --panel-rgb: 12, 22, 30;
-  --panel: rgba(var(--panel-rgb), var(--surface-alpha));
   --border: rgba(120, 200, 255, .14);
   --border2: rgba(120, 200, 255, .20);
   --text: #e9f7ff;
   --muted: #9ec2d6;
   --accent: #3ddc84;
-  --danger: #ff5d6c;
+  --accent-rgb: 61, 220, 132;
   --shadow: 0 18px 45px rgba(0,0,0,.50);
 }
 
 :root[data-theme="dark"]{
   --bg: #0b0d10;
   --panel-rgb: 15, 20, 27;
-  --panel: rgba(var(--panel-rgb), var(--surface-alpha));
   --border: #1c2430;
   --border2: #263244;
   --text: #e9eef5;
   --muted: #93a4bd;
-  --accent: #3ddc84;
-  --danger: #ff5d6c;
-  --shadow: 0 10px 30px rgba(0,0,0,.35);
+  --accent: #57d2ff;
+  --accent-rgb: 87, 210, 255;
 }
 
 :root[data-theme="oled"]{
   --bg: #000000;
   --panel-rgb: 10, 10, 10;
-  --panel: rgba(var(--panel-rgb), var(--surface-alpha));
   --border: rgba(255,255,255,.10);
   --border2: rgba(255,255,255,.14);
   --text: #f3f6fb;
   --muted: rgba(243,246,251,.65);
-  --accent: #3ddc84;
-  --danger: #ff5d6c;
-  --shadow: 0 16px 40px rgba(0,0,0,.70);
+  --accent: #6ef3b2;
+  --accent-rgb: 110, 243, 178;
+  --bg-layer-1: radial-gradient(950px 650px at 20% -10%, rgba(110, 243, 178, .08), transparent 58%);
+  --bg-layer-2: radial-gradient(900px 700px at 115% 15%, rgba(55, 110, 255, .08), transparent 58%);
+  --bg-layer-3: radial-gradient(860px 640px at 45% 115%, rgba(180, 180, 180, .05), transparent 60%);
+}
+
+:root[data-theme="windows-xp"]{
+  --bg: #0e5fb7;
+  --panel-rgb: 236, 244, 255;
+  --border: rgba(18, 78, 149, .38);
+  --border2: rgba(22, 96, 184, .46);
+  --text: #0b2f61;
+  --muted: #2f5e99;
+  --accent: #4e9dff;
+  --accent-rgb: 78, 157, 255;
+  --shadow: 0 14px 32px rgba(5, 32, 84, .42);
+  --bg-layer-1: linear-gradient(180deg, rgba(72, 155, 255, .28), rgba(18, 87, 175, .16));
+  --bg-layer-2: radial-gradient(1000px 680px at -10% -20%, rgba(255,255,255,.38), transparent 50%);
+  --bg-layer-3: radial-gradient(900px 650px at 110% 25%, rgba(116, 214, 255, .26), transparent 55%);
+}
+
+:root[data-theme="minecraft-grass-block"]{
+  --bg: #32271d;
+  --panel-rgb: 44, 55, 35;
+  --border: rgba(132, 95, 58, .45);
+  --border2: rgba(93, 145, 61, .50);
+  --text: #f1eadf;
+  --muted: #c7b79f;
+  --accent: #6fcf55;
+  --accent-rgb: 111, 207, 85;
+  --bg-layer-1: linear-gradient(180deg, rgba(100, 181, 67, .22), transparent 45%);
+  --bg-layer-2: linear-gradient(45deg, rgba(58, 86, 42, .14) 25%, transparent 25%) 0 0 / 18px 18px;
+  --bg-layer-3: linear-gradient(-45deg, rgba(58, 86, 42, .14) 25%, transparent 25%) 0 9px / 18px 18px;
+}
+
+:root[data-theme="end-dimension"]{
+  --bg: #0f0b1d;
+  --panel-rgb: 24, 19, 40;
+  --border: rgba(166, 117, 255, .28);
+  --border2: rgba(199, 146, 255, .34);
+  --text: #f3ecff;
+  --muted: #c8b8e8;
+  --accent: #b983ff;
+  --accent-rgb: 185, 131, 255;
+}
+
+:root[data-theme="nether-core"]{
+  --bg: #180707;
+  --panel-rgb: 32, 12, 12;
+  --border: rgba(255, 95, 78, .30);
+  --border2: rgba(255, 138, 92, .36);
+  --text: #ffefea;
+  --muted: #d7aba1;
+  --accent: #ff6b4d;
+  --accent-rgb: 255, 107, 77;
+}
+
+:root[data-theme="ice-frost"]{
+  --bg: #0a1824;
+  --panel-rgb: 20, 34, 46;
+  --border: rgba(170, 221, 255, .26);
+  --border2: rgba(191, 231, 255, .35);
+  --text: #eef8ff;
+  --muted: #b8d3e4;
+  --accent: #87d6ff;
+  --accent-rgb: 135, 214, 255;
+  --bg-layer-1: radial-gradient(1000px 650px at 10% -20%, rgba(183, 225, 255, .18), transparent 55%);
+  --bg-layer-2: radial-gradient(900px 680px at 115% 18%, rgba(131, 195, 255, .15), transparent 58%);
+  --bg-layer-3: radial-gradient(860px 620px at 45% 120%, rgba(220, 244, 255, .12), transparent 60%);
+}
+
+:root[data-theme="prism-style"]{
+  --bg: #101418;
+  --panel-rgb: 24, 29, 34;
+  --border: rgba(190, 201, 212, .18);
+  --border2: rgba(190, 201, 212, .28);
+  --text: #ebf0f5;
+  --muted: #a1adb9;
+  --accent: #5ea3ff;
+  --accent-rgb: 94, 163, 255;
+  --bg-layer-1: radial-gradient(920px 620px at 16% -12%, rgba(255,255,255,.05), transparent 60%);
+  --bg-layer-2: radial-gradient(860px 610px at 112% 20%, rgba(94, 163, 255, .08), transparent 60%);
+  --bg-layer-3: radial-gradient(820px 600px at 48% 115%, rgba(70, 87, 102, .10), transparent 62%);
+}
+
+:root[data-theme="creeper-mode"]{
+  --bg: #090f0a;
+  --panel-rgb: 16, 24, 18;
+  --border: rgba(90, 190, 92, .24);
+  --border2: rgba(109, 215, 112, .34);
+  --text: #e4ffe5;
+  --muted: #aad2ad;
+  --accent: #62e566;
+  --accent-rgb: 98, 229, 102;
+}
+
+:root[data-theme="retro-2000s"]{
+  --bg: #132239;
+  --panel-rgb: 30, 48, 76;
+  --border: rgba(149, 190, 240, .28);
+  --border2: rgba(184, 214, 250, .35);
+  --text: #eef6ff;
+  --muted: #b8cde8;
+  --accent: #7ac3ff;
+  --accent-rgb: 122, 195, 255;
+  --shadow: 0 14px 34px rgba(0, 0, 0, .36);
+}
+
+:root[data-theme="rgb-gamer"]{
+  --bg: #090c12;
+  --panel-rgb: 16, 20, 29;
+  --border: rgba(170, 170, 255, .30);
+  --border2: rgba(170, 170, 255, .38);
+  --text: #ecf3ff;
+  --muted: #a7b4cc;
+  --accent: #5b8bff;
+  --accent-rgb: 91, 139, 255;
+}
+
+:root[data-theme="glass-modern-w11"]{
+  --bg: #0b1521;
+  --panel-rgb: 26, 39, 54;
+  --border: rgba(184, 215, 242, .28);
+  --border2: rgba(198, 224, 248, .34);
+  --text: #eaf5ff;
+  --muted: #aac2d8;
+  --accent: #72d0ff;
+  --accent-rgb: 114, 208, 255;
+}
+
+:root[data-theme="console-mode"]{
+  --bg: #091219;
+  --panel-rgb: 19, 30, 40;
+  --border: rgba(106, 187, 240, .23);
+  --border2: rgba(122, 204, 255, .31);
+  --text: #ecf7ff;
+  --muted: #99b8cd;
+  --accent: #6bd5ff;
+  --accent-rgb: 107, 213, 255;
+  --r12: 15px;
+  --r16: 20px;
+}
+
+:root[data-theme="dynamic-accent"]{
+  --bg: #0b1218;
+  --panel-rgb: 17, 25, 33;
+  --border: rgba(146, 173, 198, .20);
+  --border2: rgba(146, 173, 198, .30);
+  --text: #e9f2fb;
+  --muted: #a3b5c8;
+}
+
+:root[data-theme="biome-plains"]{
+  --bg: #18261a;
+  --panel-rgb: 30, 44, 30;
+  --border: rgba(150, 198, 128, .26);
+  --border2: rgba(169, 220, 146, .34);
+  --text: #eff7e7;
+  --muted: #bbcfaf;
+  --accent: #8bd16f;
+  --accent-rgb: 139, 209, 111;
+}
+
+:root[data-theme="biome-desert"]{
+  --bg: #2a2016;
+  --panel-rgb: 57, 44, 31;
+  --border: rgba(222, 182, 116, .30);
+  --border2: rgba(235, 200, 139, .36);
+  --text: #fff3da;
+  --muted: #d7be94;
+  --accent: #e6be72;
+  --accent-rgb: 230, 190, 114;
+}
+
+:root[data-theme="biome-jungle"]{
+  --bg: #111f18;
+  --panel-rgb: 24, 43, 32;
+  --border: rgba(96, 172, 130, .30);
+  --border2: rgba(114, 191, 147, .38);
+  --text: #e9fbef;
+  --muted: #9dc9ac;
+  --accent: #4fd184;
+  --accent-rgb: 79, 209, 132;
+}
+
+:root[data-theme="biome-snow"]{
+  --bg: #1a2028;
+  --panel-rgb: 34, 44, 56;
+  --border: rgba(188, 214, 236, .30);
+  --border2: rgba(205, 227, 246, .38);
+  --text: #f3f9ff;
+  --muted: #b8cbe0;
+  --accent: #98d5ff;
+  --accent-rgb: 152, 213, 255;
+}
+
+:root[data-theme="biome-cherry-grove"]{
+  --bg: #231621;
+  --panel-rgb: 47, 31, 45;
+  --border: rgba(238, 170, 206, .30);
+  --border2: rgba(248, 192, 223, .38);
+  --text: #fff0f9;
+  --muted: #d8b6cc;
+  --accent: #f49cd0;
+  --accent-rgb: 244, 156, 208;
+}
+
+:root[data-theme="developer-mode"]{
+  --bg: #090d11;
+  --panel-rgb: 13, 20, 27;
+  --border: rgba(130, 168, 205, .22);
+  --border2: rgba(130, 168, 205, .34);
+  --text: #dbe9f7;
+  --muted: #8fa7bf;
+  --accent: #8ad4ff;
+  --accent-rgb: 138, 212, 255;
+  --font-ui: "Cascadia Mono", "Consolas", "Courier New", monospace;
+}
+
+:root[data-theme="minimal-bw"]{
+  --bg: #0f0f0f;
+  --panel-rgb: 28, 28, 28;
+  --border: rgba(245, 245, 245, .20);
+  --border2: rgba(245, 245, 245, .30);
+  --text: #f1f1f1;
+  --muted: #c6c6c6;
+  --accent: #d9d9d9;
+  --accent-rgb: 217, 217, 217;
+  --bg-layer-1: radial-gradient(900px 620px at 16% -12%, rgba(255,255,255,.04), transparent 60%);
+  --bg-layer-2: radial-gradient(860px 610px at 112% 20%, rgba(255,255,255,.03), transparent 60%);
+  --bg-layer-3: radial-gradient(820px 600px at 48% 115%, rgba(255,255,255,.02), transparent 62%);
+}
+
+:root[data-font="pixel"]{
+  --font-ui: "Press Start 2P", "Minecraftia", "Consolas", monospace;
+}
+
+:root[data-theme="rgb-gamer"] .brand .dot{
+  animation: fishbatteryAccentPulse 7s linear infinite;
+}
+
+:root[data-theme="rgb-gamer"] body{
+  animation: fishbatteryRgbSweep 18s linear infinite;
+}
+
+@keyframes fishbatteryRgbSweep{
+  0%{ filter: hue-rotate(0deg); }
+  100%{ filter: hue-rotate(360deg); }
+}
+
+@keyframes fishbatteryAccentPulse{
+  0%, 100%{ transform: scale(1); }
+  50%{ transform: scale(1.08); }
+}
+
+:root[data-theme="developer-mode"] .logs pre{
+  background-image: linear-gradient(rgba(138,212,255,.05) 1px, transparent 1px);
+  background-size: 100% 20px;
+}
+
+:root[data-theme="console-mode"] .btn,
+:root[data-theme="console-mode"] .setNavBtn,
+:root[data-theme="console-mode"] .setControl{
+  padding-top: 12px;
+  padding-bottom: 12px;
 }
 
 :root[data-glass="0"] .card,
@@ -615,16 +905,6 @@ pre{
   backdrop-filter: blur(10px);
 }
 
-/* Ocean glow for the whole app */
-body{
-  background:
-    radial-gradient(1000px 700px at 20% -10%, rgba(0, 180, 255, .14), transparent 55%),
-    radial-gradient(900px 700px at 110% 20%, rgba(var(--accent-rgb), .10), transparent 55%),
-    radial-gradient(900px 700px at 40% 120%, rgba(0, 140, 255, .08), transparent 60%),
-    var(--bg);
-}
-
-/* Brand dot feels like a bubble */
 .brand .dot{
   background: radial-gradient(circle at 35% 35%, rgba(255,255,255,.9), rgba(255,255,255,.08) 35%, rgba(var(--accent-rgb),1) 75%);
   box-shadow: 0 0 0 4px rgba(var(--accent-rgb),.12), 0 0 24px rgba(0,180,255,.18);
