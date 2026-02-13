@@ -481,6 +481,7 @@ const INSTANCE_PRESETS: Record<Exclude<InstancePresetId, "none">, InstancePreset
           "immediatelyfast",
           "entityculling",
           "dynamic-fps",
+          "pvp-essentials-refined",
           "mod-menu",
           "fabric-api"
         ],
@@ -2099,22 +2100,50 @@ function getAccountLabel(a: any) {
   return a?.name ?? a?.username ?? a?.profileName ?? a?.id ?? "Account";
 }
 
+function fallbackAvatarDataUrl(label: string) {
+  const txt =
+    String(label || "?")
+      .trim()
+      .slice(0, 1)
+      .toUpperCase() || "?";
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96">` +
+    `<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#124e3a"/><stop offset="100%" stop-color="#1d8d67"/></linearGradient></defs>` +
+    `<rect width="96" height="96" rx="18" fill="url(#g)"/>` +
+    `<text x="50%" y="56%" text-anchor="middle" dominant-baseline="middle" font-family="Segoe UI, Arial" font-size="46" font-weight="700" fill="#e6fff5">${txt}</text>` +
+    `</svg>`;
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+}
+
 async function renderAccounts() {
   const accounts = state.accounts?.accounts ?? [];
   const activeId = state.accounts?.activeAccountId ?? null;
+  const avatarById = new Map<string, string | null>();
 
   accountItems.innerHTML = "";
+  await Promise.all(
+    accounts.map(async (a: any) => {
+      try {
+        avatarById.set(a.id, await window.api.accountsGetAvatar(a.id));
+      } catch {
+        avatarById.set(a.id, null);
+      }
+    })
+  );
 
   if (!accounts.length) {
     accountName.textContent = "Not signed in";
     accountSub.textContent = "Add an account";
-    accountAvatarImg.src = "";
+    accountAvatarImg.src = fallbackAvatarDataUrl("?");
   } else {
     const active = accounts.find((a: any) => a.id === activeId) ?? accounts[0];
     accountName.textContent = getAccountLabel(active);
     accountSub.textContent = active?.type ?? active?.provider ?? "Microsoft";
-    accountAvatarImg.src = active?.avatarUrl ?? "";
+    accountAvatarImg.src = avatarById.get(active.id) || fallbackAvatarDataUrl(getAccountLabel(active));
   }
+  accountAvatarImg.onerror = () => {
+    accountAvatarImg.src = fallbackAvatarDataUrl(accountName.textContent || "?");
+  };
 
   for (const a of accounts) {
     const item = document.createElement("div");
@@ -2126,7 +2155,10 @@ async function renderAccounts() {
     const av = document.createElement("span");
     av.className = "avatar";
     const img = document.createElement("img");
-    img.src = a?.avatarUrl ?? "";
+    img.src = avatarById.get(a.id) || fallbackAvatarDataUrl(getAccountLabel(a));
+    img.onerror = () => {
+      img.src = fallbackAvatarDataUrl(getAccountLabel(a));
+    };
     av.appendChild(img);
 
     const meta = document.createElement("div");
@@ -2149,7 +2181,25 @@ async function renderAccounts() {
     left.appendChild(av);
     left.appendChild(meta);
 
+    const right = document.createElement("div");
+    right.className = "right";
+
+    const btnRefreshAvatar = document.createElement("button");
+    btnRefreshAvatar.className = "iconBtn";
+    btnRefreshAvatar.title = "Refresh skin";
+    btnRefreshAvatar.textContent = "↻";
+    btnRefreshAvatar.onclick = (e) => {
+      e.stopPropagation();
+      void guarded(async () => {
+        await window.api.accountsGetAvatar(a.id, true);
+        state.accounts = await window.api.accountsList();
+        await renderAccounts();
+      });
+    };
+    right.appendChild(btnRefreshAvatar);
+
     item.appendChild(left);
+    item.appendChild(right);
 
     item.onclick = async () => {
       await window.api.accountsSetActive(a.id);

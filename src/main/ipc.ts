@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { listAllVersions } from "./versions";
 import {
   addMicrosoftAccountInteractive,
+  getAccountAvatarDataUrl,
   listAccounts,
   removeAccount,
   setActiveAccount
@@ -381,6 +382,10 @@ export function registerIpc() {
 
   // ---------- Accounts ----------
   ipcMain.handle("accounts:list", async () => listAccounts());
+  ipcMain.handle("accounts:getAvatar", async (_e, id: string, refresh?: boolean) => {
+    if (!id) throw new Error("accounts:getAvatar: id missing");
+    return getAccountAvatarDataUrl(id, !!refresh);
+  });
   ipcMain.handle("accounts:add", async () => addMicrosoftAccountInteractive());
 
   ipcMain.handle("accounts:remove", async (_e, id: string) => {

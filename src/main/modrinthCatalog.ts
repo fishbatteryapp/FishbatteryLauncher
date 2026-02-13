@@ -29,5 +29,6 @@ export const CATALOG: CatalogMod[] = [
   { id: "mod-menu", name: "Mod Menu", required: true, source: { kind: "modrinth", projectId: "mOgUt4GM" } },
   { id: "iris", name: "Iris Shaders", source: { kind: "modrinth", projectId: "YL57xq9U" } },
   { id: "emf", name: "Entity Model Features", source: { kind: "modrinth", projectId: "4I1XuqiY" } },
+  { id: "pvp-essentials-refined", name: "PVP essentials Refined", source: { kind: "modrinth", projectId: "DlA1yH1r" } },
   { id: "etf", name: "Entity Texture Features", source: { kind: "modrinth", projectId: "BVzZfTc1" } }
 ];

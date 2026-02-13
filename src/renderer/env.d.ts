@@ -6,6 +6,7 @@ declare global {
       versionsList: () => Promise<any>;
 
       accountsList: () => Promise<any>;
+      accountsGetAvatar: (id: string, refresh?: boolean) => Promise<string | null>;
       accountsAdd: () => Promise<any>;
       accountsSetActive: (id: string | null) => Promise<any>;
       accountsRemove: (id: string) => Promise<any>;

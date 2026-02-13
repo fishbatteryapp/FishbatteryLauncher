@@ -1,6 +1,10 @@
 import { getAccountsPath } from "./paths";
+import { getDataRoot } from "./paths";
 import { readJsonFile, writeJsonFile } from "./store";
 import { Auth } from "msmc";
+import fs from "node:fs";
+import path from "node:path";
+import fetch from "node-fetch";
 
 export type StoredAccount = {
   id: string; // UUID
@@ -144,4 +148,54 @@ export function removeAccount(id: string) {
   db.accounts = db.accounts.filter((a) => a.id !== id);
   if (db.activeId === id) db.activeId = db.accounts[0]?.id ?? null;
   saveDb(db);
+}
+
+function avatarCacheDir() {
+  return path.join(getDataRoot(), "account-avatars");
+}
+
+function avatarPathFor(id: string) {
+  return path.join(avatarCacheDir(), `${String(id || "").replace(/[^a-zA-Z0-9-]/g, "")}.png`);
+}
+
+function readAvatarDataUrl(p: string): string | null {
+  try {
+    if (!fs.existsSync(p)) return null;
+    const buf = fs.readFileSync(p);
+    if (!buf.length) return null;
+    return `data:image/png;base64,${buf.toString("base64")}`;
+  } catch {
+    return null;
+  }
+}
+
+async function fetchAvatarToCache(uuid: string, outPath: string) {
+  const compact = String(uuid || "").replace(/-/g, "");
+  if (!compact) throw new Error("Account UUID missing");
+  const url = `https://crafatar.com/avatars/${encodeURIComponent(compact)}?size=128&overlay`;
+  const res = await fetch(url, { headers: { "User-Agent": "FishbatteryLauncher/0.2.1" } });
+  if (!res.ok) throw new Error(`Avatar fetch failed (${res.status})`);
+  const buf = Buffer.from(await res.arrayBuffer());
+  if (!buf.length) throw new Error("Avatar response was empty");
+  fs.mkdirSync(path.dirname(outPath), { recursive: true });
+  fs.writeFileSync(outPath, buf);
+}
+
+export async function getAccountAvatarDataUrl(id: string, refresh = false): Promise<string | null> {
+  const account = getAccountById(id);
+  if (!account?.id) return null;
+  const p = avatarPathFor(account.id);
+
+  if (!refresh) {
+    const cached = readAvatarDataUrl(p);
+    if (cached) return cached;
+  }
+
+  try {
+    await fetchAvatarToCache(account.id, p);
+  } catch {
+    // best effort: fall back to cached value when API is unavailable
+  }
+
+  return readAvatarDataUrl(p);
 }

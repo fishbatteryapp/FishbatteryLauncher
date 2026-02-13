@@ -178,30 +178,36 @@ body{
   gap: 10px;
   border-radius: 999px;
   border: 1px solid var(--border2);
-  background: rgba(255,255,255,.02);
-  padding: 8px 10px;
+  background: rgba(255,255,255,.03);
+  padding: 7px 10px;
   cursor: pointer;
   min-width: 220px;
   justify-content: space-between;
+  transition: background .15s ease, border-color .15s ease;
+}
+.accountBtn:hover{
+  background: rgba(255,255,255,.06);
+  border-color: rgba(61,220,132,.28);
 }
 .accountLeft{ display: flex; align-items: center; gap: 10px; }
 
 .avatar{
-  width: 26px;
-  height: 26px;
-  border-radius: 8px;
-  background: #1b2432;
-  border: 1px solid var(--border);
+  width: 30px;
+  height: 30px;
+  border-radius: 10px;
+  background: linear-gradient(145deg, rgba(61,220,132,.22), rgba(61,220,132,.06));
+  border: 1px solid rgba(61,220,132,.28);
   display: flex;
   align-items: center;
   justify-content: center;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 11px;
+  overflow: hidden;
 }
 
 .accountMeta{ display: flex; flex-direction: column; line-height: 1.1; }
-.accountMeta strong{ font-size: 13px; }
-.accountMeta small{ font-size: 11px; color: var(--muted); }
+.accountMeta strong{ font-size: 13px; font-weight: 700; }
+.accountMeta small{ font-size: 11px; color: var(--muted); margin-top: 2px; }
 
 .dropdown{
   position: absolute;
@@ -232,8 +238,10 @@ body{
   gap: 12px;
   padding: 10px 12px;
   cursor: pointer;
+  border-bottom: 1px solid rgba(255,255,255,.03);
 }
 .dropdownItem:hover{ background: rgba(255,255,255,.03); }
+.dropdownItem:last-child{ border-bottom: 0; }
 
 .dropdownItem .left{ display:flex; gap: 10px; align-items:center; }
 .dropdownItem .right{ display:flex; gap: 8px; align-items:center; }

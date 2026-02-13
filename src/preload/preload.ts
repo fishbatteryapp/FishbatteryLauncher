@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld("api", {
   versionsList: () => ipcRenderer.invoke("versions:list"),
 
   accountsList: () => ipcRenderer.invoke("accounts:list"),
+  accountsGetAvatar: (id: string, refresh?: boolean) => ipcRenderer.invoke("accounts:getAvatar", id, refresh),
   accountsAdd: () => ipcRenderer.invoke("accounts:add"),
   accountsSetActive: (id: string | null) => ipcRenderer.invoke("accounts:setActive", id),
   accountsRemove: (id: string) => ipcRenderer.invoke("accounts:remove", id),
