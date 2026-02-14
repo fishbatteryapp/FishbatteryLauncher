@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld("api", {
   versionsList: () => ipcRenderer.invoke("versions:list"),
   windowMinimize: () => ipcRenderer.invoke("window:minimize"),
   windowToggleMaximize: () => ipcRenderer.invoke("window:toggleMaximize"),
+  windowToggleFullscreen: () => ipcRenderer.invoke("window:toggleFullscreen"),
   windowClose: () => ipcRenderer.invoke("window:close"),
   windowSetTitleBarTheme: (color: string, symbolColor: string) =>
     ipcRenderer.invoke("window:setTitleBarTheme", { color, symbolColor }),

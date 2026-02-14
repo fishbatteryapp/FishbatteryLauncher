@@ -97,6 +97,13 @@ export function registerIpc() {
     return owner.isMaximized();
   });
 
+  ipcMain.handle("window:toggleFullscreen", async (e) => {
+    const owner = BrowserWindow.fromWebContents(e.sender);
+    if (!owner) return false;
+    owner.setFullScreen(!owner.isFullScreen());
+    return owner.isFullScreen();
+  });
+
   ipcMain.handle("window:close", async (e) => {
     const owner = BrowserWindow.fromWebContents(e.sender);
     if (!owner) return false;

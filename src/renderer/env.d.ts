@@ -6,6 +6,7 @@ declare global {
       versionsList: () => Promise<any>;
       windowMinimize: () => Promise<boolean>;
       windowToggleMaximize: () => Promise<boolean>;
+      windowToggleFullscreen: () => Promise<boolean>;
       windowClose: () => Promise<boolean>;
       windowSetTitleBarTheme: (color: string, symbolColor: string) => Promise<boolean>;
 
