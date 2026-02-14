@@ -20,6 +20,35 @@ export type StoredAccount = {
   addedAt: number;
 };
 
+export type OfficialMinecraftCape = {
+  id: string;
+  name: string;
+  url: string;
+  previewDataUrl: string | null;
+  state: string;
+  active: boolean;
+};
+
+export type OfficialMinecraftCapeState = {
+  accountId: string;
+  username: string;
+  skinUrl: string | null;
+  skinDataUrl: string | null;
+  capes: OfficialMinecraftCape[];
+  activeCapeId: string | null;
+};
+
+type CapeCacheEntry = {
+  state: OfficialMinecraftCapeState;
+  fetchedAt: number;
+  cooldownUntil: number;
+};
+
+const CAPE_CACHE_TTL_MS = 60_000;
+const CAPE_RATE_LIMIT_COOLDOWN_MS = 30_000;
+const capeStateCache = new Map<string, CapeCacheEntry>();
+const capePreviewCache = new Map<string, string | null>();
+
 type AccountsDb = {
   activeId: string | null;
   accounts: StoredAccount[];
@@ -224,4 +253,208 @@ export async function getAccountAvatarDataUrl(id: string, refresh = false): Prom
   }
 
   return readAvatarDataUrl(p) || cached;
+}
+
+function getMinecraftAccessToken(account: StoredAccount): string {
+  const token = String(
+    account?.mclcAuth?.access_token || account?.mclcAuth?.accessToken || account?.accessToken || ""
+  ).trim();
+  if (!token) {
+    throw new Error("Minecraft access token is missing for this account. Remove and re-add the account.");
+  }
+  return token;
+}
+
+function mapOfficialCape(raw: any): OfficialMinecraftCape | null {
+  const id = String(raw?.id || "").trim();
+  const url = String(raw?.url || "").trim();
+  if (!id || !url) return null;
+  const state = String(raw?.state || "").trim().toUpperCase();
+  const active = state === "ACTIVE";
+  const alias = String(raw?.alias || "").trim();
+  return {
+    id,
+    name: alias || id,
+    url,
+    previewDataUrl: null,
+    state: state || "UNKNOWN",
+    active
+  };
+}
+
+function toDataUrl(bytes: Buffer, contentType: string | null | undefined) {
+  const mime = String(contentType || "").split(";")[0].trim().toLowerCase();
+  const safeMime = mime && /^image\/[a-z0-9.+-]+$/.test(mime) ? mime : "image/png";
+  return `data:${safeMime};base64,${bytes.toString("base64")}`;
+}
+
+async function getCapePreviewDataUrl(url: string): Promise<string | null> {
+  const target = String(url || "").trim();
+  if (!target) return null;
+  if (capePreviewCache.has(target)) return capePreviewCache.get(target) ?? null;
+  try {
+    const res = await fetch(target, {
+      headers: {
+        "User-Agent": "FishbatteryLauncher/0.2.2"
+      }
+    });
+    if (!res.ok) {
+      capePreviewCache.set(target, null);
+      return null;
+    }
+    const bytes = Buffer.from(await res.arrayBuffer());
+    if (!bytes.length) {
+      capePreviewCache.set(target, null);
+      return null;
+    }
+    const dataUrl = toDataUrl(bytes, res.headers.get("content-type"));
+    capePreviewCache.set(target, dataUrl);
+    return dataUrl;
+  } catch {
+    capePreviewCache.set(target, null);
+    return null;
+  }
+}
+
+async function fetchMinecraftProfile(account: StoredAccount) {
+  const token = getMinecraftAccessToken(account);
+  const res = await fetch("https://api.minecraftservices.com/minecraft/profile", {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "User-Agent": "FishbatteryLauncher/0.2.2"
+    }
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    if (res.status === 401 || res.status === 403) {
+      throw new Error("Minecraft session expired. Re-add this account in the launcher.");
+    }
+    throw new Error(`Could not load official capes (${res.status}): ${text || "Unknown error"}`);
+  }
+  return (await res.json()) as any;
+}
+
+async function profileToCapeState(account: StoredAccount, profile: any): Promise<OfficialMinecraftCapeState> {
+  const capesRaw = Array.isArray(profile?.capes) ? profile.capes : [];
+  const capes = capesRaw.map(mapOfficialCape).filter(Boolean) as OfficialMinecraftCape[];
+  const skinsRaw = Array.isArray(profile?.skins) ? profile.skins : [];
+  const activeSkin =
+    skinsRaw.find((s: any) => String(s?.state || "").toUpperCase() === "ACTIVE") || skinsRaw[0] || null;
+  const skinUrl = String(activeSkin?.url || "").trim() || null;
+  const skinDataUrl = skinUrl ? await getCapePreviewDataUrl(skinUrl) : null;
+  await Promise.all(
+    capes.map(async (cape) => {
+      cape.previewDataUrl = await getCapePreviewDataUrl(cape.url);
+    })
+  );
+  const activeCape = capes.find((cape) => cape.active) ?? null;
+  return {
+    accountId: account.id,
+    username: account.username,
+    skinUrl,
+    skinDataUrl,
+    capes,
+    activeCapeId: activeCape?.id ?? null
+  };
+}
+
+export async function getOfficialMinecraftCapes(accountId: string): Promise<OfficialMinecraftCapeState> {
+  return getOfficialMinecraftCapesWithOptions(accountId, { forceRefresh: false });
+}
+
+export async function getOfficialMinecraftCapesWithOptions(
+  accountId: string,
+  opts?: { forceRefresh?: boolean }
+): Promise<OfficialMinecraftCapeState> {
+  const account = getAccountById(accountId);
+  if (!account) throw new Error("Minecraft account not found");
+  const now = Date.now();
+  const forceRefresh = !!opts?.forceRefresh;
+  const cached = capeStateCache.get(account.id);
+
+  if (!forceRefresh && cached && now - cached.fetchedAt <= CAPE_CACHE_TTL_MS) {
+    return cached.state;
+  }
+  if (!forceRefresh && cached && now < cached.cooldownUntil) {
+    return cached.state;
+  }
+
+  try {
+    const profile = await fetchMinecraftProfile(account);
+    const state = await profileToCapeState(account, profile);
+    capeStateCache.set(account.id, {
+      state,
+      fetchedAt: now,
+      cooldownUntil: 0
+    });
+    return state;
+  } catch (err: any) {
+    const message = String(err?.message || err || "");
+    if (/Could not load official capes \(429\)/i.test(message)) {
+      if (cached?.state) {
+        capeStateCache.set(account.id, {
+          ...cached,
+          cooldownUntil: now + CAPE_RATE_LIMIT_COOLDOWN_MS
+        });
+        return cached.state;
+      }
+      throw new Error("Minecraft capes API is rate-limited. Please wait about 30 seconds and refresh.");
+    }
+    throw err;
+  }
+}
+
+export async function setOfficialMinecraftCape(
+  accountId: string,
+  capeId: string | null
+): Promise<OfficialMinecraftCapeState> {
+  const account = getAccountById(accountId);
+  if (!account) throw new Error("Minecraft account not found");
+  const token = getMinecraftAccessToken(account);
+  const targetCapeId = String(capeId || "").trim();
+
+  const endpoint = "https://api.minecraftservices.com/minecraft/profile/capes/active";
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${token}`,
+    "User-Agent": "FishbatteryLauncher/0.2.2"
+  };
+
+  let res;
+  if (targetCapeId) {
+    headers["Content-Type"] = "application/json";
+    res = await fetch(endpoint, {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({ capeId: targetCapeId })
+    });
+    if (!res.ok && (res.status === 404 || res.status === 405)) {
+      res = await fetch(endpoint, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ capeId: targetCapeId })
+      });
+    }
+  } else {
+    res = await fetch(endpoint, {
+      method: "DELETE",
+      headers
+    });
+  }
+
+  if (!res.ok) {
+    const text = await res.text();
+    if (res.status === 401 || res.status === 403) {
+      throw new Error("Minecraft session expired. Re-add this account in the launcher.");
+    }
+    throw new Error(`Could not update official cape (${res.status}): ${text || "Unknown error"}`);
+  }
+
+  const updatedProfile = await fetchMinecraftProfile(account);
+  const nextState = await profileToCapeState(account, updatedProfile);
+  capeStateCache.set(account.id, {
+    state: nextState,
+    fetchedAt: Date.now(),
+    cooldownUntil: 0
+  });
+  return nextState;
 }

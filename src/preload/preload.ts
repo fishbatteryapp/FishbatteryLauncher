@@ -17,6 +17,14 @@ contextBridge.exposeInMainWorld("api", {
   windowToggleFullscreen: () => ipcRenderer.invoke("window:toggleFullscreen"),
   windowClose: () => ipcRenderer.invoke("window:close"),
   externalOpen: (url: string) => ipcRenderer.invoke("external:open", url),
+  capesListOfficial: (accountId: string, forceRefresh?: boolean) =>
+    ipcRenderer.invoke("capes:listOfficial", accountId, forceRefresh),
+  capesSetOfficialActive: (accountId: string, capeId: string | null) =>
+    ipcRenderer.invoke("capes:setOfficialActive", accountId, capeId),
+  capesListLocal: () => ipcRenderer.invoke("capes:listLocal"),
+  capesGetLocalSelection: (accountId: string) => ipcRenderer.invoke("capes:getLocalSelection", accountId),
+  capesSetLocalSelection: (accountId: string, capeId: string | null) =>
+    ipcRenderer.invoke("capes:setLocalSelection", accountId, capeId),
   windowSetTitleBarTheme: (color: string, symbolColor: string) =>
     ipcRenderer.invoke("window:setTitleBarTheme", { color, symbolColor }),
 

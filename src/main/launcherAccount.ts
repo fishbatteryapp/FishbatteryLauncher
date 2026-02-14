@@ -604,6 +604,24 @@ export async function getLauncherSubscriptionStatus(): Promise<LauncherSubscript
   }
 }
 
+export async function hasLauncherPremiumAccess(): Promise<boolean> {
+  try {
+    const status = await getLauncherSubscriptionStatus();
+    return status.tier === "premium" || status.tier === "founder" || !!status.premium;
+  } catch {
+    return false;
+  }
+}
+
+export async function hasLauncherFounderAccess(): Promise<boolean> {
+  try {
+    const status = await getLauncherSubscriptionStatus();
+    return status.tier === "founder";
+  } catch {
+    return false;
+  }
+}
+
 function getBillingReturnBaseUrl(): string {
   const preferred = String(process.env.FISHBATTERY_ACCOUNT_RETURN_URL || "").trim();
   if (/^https?:\/\//i.test(preferred)) return preferred;

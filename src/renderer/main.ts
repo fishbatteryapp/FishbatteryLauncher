@@ -5,6 +5,7 @@
 import "./index.css";
 import { CATALOG } from "../main/modrinthCatalog";
 import { PACK_CATALOG } from "../main/modrinthPackCatalog";
+import * as skinview3d from "skinview3d";
 
 // Small DOM helper (keeps your current style)
 const $ = (id: string) => document.getElementById(id) as HTMLElement;
@@ -21,6 +22,7 @@ const instancesGrid = $("instancesGrid") as HTMLDivElement;
 const searchInstances = $("searchInstances") as HTMLInputElement;
 
 const navLibrary = $("navLibrary");
+const navCapes = $("navCapes");
 const navSettings = $("navSettings");
 const sidebarSponsored = $("sidebarSponsored");
 const sidebarSponsoredTitle = $("sidebarSponsoredTitle");
@@ -30,7 +32,9 @@ const sidebarSponsoredCta = $("sidebarSponsoredCta") as HTMLButtonElement;
 const sidebarSponsoredUpgrade = $("sidebarSponsoredUpgrade") as HTMLButtonElement;
 
 const viewLibrary = $("viewLibrary");
+const viewCapes = $("viewCapes");
 const viewSettings = $("viewSettings");
+const capesPanelRoot = $("capesPanelRoot");
 
 const accountBtn = $("accountBtn");
 const accountDropdown = $("accountDropdown");
@@ -183,6 +187,8 @@ let launchLogBuffer: string[] = [];
 let latestDiagnosis: any = null;
 let diagnosisDetailsOpen = false;
 let debugLogsVisible = false;
+let capesSkinViewer: any = null;
+let capesSkinControls: any = null;
 
 type UpdaterUiState = {
   status: "idle" | "checking" | "update-available" | "up-to-date" | "downloading" | "downloaded" | "error";
@@ -533,6 +539,12 @@ function getLauncherTier(): "free" | "premium" | "founder" {
 function hasPremium(): boolean {
   const tier = getLauncherTier();
   return tier === "premium" || tier === "founder";
+}
+
+function localCapeTierLabel(tier: "free" | "premium" | "founder") {
+  if (tier === "founder") return "Founder";
+  if (tier === "premium") return "Premium";
+  return "Free";
 }
 
 async function openUpgradeFlow() {
@@ -1119,11 +1131,475 @@ async function renderSponsoredBannerState() {
   sponsoredCurrentLink = entry.link;
 }
 
-function setView(which: "library" | "settings") {
+function setView(which: "library" | "capes" | "settings") {
   viewLibrary.style.display = which === "library" ? "" : "none";
+  viewCapes.style.display = which === "capes" ? "" : "none";
   viewSettings.style.display = which === "settings" ? "" : "none";
   navLibrary.classList.toggle("active", which === "library");
+  navCapes.classList.toggle("active", which === "capes");
   navSettings.classList.toggle("active", which === "settings");
+  if (which !== "capes") {
+    disposeCapesCharacterPreview();
+  }
+  if (which === "capes") {
+    void renderCapesView();
+  }
+}
+
+async function renderCapesView(forceRefresh = false) {
+  capesPanelRoot.innerHTML = "";
+  const accounts = state.accounts?.accounts ?? [];
+  const activeId = state.accounts?.activeId ?? null;
+  const activeMc = accounts.find((a: any) => a.id === activeId) ?? accounts[0] ?? null;
+  const activeMcId = String(activeMc?.id || "");
+  const localCapeCatalog = await window.api.capesListLocal();
+  let selectedLocalCapeId = "";
+  if (activeMcId) {
+    try {
+      const sel = await window.api.capesGetLocalSelection(activeMcId);
+      selectedLocalCapeId = String(sel?.capeId || "");
+    } catch {
+      selectedLocalCapeId = "";
+    }
+  }
+
+  const shell = document.createElement("div");
+  shell.className = "capeChooser";
+  capesPanelRoot.appendChild(shell);
+
+  const strip = document.createElement("div");
+  strip.className = "capeStripLabel";
+  strip.textContent = "Choose your cape";
+  shell.appendChild(strip);
+
+  const section = document.createElement("div");
+  section.className = "capeSection";
+  shell.appendChild(section);
+
+  const heading = document.createElement("div");
+  heading.className = "capeSectionHeading";
+  heading.textContent = "Owned capes";
+  section.appendChild(heading);
+
+  const sub = document.createElement("div");
+  sub.className = "capeSectionSub";
+  sub.textContent = activeMc
+    ? `Official Minecraft capes for ${getAccountLabel(activeMc)}.`
+    : "Add and select a Minecraft account to manage official capes.";
+  section.appendChild(sub);
+
+  if (activeMc) {
+    const actions = document.createElement("div");
+    actions.className = "row";
+    actions.style.justifyContent = "flex-end";
+    actions.style.marginTop = "8px";
+    const btnRefresh = document.createElement("button");
+    btnRefresh.className = "btn";
+    btnRefresh.textContent = "Refresh";
+    btnRefresh.onclick = () => guarded(async () => renderCapesView(true));
+    actions.appendChild(btnRefresh);
+    section.appendChild(actions);
+  }
+
+  if (!activeMc) {
+    const note = document.createElement("div");
+    note.className = "setHelp";
+    note.style.marginTop = "12px";
+    note.textContent = "Official capes are unavailable until a Minecraft account is selected.";
+    section.appendChild(note);
+  }
+
+  let capeState:
+    | {
+        accountId: string;
+        username: string;
+        skinUrl: string | null;
+        skinDataUrl: string | null;
+        activeCapeId: string | null;
+        capes: Array<{
+          id: string;
+          name: string;
+          url: string;
+          previewDataUrl: string | null;
+          state: string;
+          active: boolean;
+        }>;
+      }
+    | null = null;
+  if (activeMcId) {
+    try {
+      capeState = await window.api.capesListOfficial(activeMcId, forceRefresh);
+    } catch (err: any) {
+      const row = document.createElement("div");
+      row.className = "setRow";
+      row.style.marginTop = "12px";
+      const left = document.createElement("div");
+      left.style.display = "flex";
+      left.style.flexDirection = "column";
+      const title = document.createElement("div");
+      title.className = "setLabel";
+      title.textContent = "Could not load official capes";
+      const help = document.createElement("div");
+      help.className = "setHelp";
+      help.textContent = String(err?.message || err || "Unknown error");
+      left.appendChild(title);
+      left.appendChild(help);
+      row.appendChild(left);
+      capesPanelRoot.appendChild(row);
+    }
+  }
+
+  // Current player preview (skin + cape), similar to Minecraft launcher.
+  const activeLocalCape = (localCapeCatalog?.items || []).find((x: any) => x.id === selectedLocalCapeId) ?? null;
+  const activeOfficialCape =
+    capeState?.activeCapeId && capeState?.capes?.length
+      ? capeState.capes.find((x) => x.id === capeState?.activeCapeId) ?? null
+      : null;
+  const mannequinCapeSource =
+    (activeLocalCape?.previewDataUrl || null) ??
+    (activeOfficialCape?.previewDataUrl || activeOfficialCape?.url || null);
+  const mannequinSkinSource = capeState?.skinDataUrl || capeState?.skinUrl || null;
+  const mannequinLabel = activeLocalCape
+    ? `${activeLocalCape.name} (Launcher ${localCapeTierLabel(activeLocalCape.tier)})`
+    : activeOfficialCape
+      ? `${activeOfficialCape.name} (Official)`
+      : "No Cape";
+
+  const previewRow = document.createElement("div");
+  previewRow.className = "capeMannequinRow";
+  const stage = document.createElement("div");
+  stage.className = "capeMannequinStage";
+  const mannequinHost = document.createElement("div");
+  mannequinHost.className = "capeMannequinHost";
+  stage.appendChild(mannequinHost);
+  previewRow.appendChild(stage);
+
+  const meta = document.createElement("div");
+  meta.className = "capeMannequinMeta";
+  const metaTitle = document.createElement("div");
+  metaTitle.className = "capeMannequinTitle";
+  metaTitle.textContent = "Current";
+  const metaText = document.createElement("div");
+  metaText.className = "capeMannequinText";
+  metaText.textContent = mannequinLabel;
+  meta.appendChild(metaTitle);
+  meta.appendChild(metaText);
+  const metaHelp = document.createElement("div");
+  metaHelp.className = "capeMannequinHelp";
+  metaHelp.textContent = "Drag to rotate";
+  meta.appendChild(metaHelp);
+  previewRow.appendChild(meta);
+  shell.appendChild(previewRow);
+  await renderInteractiveCharacterPreview(mannequinHost, mannequinSkinSource, mannequinCapeSource);
+
+  const buildTile = (cfg: {
+    label: string;
+    imageUrl: string | null;
+    active: boolean;
+    onSelect: () => void;
+    subLabel?: string;
+  }) => {
+    const tile = document.createElement("button");
+    tile.className = `capeTile${cfg.active ? " active" : ""}`;
+    tile.type = "button";
+    tile.onclick = () => guarded(async () => cfg.onSelect());
+
+    const preview = document.createElement("div");
+    preview.className = "capeTilePreview";
+    if (cfg.imageUrl) {
+      const img = document.createElement("img");
+      img.className = "capeTileImg";
+      void setCapePreviewImage(img, cfg.imageUrl);
+      img.alt = `${cfg.label} cape`;
+      preview.appendChild(img);
+    } else {
+      const ghost = document.createElement("div");
+      ghost.className = "capeTileGhost";
+      preview.appendChild(ghost);
+    }
+
+    const footer = document.createElement("div");
+    footer.className = "capeTileFooter";
+    const dot = document.createElement("span");
+    dot.className = `capeTileDot${cfg.active ? " on" : ""}`;
+    const text = document.createElement("span");
+    text.className = "capeTileLabel";
+    text.textContent = cfg.label;
+    footer.appendChild(dot);
+    footer.appendChild(text);
+    if (cfg.subLabel) {
+      const subText = document.createElement("small");
+      subText.className = "capeTileSub";
+      subText.textContent = cfg.subLabel;
+      footer.appendChild(subText);
+    }
+
+    tile.appendChild(preview);
+    tile.appendChild(footer);
+    return tile;
+  };
+
+  if (capeState) {
+    const grid = document.createElement("div");
+    grid.className = "capeGrid";
+    section.appendChild(grid);
+
+    grid.appendChild(
+      buildTile({
+        label: "No Cape",
+        imageUrl: null,
+        active: !capeState.activeCapeId,
+        onSelect: async () => {
+          await window.api.capesSetOfficialActive(activeMcId, null);
+          await renderCapesView(true);
+        }
+      })
+    );
+
+    for (const item of capeState.capes) {
+      grid.appendChild(
+        buildTile({
+          label: item.name,
+          imageUrl: item.previewDataUrl || null,
+          active: !!item.active,
+          onSelect: async () => {
+            await window.api.capesSetOfficialActive(activeMcId, item.id);
+            await renderCapesView(true);
+          }
+        })
+      );
+    }
+  }
+
+  const localSection = document.createElement("div");
+  localSection.className = "capeSection";
+  localSection.style.marginTop = "14px";
+  shell.appendChild(localSection);
+
+  const localHeading = document.createElement("div");
+  localHeading.className = "capeSectionHeading";
+  localHeading.textContent = "Fishbattery capes";
+  localSection.appendChild(localHeading);
+
+  const localSub = document.createElement("div");
+  localSub.className = "capeSectionSub";
+  localSub.textContent = "Launcher cape catalog from your Fishbattery cloud account.";
+  localSection.appendChild(localSub);
+
+  const localGrid = document.createElement("div");
+  localGrid.className = "capeGrid";
+  localSection.appendChild(localGrid);
+
+  const sortedLocalItems = [...(localCapeCatalog?.items || [])].sort((a, b) => {
+    const rank = (tier: "free" | "premium" | "founder") => (tier === "free" ? 0 : tier === "premium" ? 1 : 2);
+    const tierOrder = rank(a.tier) - rank(b.tier);
+    if (tierOrder !== 0) return tierOrder;
+    return String(a.name || "").localeCompare(String(b.name || ""));
+  });
+
+  if (!sortedLocalItems.length) {
+    const localEmpty = document.createElement("div");
+    localEmpty.className = "setHelp";
+    localEmpty.style.marginTop = "12px";
+    localEmpty.textContent = "No launcher capes are available for your account right now.";
+    localSection.appendChild(localEmpty);
+  } else {
+    for (const localItem of sortedLocalItems) {
+      localGrid.appendChild(
+        buildTile({
+          label: localItem.name,
+          imageUrl: localItem.previewDataUrl || null,
+          active: selectedLocalCapeId === localItem.id,
+          subLabel: localCapeTierLabel(localItem.tier),
+          onSelect: async () => {
+            if (activeMcId) await window.api.capesSetLocalSelection(activeMcId, localItem.id);
+            setStatus(`Selected launcher ${localItem.tier} cape: ${localItem.name}`);
+            await renderCapesView(false);
+          }
+        })
+      );
+    }
+    localGrid.appendChild(
+      buildTile({
+        label: "No Local Cape",
+        imageUrl: null,
+        active: !selectedLocalCapeId,
+        onSelect: async () => {
+          if (activeMcId) await window.api.capesSetLocalSelection(activeMcId, null);
+          setStatus("Launcher cape selection cleared.");
+          await renderCapesView(false);
+        }
+      })
+    );
+  }
+}
+
+const capePreviewCache = new Map<string, string | null>();
+
+async function buildCapePanelPreviewDataUrl(sourceUrl: string): Promise<string | null> {
+  const src = String(sourceUrl || "").trim();
+  if (!src) return null;
+  if (capePreviewCache.has(src)) return capePreviewCache.get(src) ?? null;
+
+  const loaded = await new Promise<HTMLImageElement | null>((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null);
+    img.src = src;
+  });
+  if (!loaded) {
+    capePreviewCache.set(src, null);
+    return null;
+  }
+
+  const w = Number(loaded.naturalWidth || 0);
+  const h = Number(loaded.naturalHeight || 0);
+  if (w <= 0 || h <= 0) {
+    capePreviewCache.set(src, null);
+    return null;
+  }
+
+  // Minecraft cape back panel in the classic cape atlas (the visible outside on player back):
+  // 64x32 logical texture: x=1..10, y=1..16 (10x16)
+  // Many cape textures are exact scale multiples of this.
+  const scale = Math.max(1, Math.floor(w / 64));
+  const sx = 1 * scale;
+  const sy = 1 * scale;
+  const sw = 10 * scale;
+  const sh = 16 * scale;
+
+  const sourceCanvas = document.createElement("canvas");
+  sourceCanvas.width = w;
+  sourceCanvas.height = h;
+  const sctx = sourceCanvas.getContext("2d");
+  if (!sctx) {
+    capePreviewCache.set(src, null);
+    return null;
+  }
+  sctx.imageSmoothingEnabled = false;
+  sctx.drawImage(loaded, 0, 0);
+
+  if (sx + sw > w || sy + sh > h) {
+    capePreviewCache.set(src, null);
+    return null;
+  }
+
+  const patch = sctx.getImageData(sx, sy, sw, sh).data;
+  let hasPixels = false;
+  for (let i = 3; i < patch.length; i += 4) {
+    if (patch[i] > 8) {
+      hasPixels = true;
+      break;
+    }
+  }
+  if (!hasPixels) {
+    capePreviewCache.set(src, null);
+    return null;
+  }
+
+  const outW = 80;
+  const outH = 128;
+  const out = document.createElement("canvas");
+  out.width = outW;
+  out.height = outH;
+  const octx = out.getContext("2d");
+  if (!octx) {
+    capePreviewCache.set(src, null);
+    return null;
+  }
+  octx.imageSmoothingEnabled = false;
+  octx.clearRect(0, 0, outW, outH);
+
+  // Keep cape proportions and center in tile.
+  const drawH = outH;
+  const drawW = Math.round((sw / sh) * drawH);
+  const dx = Math.round((outW - drawW) / 2);
+  octx.drawImage(sourceCanvas, sx, sy, sw, sh, dx, 0, drawW, drawH);
+
+  const preview = out.toDataURL("image/png");
+  capePreviewCache.set(src, preview);
+  return preview;
+}
+
+async function setCapePreviewImage(imgEl: HTMLImageElement, sourceUrl: string) {
+  const preview = await buildCapePanelPreviewDataUrl(sourceUrl);
+  imgEl.src = preview || sourceUrl;
+}
+
+function disposeCapesCharacterPreview() {
+  try {
+    capesSkinControls?.dispose?.();
+  } catch {}
+  capesSkinControls = null;
+  try {
+    capesSkinViewer?.dispose?.();
+  } catch {}
+  capesSkinViewer = null;
+}
+
+async function renderInteractiveCharacterPreview(
+  hostEl: HTMLElement,
+  skinSourceUrl: string | null,
+  capeSourceUrl: string | null
+) {
+  disposeCapesCharacterPreview();
+  hostEl.innerHTML = "";
+
+  const skinSrc = String(skinSourceUrl || "").trim();
+  if (!skinSrc) {
+    const empty = document.createElement("div");
+    empty.className = "capeMannequinEmpty";
+    empty.textContent = "No skin";
+    hostEl.appendChild(empty);
+    return;
+  }
+
+  const capeSrc = String(capeSourceUrl || "").trim();
+  const canvas = document.createElement("canvas");
+  canvas.className = "capeMannequinCanvas";
+  hostEl.appendChild(canvas);
+
+  const width = Math.max(180, hostEl.clientWidth || 180);
+  const height = Math.max(220, hostEl.clientHeight || 220);
+  const viewer = new (skinview3d as any).SkinViewer({
+    canvas,
+    width,
+    height
+  });
+  capesSkinViewer = viewer;
+
+  try {
+    await viewer.loadSkin(skinSrc);
+    if (capeSrc) {
+      await viewer.loadCape(capeSrc);
+      if (viewer.playerObject?.cape) viewer.playerObject.cape.visible = true;
+    } else if (viewer.playerObject?.cape) {
+      viewer.playerObject.cape.visible = false;
+    }
+
+    viewer.background = null;
+    viewer.fov = 42;
+    viewer.zoom = 0.58;
+    viewer.playerObject.rotation.y = Math.PI;
+    viewer.camera.position.set(26, 0, 48);
+
+    const controls = viewer.controls;
+    capesSkinControls = controls;
+    controls.enablePan = false;
+    controls.enableZoom = false;
+    controls.enableDamping = true;
+    controls.rotateSpeed = 0.9;
+    controls.target.set(0, 0, 0);
+    controls.update();
+  } catch (err) {
+    console.error("Character preview failed", err);
+    disposeCapesCharacterPreview();
+    hostEl.innerHTML = "";
+    const fail = document.createElement("div");
+    fail.className = "capeMannequinEmpty";
+    fail.textContent = "Preview unavailable";
+    hostEl.appendChild(fail);
+  }
 }
 
 function openModal() {
@@ -1230,7 +1706,7 @@ function renderFileList(
 
     const sub = document.createElement("div");
     sub.className = "setHelp";
-    sub.textContent = formatBytes(it.size) + (it.name.endsWith(".disabled") ? " â€¢ Disabled" : "");
+    sub.textContent = formatBytes(it.size) + (it.name.endsWith(".disabled") ? " | Disabled" : "");
 
     left.appendChild(nameEl);
     left.appendChild(sub);
@@ -2647,7 +3123,7 @@ async function renderRecommendedPacks(instanceId: string | null) {
 
     const sub = document.createElement("div");
     sub.className = "setHelp";
-    sub.textContent = statusBits.join(" â€¢ ");
+    sub.textContent = statusBits.join(" | ");
 
     left.appendChild(name);
     left.appendChild(sub);
@@ -3021,7 +3497,7 @@ async function renderInstanceMods(instanceId: string | null) {
     if (reason) bits.push(reason);
     const alts = MOD_ALTERNATIVES[m.id];
     if (reason && alts?.length) bits.push(`Try: ${alts.join(" | ")}`);
-    sub.textContent = bits.join(" â€¢ ");
+    sub.textContent = bits.join(" | ");
 
     left.appendChild(name);
     left.appendChild(sub);
@@ -4056,7 +4532,7 @@ async function renderInstances() {
 
     const subtext = document.createElement("small");
     subtext.className = "instanceSubtext";
-    subtext.textContent = `${i.loader ?? "fabric"} â€¢ Minecraft ${i.mcVersion ?? "unknown"}`;
+    subtext.textContent = `${i.loader ?? "fabric"} | Minecraft ${i.mcVersion ?? "unknown"}`;
 
     meta.appendChild(title);
     meta.appendChild(subtext);
@@ -4070,7 +4546,8 @@ async function renderInstances() {
     btnEdit.type = "button";
     btnEdit.title = "Edit instance";
     btnEdit.setAttribute("aria-label", `Edit ${i.name ?? "instance"}`);
-    btnEdit.textContent = "âš™";
+    btnEdit.innerHTML =
+      '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M19.14 12.94a7.9 7.9 0 0 0 .06-.94c0-.32-.02-.63-.06-.94l2.03-1.58a.5.5 0 0 0 .12-.63l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.4 7.4 0 0 0-1.63-.94l-.36-2.54a.5.5 0 0 0-.5-.42h-3.84a.5.5 0 0 0-.5.42l-.36 2.54c-.58.23-1.12.54-1.63.94l-2.39-.96a.5.5 0 0 0-.6.22L2.71 8.85a.5.5 0 0 0 .12.63l2.03 1.58c-.04.31-.06.62-.06.94s.02.63.06.94l-2.03 1.58a.5.5 0 0 0-.12.63l1.92 3.32a.5.5 0 0 0 .6.22l2.39-.96c.51.4 1.05.71 1.63.94l.36 2.54a.5.5 0 0 0 .5.42h3.84a.5.5 0 0 0 .5-.42l.36-2.54c.58-.23 1.12-.54 1.63-.94l2.39.96a.5.5 0 0 0 .6-.22l1.92-3.32a.5.5 0 0 0-.12-.63zM12 15.2A3.2 3.2 0 1 1 12 8.8a3.2 3.2 0 0 1 0 6.4z" fill="currentColor"/></svg>';
     btnEdit.onclick = async () => {
       modalMode = "edit";
       editInstanceId = i.id;
@@ -4404,7 +4881,7 @@ async function runModrinthSearch() {
     meta.className = "setHelp";
     const mc = h.mcVersion || "unknown MC";
     const loader = h.loader || "unknown loader";
-    meta.textContent = `MC ${mc} â€¢ ${loader}`;
+    meta.textContent = `MC ${mc} | ${loader}`;
     left.appendChild(meta);
 
     row.appendChild(left);
@@ -4475,13 +4952,13 @@ async function runProviderSearch() {
 
     const meta = document.createElement("div");
     meta.className = "setHelp";
-    meta.textContent = `MC ${h.mcVersion} â€¢ ${h.loader}`;
+    meta.textContent = `MC ${h.mcVersion} | ${h.loader}`;
     left.appendChild(meta);
 
     if (Array.isArray(h.tags) && h.tags.length) {
       const tags = document.createElement("div");
       tags.className = "setHelp";
-      tags.textContent = `Tags: ${h.tags.slice(0, 4).join(" â€¢ ")}`;
+      tags.textContent = `Tags: ${h.tags.slice(0, 4).join(" | ")}`;
       left.appendChild(tags);
     }
 
@@ -4621,6 +5098,7 @@ sidebarSponsoredUpgrade.onclick = () => {
 
 // ---------------- Event wiring ----------------
 navLibrary.onclick = () => setView("library");
+navCapes.onclick = () => setView("capes");
 navSettings.onclick = () => setView("settings");
 
 accountBtn.onclick = () => accountDropdown.classList.toggle("open");

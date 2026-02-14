@@ -1,7 +1,7 @@
 {
   "name": "fishbattery-launcher",
   "productName": "fishbattery-launcher",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "private": true,
   "description": "Fishbattery launcher is an underwater-themed Fabric launcher with isolated instances and Modrinth mods.",
   "author": "Fishbattery",
@@ -29,6 +29,7 @@
     "msmc": "^5.0.5",
     "node-fetch": "^3.3.2",
     "semver": "^7.6.3",
+    "skinview3d": "^3.2.0",
     "unzipper": "^0.12.3",
     "zod": "^3.23.8"
   },
@@ -55,6 +56,10 @@
       {
         "from": "runtime/java21",
         "to": "runtime/java21"
+      },
+      {
+        "from": "launcher-cape-bridges",
+        "to": "launcher-cape-bridges"
       }
     ],
     "asar": true,

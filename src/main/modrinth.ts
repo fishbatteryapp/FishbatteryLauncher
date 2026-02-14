@@ -20,6 +20,13 @@ export type ModrinthVersion = {
   }>;
 };
 
+export type ModrinthSearchHit = {
+  project_id: string;
+  slug: string;
+  title: string;
+  project_type: string;
+};
+
 export type ResolveLatestModrinthOpts = {
   projectId: string;
   mcVersion: string;
@@ -95,4 +102,21 @@ export async function downloadBuffer(url: string): Promise<Buffer> {
   if (!res.ok) throw new Error(`Download failed: ${res.status}`);
   const ab = await res.arrayBuffer();
   return Buffer.from(ab);
+}
+
+export async function searchModrinthProjects(query: string, loader: "fabric" = "fabric", limit = 8) {
+  const q = String(query || "").trim();
+  if (!q) return [] as ModrinthSearchHit[];
+  const facets = [
+    ["project_type:mod"],
+    [`categories:${loader}`]
+  ];
+  const url =
+    `https://api.modrinth.com/v2/search?query=${encodeURIComponent(q)}` +
+    `&limit=${Math.max(1, Math.min(30, Number(limit || 8)))}` +
+    `&index=relevance&facets=${encodeURIComponent(JSON.stringify(facets))}`;
+  const res = await fetch(url, { headers: { "User-Agent": UA } });
+  if (!res.ok) throw new Error(`Modrinth search failed: ${res.status}`);
+  const json = (await res.json()) as { hits?: ModrinthSearchHit[] };
+  return Array.isArray(json?.hits) ? json.hits : [];
 }

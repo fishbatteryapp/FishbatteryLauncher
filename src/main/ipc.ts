@@ -5,13 +5,19 @@ import { listAllVersions } from "./versions";
 import {
   addMicrosoftAccountInteractive,
   getAccountAvatarDataUrl,
+  getOfficialMinecraftCapes,
+  getOfficialMinecraftCapesWithOptions,
   listAccounts,
   removeAccount,
+  setOfficialMinecraftCape,
   setActiveAccount
 } from "./accounts";
+import { getSelectedLocalCapeId, listLocalCapes, setSelectedLocalCapeId } from "./capes";
 import {
   openLauncherBillingPortal,
   openLauncherCheckout,
+  hasLauncherFounderAccess,
+  hasLauncherPremiumAccess,
   getLauncherSubscriptionStatus,
   getLauncherAccountState,
   loginLauncherAccountWithGoogleDesktop,
@@ -41,6 +47,7 @@ import { installVanillaVersion } from "./vanillaInstall";
 import { pickLoaderVersion, prepareLoaderInstall, type LoaderKind } from "./loaderSupport";
 import { launchInstance, isInstanceRunning, stopInstance } from "./launch";
 import type { LaunchRuntimePrefs } from "./launch";
+import { syncCapeBridgeModWithGithub } from "./capeBridge";
 import { registerContentIpc } from "./content";
 import { exportDiagnosticsZip } from "./diagnostics";
 import { getLastPreflightChecks, runPreflightChecks } from "./preflight";
@@ -178,6 +185,64 @@ export function registerIpc() {
     return !err;
   });
 
+  ipcMain.handle("capes:listOfficial", async (_e, accountId: string, forceRefresh?: boolean) => {
+    if (!accountId) throw new Error("capes:listOfficial: accountId missing");
+    if (forceRefresh) return getOfficialMinecraftCapesWithOptions(accountId, { forceRefresh: true });
+    return getOfficialMinecraftCapes(accountId);
+  });
+  ipcMain.handle("capes:setOfficialActive", async (_e, accountId: string, capeId: string | null) => {
+    if (!accountId) throw new Error("capes:setOfficialActive: accountId missing");
+    return setOfficialMinecraftCape(accountId, capeId ?? null);
+  });
+  ipcMain.handle("capes:listLocal", async () => {
+    const catalog = await listLocalCapes();
+    const founder = await hasLauncherFounderAccess();
+    if (founder) return catalog;
+    return {
+      ...catalog,
+      items: catalog.items.filter((x) => x.tier !== "founder")
+    };
+  });
+  ipcMain.handle("capes:getLocalSelection", async (_e, accountId: string) => {
+    if (!accountId) throw new Error("capes:getLocalSelection: accountId missing");
+    const selectedId = getSelectedLocalCapeId(accountId);
+    if (!selectedId) return { accountId, capeId: null };
+
+    const catalog = await listLocalCapes();
+    const selected = catalog.items.find((x) => x.id === selectedId) ?? null;
+    if (!selected) {
+      setSelectedLocalCapeId(accountId, null);
+      return { accountId, capeId: null };
+    }
+
+    if (selected.tier === "founder" && !(await hasLauncherFounderAccess())) {
+      setSelectedLocalCapeId(accountId, null);
+      return { accountId, capeId: null };
+    }
+    if (selected.tier === "premium" && !(await hasLauncherPremiumAccess())) {
+      setSelectedLocalCapeId(accountId, null);
+      return { accountId, capeId: null };
+    }
+
+    return { accountId, capeId: selectedId };
+  });
+  ipcMain.handle("capes:setLocalSelection", async (_e, accountId: string, capeId: string | null) => {
+    if (!accountId) throw new Error("capes:setLocalSelection: accountId missing");
+    const normalizedCapeId = capeId ? String(capeId) : null;
+    if (normalizedCapeId) {
+      const catalog = await listLocalCapes();
+      const selected = catalog.items.find((x) => x.id === normalizedCapeId) ?? null;
+      if (!selected) throw new Error("capes:setLocalSelection: cape not found");
+      if (selected.tier === "founder" && !(await hasLauncherFounderAccess())) {
+        throw new Error("Founder cape is available only to founder accounts.");
+      }
+      if (selected.tier === "premium" && !(await hasLauncherPremiumAccess())) {
+        throw new Error("Launcher Premium is required to use premium capes.");
+      }
+    }
+    return setSelectedLocalCapeId(accountId, normalizedCapeId);
+  });
+
   ipcMain.handle("window:setTitleBarTheme", async (e, payload: { color?: string; symbolColor?: string }) => {
     const owner = BrowserWindow.fromWebContents(e.sender);
     if (!owner) return false;
@@ -206,7 +271,9 @@ export function registerIpc() {
 
   ipcMain.handle("instances:create", async (_e, cfg) => {
     if (!cfg) throw new Error("instances:create: cfg missing");
-    return createInstance(cfg);
+    const created = createInstance(cfg);
+    await syncCapeBridgeModWithGithub(created);
+    return created;
   });
 
   ipcMain.handle("instances:update", async (_e, id: string, patch: any) => {

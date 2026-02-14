@@ -10,6 +10,10 @@ import { installFabricVersion } from "./fabricInstall";
 import { pickLoaderVersion, prepareLoaderInstall, resolveForgeInstallerPath } from "./loaderSupport";
 import crypto from "node:crypto";
 import { getDataRoot, getAssetsRoot, getLibrariesRoot, getVersionsRoot } from "./paths";
+import { getSelectedLocalCapeForAccount, setSelectedLocalCapeId } from "./capes";
+import { syncCapeBridgeModWithGithub } from "./capeBridge";
+import { autoInstallMissingDependenciesForInstance } from "./dependencyAutoInstall";
+import { hasLauncherFounderAccess, hasLauncherPremiumAccess } from "./launcherAccount";
 
 const running = new Map<string, any>(); // instanceId -> child process
 const launching = new Set<string>(); // instanceId currently in launcher bootstrap
@@ -33,7 +37,8 @@ function ensureInstanceDirs(gameDir: string) {
   ensureDirs(path.join(gameDir, "resourcepacks"));
   ensureDirs(path.join(gameDir, "shaderpacks"));
   ensureDirs(path.join(gameDir, "saves"));
-  ensureDirs(path.join(gameDir, "logs")); // ✅ make sure logs land in instance
+  ensureDirs(path.join(gameDir, "logs"));
+  ensureDirs(path.join(gameDir, ".fishbattery"));
 }
 
 function ensureSharedMinecraftDirs(root: string) {
@@ -377,6 +382,20 @@ async function launchResolved(
     });
   }
 
+  await syncCapeBridgeModWithGithub(instance, onLog);
+
+  if (instance.loader === "fabric" || instance.loader === "quilt") {
+    const depFix = await autoInstallMissingDependenciesForInstance({
+      instanceId: instance.id,
+      mcVersion: instance.mcVersion,
+      loader: "fabric",
+      onLog
+    });
+    if (depFix.installed.length) {
+      onLog?.(`[deps] Auto-installed ${depFix.installed.length} missing dependencies.`);
+    }
+  }
+
   const authorization = buildMclcAuthorization(account);
   onLog?.(`[auth] name=${authorization.name} uuid=${authorization.uuid} xuid=${authorization.meta?.xuid}`);
 
@@ -411,6 +430,48 @@ async function launchResolved(
   const assetsDir = getAssetsRoot();
   const javaExe = pickJavaExecutable(onLog);
   const customJavaArgs = splitShellWords(String(runtimePrefs?.jvmArgs ?? "").trim());
+  let selectedLauncherCape = await getSelectedLocalCapeForAccount(account.id);
+  if (selectedLauncherCape?.tier === "founder") {
+    const founderAllowed = await hasLauncherFounderAccess();
+    if (!founderAllowed) {
+      selectedLauncherCape = null;
+      setSelectedLocalCapeId(account.id, null);
+      onLog?.("[capes] Founder cape selection cleared: founder account required.");
+    }
+  }
+  if (selectedLauncherCape?.tier === "premium") {
+    const premiumAllowed = await hasLauncherPremiumAccess();
+    if (!premiumAllowed) {
+      selectedLauncherCape = null;
+      setSelectedLocalCapeId(account.id, null);
+      onLog?.("[capes] Premium cape selection cleared: Launcher Premium is required.");
+    }
+  }
+
+  if (selectedLauncherCape) {
+    const capeMetaPath = path.join(gameDir, ".fishbattery", "launcher-cape.json");
+    const capeMeta = {
+      accountId: account.id,
+      capeId: selectedLauncherCape.id,
+      tier: selectedLauncherCape.tier,
+      fileName: selectedLauncherCape.fileName,
+      fullPath: selectedLauncherCape.fullPath,
+      updatedAt: Date.now()
+    };
+    fs.writeFileSync(capeMetaPath, JSON.stringify(capeMeta, null, 2), "utf8");
+    customJavaArgs.push(`-Dfishbattery.launcherCape.path=${selectedLauncherCape.fullPath}`);
+    customJavaArgs.push(`-Dfishbattery.launcherCape.id=${selectedLauncherCape.id}`);
+    customJavaArgs.push(`-Dfishbattery.launcherCape.tier=${selectedLauncherCape.tier}`);
+    customJavaArgs.push(`-Dfishbattery.launcherCape.meta=${capeMetaPath}`);
+    onLog?.(`[capes] Launcher-only cape enabled: ${selectedLauncherCape.name} (${selectedLauncherCape.tier})`);
+  } else {
+    const capeMetaPath = path.join(gameDir, ".fishbattery", "launcher-cape.json");
+    try {
+      if (fs.existsSync(capeMetaPath)) fs.rmSync(capeMetaPath, { force: true });
+    } catch {}
+    customJavaArgs.push("-Dfishbattery.launcherCape.path=");
+    onLog?.("[capes] Launcher-only cape disabled");
+  }
 
   if (String(runtimePrefs?.preLaunch ?? "").trim()) {
     await runHookCommand("pre-launch", String(runtimePrefs?.preLaunch), onLog);
@@ -524,3 +585,5 @@ async function launchResolved(
 
   return true;
 }
+
+

@@ -41,6 +41,9 @@ Edit:
 
 Use Modrinth project IDs (not slugs).
 
+## Cloud capes
+- Cloud cape setup and API contract: `docs/capes-cloud-setup.md`
+
 ## Troubleshooting
 - Login issues: confirm your Microsoft account owns Minecraft Java Edition.
 - Launch failures: verify internet connection and check the launcher logs.

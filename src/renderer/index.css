@@ -621,9 +621,15 @@ body{
   top: 10px;
   right: 10px;
   z-index: 2;
-  font-size: 16px;
-  line-height: 1;
-  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+.instanceEditBtn svg{
+  width: 15px;
+  height: 15px;
+  display: block;
 }
 .emptyInstances{
   grid-column: 1 / -1;
@@ -1347,6 +1353,180 @@ pre{
 
 .setLabel{ font-size: 13px; }
 .setHelp{ color: var(--muted); font-size: 12px; margin-top: 4px; }
+.capeChooser{
+  border-top: 1px solid var(--border2);
+  padding-top: 10px;
+}
+.capeStripLabel{
+  display: inline-block;
+  background: rgba(var(--accent-rgb), .95);
+  color: #0c120d;
+  font-weight: 700;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  padding: 2px 8px;
+  margin-bottom: 6px;
+}
+.capeSection{
+  border: 1px solid var(--border);
+  border-top: 4px solid rgba(var(--accent-rgb), .9);
+  border-radius: 0 0 10px 10px;
+  background: rgba(255,255,255,.03);
+  padding: 14px;
+}
+.capeSectionHeading{
+  font-size: 20px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+.capeSectionSub{
+  margin-top: 6px;
+  color: var(--text);
+  opacity: .9;
+  font-size: 14px;
+}
+.capeMannequinRow{
+  margin: 12px 0 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(0,0,0,.22);
+  padding: 10px 12px;
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+.capeMannequinStage{
+  width: 180px;
+  height: 230px;
+  display: grid;
+  place-items: end center;
+  border: 1px solid var(--border2);
+  border-radius: 8px;
+  background:
+    radial-gradient(circle at 50% 20%, rgba(255,255,255,.06), rgba(0,0,0,.25)),
+    linear-gradient(180deg, rgba(255,255,255,.02), rgba(255,255,255,.00));
+  overflow: hidden;
+}
+.capeMannequinHost{
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+}
+.capeMannequinHost:active{
+  cursor: grabbing;
+}
+.capeMannequinCanvas{
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.capeMannequinEmpty{
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  font-size: 12px;
+}
+.capeMannequinMeta{
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.capeMannequinTitle{
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--muted);
+}
+.capeMannequinText{
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text);
+}
+.capeMannequinHelp{
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 6px;
+}
+.capeGrid{
+  margin-top: 16px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 12px;
+}
+.capeTile{
+  min-width: 0;
+  border: 1px solid var(--border2);
+  border-radius: 0;
+  background: rgba(0,0,0,.25);
+  color: var(--text);
+  text-align: left;
+  padding: 0;
+  cursor: pointer;
+}
+.capeTile:hover{
+  border-color: rgba(var(--accent-rgb), .65);
+}
+.capeTile.active{
+  border-color: rgba(var(--accent-rgb), .9);
+  box-shadow: 0 0 0 1px rgba(var(--accent-rgb), .45) inset;
+}
+.capeTilePreview{
+  height: 156px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,.28);
+  border-bottom: 1px solid var(--border2);
+}
+.capeTileImg{
+  width: 64px;
+  height: 128px;
+  object-fit: contain;
+  image-rendering: pixelated;
+}
+.capeTileGhost{
+  width: 64px;
+  height: 128px;
+  border: 2px dashed rgba(255,255,255,.5);
+}
+.capeTileFooter{
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  font-size: 14px;
+}
+.capeTileLabel{
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.capeTileSub{
+  margin-left: 0;
+  justify-self: end;
+  font-size: 11px;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.capeTileDot{
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1px solid rgba(255,255,255,.6);
+  background: transparent;
+}
+.capeTileDot.on{
+  border-color: rgba(var(--accent-rgb), .95);
+  box-shadow: 0 0 0 2px rgba(var(--accent-rgb), .22);
+  background: rgba(var(--accent-rgb), .95);
+}
 
 .setControl{
   width: 260px;

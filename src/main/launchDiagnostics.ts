@@ -108,6 +108,11 @@ export function diagnoseLaunchLogs(lines: string[]): LaunchDiagnosis {
 
   if (
     hasAny(full, [
+      "noclassdeffounderror",
+      "classnotfoundexception",
+      "could not execute entrypoint stage",
+      "recommends any version of cloth-config, which is missing",
+      "requires any version of cloth-config, which is missing",
       "incompatible",
       "depends on",
       "requires minecraft",
@@ -118,14 +123,17 @@ export function diagnoseLaunchLogs(lines: string[]): LaunchDiagnosis {
     return {
       code: "mod-mismatch",
       severity: "critical",
-      summary: "One or more mods are incompatible with this Minecraft version/loader.",
-      details: ["At least one enabled mod cannot be resolved for the current version stack."],
-      recommendedActions: [
-        "Run automatic mod refresh to pull compatible versions.",
-        "Disable or replace remaining incompatible mods if needed."
+      summary: "One or more mods are missing required dependencies or are incompatible.",
+      details: [
+        "At least one enabled mod could not load due to missing classes/dependencies or version mismatch."
       ],
-      fixAction: "refresh-mods",
-      canAutoFix: true
+      recommendedActions: [
+        "Install the missing dependency for the failing mod (example: Cloth Config for mods that require AutoConfig).",
+        "Disable or replace incompatible mods if needed.",
+        "Use automatic mod refresh for catalog-managed mods."
+      ],
+      fixAction: "none",
+      canAutoFix: false
     };
   }
 

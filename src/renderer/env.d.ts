@@ -13,6 +13,55 @@ declare global {
       windowToggleFullscreen: () => Promise<boolean>;
       windowClose: () => Promise<boolean>;
       externalOpen: (url: string) => Promise<boolean>;
+      capesListOfficial: (accountId: string, forceRefresh?: boolean) => Promise<{
+        accountId: string;
+        username: string;
+        skinUrl: string | null;
+        skinDataUrl: string | null;
+        activeCapeId: string | null;
+        capes: Array<{
+          id: string;
+          name: string;
+          url: string;
+          previewDataUrl: string | null;
+          state: string;
+          active: boolean;
+        }>;
+      }>;
+      capesSetOfficialActive: (accountId: string, capeId: string | null) => Promise<{
+        accountId: string;
+        username: string;
+        skinUrl: string | null;
+        skinDataUrl: string | null;
+        activeCapeId: string | null;
+        capes: Array<{
+          id: string;
+          name: string;
+          url: string;
+          previewDataUrl: string | null;
+          state: string;
+          active: boolean;
+        }>;
+      }>;
+      capesListLocal: () => Promise<{
+        roots: string[];
+        items: Array<{
+          id: string;
+          name: string;
+          tier: "free" | "premium" | "founder";
+          fileName: string;
+          fullPath: string;
+          previewDataUrl: string;
+        }>;
+      }>;
+      capesGetLocalSelection: (accountId: string) => Promise<{
+        accountId: string;
+        capeId: string | null;
+      }>;
+      capesSetLocalSelection: (accountId: string, capeId: string | null) => Promise<{
+        accountId: string;
+        capeId: string | null;
+      }>;
       windowSetTitleBarTheme: (color: string, symbolColor: string) => Promise<boolean>;
 
       accountsList: () => Promise<any>;
