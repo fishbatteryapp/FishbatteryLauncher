@@ -76,6 +76,22 @@ declare global {
         updatedAt: number | null;
         error: string | null;
       }>;
+      launcherAccountGetSubscriptionStatus: () => Promise<{
+        tier: "free" | "premium" | "founder";
+        premium: boolean;
+        source: "server";
+        features: {
+          adsFree: boolean;
+          advancedThemes: boolean;
+          earlyExperimental: boolean;
+          cloudSyncPriority: boolean;
+          advancedBenchmarking: boolean;
+        };
+        upgradeUrl: string | null;
+      }>;
+      launcherAccountCheckout: (plan: "monthly" | "yearly") => Promise<boolean>;
+      launcherAccountBillingPortal: () => Promise<boolean>;
+      launcherAccountOpenUpgradePage: () => Promise<boolean>;
       launcherAccountUpdateProfile: (patch: {
         displayName?: string;
         avatarUrl?: string | null;

@@ -37,6 +37,20 @@ export type LauncherAccountState = {
   error: string | null;
 };
 
+export type LauncherSubscriptionStatus = {
+  tier: "free" | "premium" | "founder";
+  premium: boolean;
+  source: "server" | "local-fallback";
+  features: {
+    adsFree: boolean;
+    advancedThemes: boolean;
+    earlyExperimental: boolean;
+    cloudSyncPriority: boolean;
+    advancedBenchmarking: boolean;
+  };
+  upgradeUrl: string | null;
+};
+
 type AuthResponse = {
   accessToken?: string;
   token?: string;
@@ -89,6 +103,25 @@ const PATH_GOOGLE_DESKTOP_COMPLETE = getApiPath(
   "FISHBATTERY_ACCOUNT_GOOGLE_DESKTOP_COMPLETE_PATH",
   "/v1/auth/google/desktop/complete"
 );
+const PATH_SUBSCRIPTION_STATUS = getApiPath(
+  "FISHBATTERY_ACCOUNT_SUBSCRIPTION_STATUS_PATH",
+  "/v1/subscription/status"
+);
+const PATH_BILLING_CHECKOUT_SESSION = getApiPath(
+  "FISHBATTERY_ACCOUNT_BILLING_CHECKOUT_PATH",
+  "/v1/billing/checkout-session"
+);
+const PATH_BILLING_PORTAL_SESSION = getApiPath(
+  "FISHBATTERY_ACCOUNT_BILLING_PORTAL_PATH",
+  "/v1/billing/portal-session"
+);
+
+function normalizeTier(value: unknown): "free" | "premium" | "founder" {
+  const raw = String(value || "").trim().toLowerCase();
+  if (raw === "premium") return "premium";
+  if (raw === "founder") return "founder";
+  return "free";
+}
 
 function readDb(): LauncherAccountDb {
   return readJsonFile<LauncherAccountDb>(getLauncherAccountsPath(), {
@@ -488,4 +521,116 @@ export async function loginLauncherAccountWithGoogleDesktop(): Promise<LauncherA
     }
   });
   return applyAuthResponse(completed);
+}
+
+export async function getLauncherSubscriptionStatus(): Promise<LauncherSubscriptionStatus> {
+  const session = loadSession();
+  if (!session?.accessToken) throw new Error("Not signed in.");
+  try {
+    const payload = await requestAuth(PATH_SUBSCRIPTION_STATUS, {
+      method: "GET",
+      accessToken: session.accessToken
+    });
+    const tier = normalizeTier((payload as any)?.tier);
+    const premium = tier === "premium" || tier === "founder";
+    const featuresRaw = ((payload as any)?.features || {}) as Record<string, unknown>;
+    return {
+      tier,
+      premium: Boolean((payload as any)?.premium ?? premium),
+      source: "server",
+      features: {
+        adsFree: Boolean(featuresRaw.adsFree ?? premium),
+        advancedThemes: Boolean(featuresRaw.advancedThemes ?? premium),
+        earlyExperimental: Boolean(featuresRaw.earlyExperimental ?? premium),
+        cloudSyncPriority: Boolean(featuresRaw.cloudSyncPriority ?? premium),
+        advancedBenchmarking: Boolean(featuresRaw.advancedBenchmarking ?? premium)
+      },
+      upgradeUrl: (payload as any)?.upgradeUrl ? String((payload as any).upgradeUrl) : null
+    };
+  } catch {
+    const db = readDb();
+    const active =
+      db.accounts.find((entry) => entry.id === db.activeAccountId) ??
+      (db.accounts.length ? db.accounts[0] : null);
+    const tier = normalizeTier(active?.subscriptionTier);
+    const premium = tier === "premium" || tier === "founder";
+    return {
+      tier,
+      premium,
+      source: "local-fallback",
+      features: {
+        adsFree: premium,
+        advancedThemes: premium,
+        earlyExperimental: premium,
+        cloudSyncPriority: premium,
+        advancedBenchmarking: premium
+      },
+      upgradeUrl: String(process.env.FISHBATTERY_UPGRADE_URL || "http://localhost:5176").trim() || null
+    };
+  }
+}
+
+function getBillingReturnBaseUrl(): string {
+  const preferred = String(process.env.FISHBATTERY_ACCOUNT_RETURN_URL || "").trim();
+  if (/^https?:\/\//i.test(preferred)) return preferred;
+  const fallback = String(process.env.FISHBATTERY_UPGRADE_URL || "https://fishbattery.app/upgrade").trim();
+  if (/^https?:\/\//i.test(fallback)) return fallback;
+  return "https://fishbattery.app/upgrade";
+}
+
+export async function openLauncherCheckout(plan: "monthly" | "yearly"): Promise<boolean> {
+  const normalizedPlan = plan === "yearly" ? "yearly" : "monthly";
+  const session = loadSession();
+  if (!session?.accessToken) throw new Error("Not signed in.");
+
+  const returnUrl = getBillingReturnBaseUrl();
+  const payload = await requestAuth(PATH_BILLING_CHECKOUT_SESSION, {
+    method: "POST",
+    accessToken: session.accessToken,
+    body: {
+      plan: normalizedPlan,
+      successUrl: returnUrl,
+      cancelUrl: returnUrl
+    }
+  });
+
+  const url = String((payload as any)?.url || "").trim();
+  if (!/^https?:\/\//i.test(url)) {
+    throw new Error("Billing API did not return a valid checkout URL.");
+  }
+  const err = await shell.openExternal(url);
+  return !err;
+}
+
+export async function openLauncherBillingPortal(): Promise<boolean> {
+  const session = loadSession();
+  if (!session?.accessToken) throw new Error("Not signed in.");
+
+  const returnUrl = getBillingReturnBaseUrl();
+  const payload = await requestAuth(PATH_BILLING_PORTAL_SESSION, {
+    method: "POST",
+    accessToken: session.accessToken,
+    body: { returnUrl }
+  });
+
+  const url = String((payload as any)?.url || "").trim();
+  if (!/^https?:\/\//i.test(url)) {
+    throw new Error("Billing API did not return a valid portal URL.");
+  }
+  const err = await shell.openExternal(url);
+  return !err;
+}
+
+export async function openLauncherUpgradePage(): Promise<boolean> {
+  const fallbackUrl = String(process.env.FISHBATTERY_UPGRADE_URL || "http://localhost:5176").trim();
+  let url = fallbackUrl;
+  try {
+    const status = await getLauncherSubscriptionStatus();
+    if (status.upgradeUrl) url = status.upgradeUrl;
+  } catch {
+    // If status request fails, still try fallback URL.
+  }
+  if (!url) return false;
+  const err = await shell.openExternal(url);
+  return !err;
 }

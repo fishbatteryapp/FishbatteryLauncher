@@ -10,9 +10,13 @@ import {
   setActiveAccount
 } from "./accounts";
 import {
+  openLauncherBillingPortal,
+  openLauncherCheckout,
+  getLauncherSubscriptionStatus,
   getLauncherAccountState,
   loginLauncherAccountWithGoogleDesktop,
   loginLauncherAccount,
+  openLauncherUpgradePage,
   logoutLauncherAccount,
   registerLauncherAccount,
   updateLauncherAccountProfile,
@@ -418,6 +422,12 @@ export function registerIpc() {
   ipcMain.handle("launcherAccount:googleLogin", async () => loginLauncherAccountWithGoogleDesktop());
   ipcMain.handle("launcherAccount:switch", async (_e, accountId: string) => switchLauncherAccount(accountId));
   ipcMain.handle("launcherAccount:logout", async () => logoutLauncherAccount());
+  ipcMain.handle("launcherAccount:getSubscriptionStatus", async () => getLauncherSubscriptionStatus());
+  ipcMain.handle("launcherAccount:checkout", async (_e, plan: "monthly" | "yearly") =>
+    openLauncherCheckout(plan === "yearly" ? "yearly" : "monthly")
+  );
+  ipcMain.handle("launcherAccount:billingPortal", async () => openLauncherBillingPortal());
+  ipcMain.handle("launcherAccount:openUpgradePage", async () => openLauncherUpgradePage());
   ipcMain.handle(
     "launcherAccount:updateProfile",
     async (_e, patch: { displayName?: string; avatarUrl?: string | null }) => updateLauncherAccountProfile(patch)

@@ -20,6 +20,10 @@ contextBridge.exposeInMainWorld("api", {
   launcherAccountGoogleLogin: () => ipcRenderer.invoke("launcherAccount:googleLogin"),
   launcherAccountSwitch: (accountId: string) => ipcRenderer.invoke("launcherAccount:switch", accountId),
   launcherAccountLogout: () => ipcRenderer.invoke("launcherAccount:logout"),
+  launcherAccountGetSubscriptionStatus: () => ipcRenderer.invoke("launcherAccount:getSubscriptionStatus"),
+  launcherAccountCheckout: (plan: "monthly" | "yearly") => ipcRenderer.invoke("launcherAccount:checkout", plan),
+  launcherAccountBillingPortal: () => ipcRenderer.invoke("launcherAccount:billingPortal"),
+  launcherAccountOpenUpgradePage: () => ipcRenderer.invoke("launcherAccount:openUpgradePage"),
   launcherAccountUpdateProfile: (patch: { displayName?: string; avatarUrl?: string | null }) =>
     ipcRenderer.invoke("launcherAccount:updateProfile", patch),
   cloudSyncGetState: () => ipcRenderer.invoke("cloudSync:getState"),

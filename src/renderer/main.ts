@@ -160,6 +160,7 @@ let state: any = {
   versions: [],
   accounts: null,
   launcherAccount: null,
+  launcherSubscription: null,
   instances: null
 };
 
@@ -424,6 +425,42 @@ const THEME_BEHAVIOR_TEXT: Record<ThemeId, string> = {
   "developer-mode": "Terminal-inspired mono style with utilitarian emphasis.",
   "minimal-bw": "Monochrome grayscale style focused on structure and clarity."
 };
+
+const PREMIUM_THEMES = new Set<ThemeId>([
+  "windows-xp",
+  "end-dimension",
+  "nether-core",
+  "ice-frost",
+  "retro-2000s",
+  "rgb-gamer",
+  "glass-modern-w11",
+  "console-mode",
+  "dynamic-accent",
+  "biome-jungle",
+  "biome-snow",
+  "biome-cherry-grove",
+  "developer-mode"
+]);
+
+function getLauncherTier(): "free" | "premium" | "founder" {
+  const fromStatus = state.launcherSubscription?.tier;
+  if (fromStatus === "premium" || fromStatus === "founder") return fromStatus;
+  const fromAccount = String(state.launcherAccount?.activeAccount?.subscriptionTier || "").toLowerCase();
+  if (fromAccount === "premium" || fromAccount === "founder") return fromAccount;
+  return "free";
+}
+
+function hasPremium(): boolean {
+  const tier = getLauncherTier();
+  return tier === "premium" || tier === "founder";
+}
+
+async function openUpgradeFlow() {
+  const opened = await window.api.launcherAccountOpenUpgradePage();
+  if (!opened) {
+    alert("Upgrade page could not be opened. Check FISHBATTERY_UPGRADE_URL or BILLING_UPGRADE_URL.");
+  }
+}
 
 type AppSettings = {
   theme: ThemeId;
@@ -1420,6 +1457,11 @@ async function runActiveModalBenchmark() {
 
 function renderSettingsPanels() {
   const s = getSettings();
+  const premium = hasPremium();
+
+  if (!premium && PREMIUM_THEMES.has(s.theme)) {
+    setSettings({ theme: defaultSettings.theme });
+  }
 
   // General
   clearPanel(settingsPanelGeneral);
@@ -1463,20 +1505,54 @@ function renderSettingsPanels() {
 
   {
     const { row } = makeRow("Base style", "Changes the overall look.");
-    const sel = makeSelect(
-      THEME_OPTIONS,
-      s.theme,
-      (v) => {
-        setSettings({ theme: v as AppSettings["theme"] });
-        renderSettingsPanels();
+    const sel = document.createElement("select");
+    sel.className = "setControl";
+
+    const freeGroup = document.createElement("optgroup");
+    freeGroup.label = "Free themes";
+    const premiumGroup = document.createElement("optgroup");
+    premiumGroup.label = "Premium themes";
+
+    for (const option of THEME_OPTIONS) {
+      const opt = document.createElement("option");
+      opt.value = option.value;
+      opt.textContent = option.label;
+      if (PREMIUM_THEMES.has(option.value)) {
+        premiumGroup.appendChild(opt);
+      } else {
+        freeGroup.appendChild(opt);
       }
-    );
+    }
+
+    sel.appendChild(freeGroup);
+    sel.appendChild(premiumGroup);
+    sel.value = s.theme;
+    sel.onchange = async () => {
+      const next = sel.value as AppSettings["theme"];
+      if (!premium && PREMIUM_THEMES.has(next)) {
+        const label = THEME_OPTIONS.find((x) => x.value === next)?.label || "This theme";
+        const goUpgrade = confirm(`${label} is a Premium theme.\n\nOpen upgrade page now?`);
+        if (goUpgrade) await openUpgradeFlow();
+        sel.value = s.theme;
+        return;
+      }
+      setSettings({ theme: next });
+      renderSettingsPanels();
+    };
     row.appendChild(sel);
     settingsPanelTheme.appendChild(row);
   }
 
   {
     const { row } = makeRow("Theme behavior", THEME_BEHAVIOR_TEXT[s.theme]);
+    settingsPanelTheme.appendChild(row);
+  }
+
+  if (!premium) {
+    const { row } = makeRow(
+      "Premium themes",
+      "Theme list is split into Free and Premium groups. Upgrade in the account menu to unlock Premium themes."
+    );
     settingsPanelTheme.appendChild(row);
   }
 
@@ -1783,6 +1859,15 @@ function renderSettingsPanels() {
       : "never";
     syncMeta.textContent = `Last synced: ${lastSyncText}`;
     settingsPanelInstall.appendChild(syncMeta);
+
+    const syncPriorityMeta = document.createElement("div");
+    syncPriorityMeta.className = "muted";
+    syncPriorityMeta.style.fontSize = "12px";
+    syncPriorityMeta.style.marginBottom = "10px";
+    syncPriorityMeta.textContent = hasPremium()
+      ? "Cloud sync priority: Premium"
+      : "Cloud sync priority: Standard (Premium includes priority syncing)";
+    settingsPanelInstall.appendChild(syncPriorityMeta);
 
     const actions = document.createElement("div");
     actions.className = "row";
@@ -2749,6 +2834,18 @@ async function runLauncherAccountAction(fn: () => Promise<void>) {
   }
 }
 
+async function refreshLauncherSubscription() {
+  if (!state.launcherAccount?.activeAccountId) {
+    state.launcherSubscription = null;
+    return;
+  }
+  try {
+    state.launcherSubscription = await window.api.launcherAccountGetSubscriptionStatus();
+  } catch {
+    state.launcherSubscription = null;
+  }
+}
+
 type LauncherAuthFormResult = {
   email: string;
   password: string;
@@ -3071,6 +3168,7 @@ function fallbackAvatarDataUrl(label: string) {
 
 async function renderAccounts() {
   const launcherState = state.launcherAccount;
+  const launcherSubscription = state.launcherSubscription;
   const launcherActive = launcherState?.activeAccount ?? null;
   const accounts = state.accounts?.accounts ?? [];
   const activeId = state.accounts?.activeId ?? null;
@@ -3215,6 +3313,9 @@ async function renderAccounts() {
   launcherActionRow.style.display = "flex";
   launcherActionRow.style.gap = "8px";
   launcherActionRow.style.flexWrap = "wrap";
+  const launcherPlanTier = getLauncherTier();
+  const launcherPlanLabel =
+    launcherPlanTier === "founder" ? "Founder" : launcherPlanTier === "premium" ? "Premium" : "Free";
 
   const btnLauncherSignIn = document.createElement("button");
   btnLauncherSignIn.className = "btn";
@@ -3224,6 +3325,7 @@ async function renderAccounts() {
       const values = await openLauncherAuthDialog("login");
       if (!values) return;
       state.launcherAccount = await window.api.launcherAccountLogin(values.email, values.password);
+      await refreshLauncherSubscription();
       await renderAccounts();
       accountDropdown.classList.remove("open");
     });
@@ -3241,6 +3343,7 @@ async function renderAccounts() {
         values.password,
         values.displayName
       );
+      await refreshLauncherSubscription();
       await renderAccounts();
       accountDropdown.classList.remove("open");
     });
@@ -3253,6 +3356,7 @@ async function renderAccounts() {
     void runLauncherAccountAction(async () => {
       alert("A browser window will open for Google sign-in. Complete it, then return to the launcher.");
       state.launcherAccount = await window.api.launcherAccountGoogleLogin();
+      await refreshLauncherSubscription();
       await renderAccounts();
       accountDropdown.classList.remove("open");
     });
@@ -3264,6 +3368,7 @@ async function renderAccounts() {
   btnLauncherLogout.onclick = () => {
     void runLauncherAccountAction(async () => {
       state.launcherAccount = await window.api.launcherAccountLogout();
+      state.launcherSubscription = null;
       await renderAccounts();
       accountDropdown.classList.remove("open");
     });
@@ -3283,8 +3388,18 @@ async function renderAccounts() {
         displayName: values.displayName,
         avatarUrl: values.avatarUrl
       });
+      await refreshLauncherSubscription();
       await renderAccounts();
       accountDropdown.classList.remove("open");
+    });
+  };
+
+  const btnUpgradePremium = document.createElement("button");
+  btnUpgradePremium.className = "btn";
+  btnUpgradePremium.textContent = "Upgrade to Premium";
+  btnUpgradePremium.onclick = () => {
+    void runLauncherAccountAction(async () => {
+      await openUpgradeFlow();
     });
   };
 
@@ -3338,7 +3453,9 @@ async function renderAccounts() {
       const sub = document.createElement("small");
       sub.className = "muted";
       sub.style.fontSize = "11px";
-      sub.textContent = a.subscriptionTier ? `Fishbattery • ${String(a.subscriptionTier)}` : "Fishbattery account";
+      const tier = String(a.subscriptionTier || launcherPlanTier || "free").toLowerCase();
+      const tierLabel = tier === "founder" ? "Founder" : tier === "premium" ? "Premium" : "Free";
+      sub.textContent = `Fishbattery - ${tierLabel}`;
 
       meta.appendChild(title);
       meta.appendChild(sub);
@@ -3349,6 +3466,7 @@ async function renderAccounts() {
       item.onclick = () => {
         void runLauncherAccountAction(async () => {
           state.launcherAccount = await window.api.launcherAccountSwitch(a.id);
+          await refreshLauncherSubscription();
           await renderAccounts();
           accountDropdown.classList.remove("open");
         });
@@ -3356,8 +3474,16 @@ async function renderAccounts() {
 
       accountItems.appendChild(item);
     }
-    launcherActionRow.appendChild(btnLauncherLogout);
+    launcherActionRow.appendChild(btnUpgradePremium);
     accountItems.appendChild(launcherActionRow);
+
+    const planHint = document.createElement("div");
+    planHint.style.padding = "0 12px 10px";
+    planHint.className = "muted";
+    planHint.style.fontSize = "12px";
+    const priorityLabel = launcherSubscription?.features?.cloudSyncPriority ? "Priority" : "Standard";
+    planHint.textContent = `Plan: ${launcherPlanLabel} - Cloud sync: ${priorityLabel}`;
+    accountItems.appendChild(planHint);
   }
 
   if (accounts.length && !accountAvatarWarmupInFlight) {
@@ -3903,6 +4029,7 @@ async function refreshAll() {
       error: String(err?.message ?? err ?? "Failed to load launcher account state")
     };
   }
+  await refreshLauncherSubscription();
   try {
     const remoteSyncState = await window.api.cloudSyncGetState();
     cloudSyncState = {
