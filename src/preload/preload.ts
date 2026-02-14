@@ -8,6 +8,12 @@ contextBridge.exposeInMainWorld("api", {
   versionsList: () => ipcRenderer.invoke("versions:list"),
   windowMinimize: () => ipcRenderer.invoke("window:minimize"),
   windowToggleMaximize: () => ipcRenderer.invoke("window:toggleMaximize"),
+  windowIsMaximized: () => ipcRenderer.invoke("window:isMaximized"),
+  windowDragRestore: (cursorX: number, cursorY: number, anchorRatio: number) =>
+    ipcRenderer.invoke("window:dragRestore", { cursorX, cursorY, anchorRatio }),
+  windowDragMove: (cursorX: number, cursorY: number, anchorRatio: number) =>
+    ipcRenderer.invoke("window:dragMove", { cursorX, cursorY, anchorRatio }),
+  windowDragEnd: (cursorY: number) => ipcRenderer.invoke("window:dragEnd", { cursorY }),
   windowToggleFullscreen: () => ipcRenderer.invoke("window:toggleFullscreen"),
   windowClose: () => ipcRenderer.invoke("window:close"),
   windowSetTitleBarTheme: (color: string, symbolColor: string) =>

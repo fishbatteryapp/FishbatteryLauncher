@@ -15,6 +15,7 @@ const statusText = $("statusText");
 const winBtnMin = $("winBtnMin") as HTMLButtonElement;
 const winBtnMax = $("winBtnMax") as HTMLButtonElement;
 const winBtnClose = $("winBtnClose") as HTMLButtonElement;
+const windowTopbar = $("windowTopbar");
 
 const instancesGrid = $("instancesGrid") as HTMLDivElement;
 const searchInstances = $("searchInstances") as HTMLInputElement;
@@ -5118,6 +5119,75 @@ winBtnMax.onclick = async () => {
 winBtnClose.onclick = () => {
   void window.api.windowClose();
 };
+
+let topbarDragActive = false;
+let topbarDragRestored = false;
+let topbarDragAnchorRatio = 0.5;
+let topbarDragStartX = 0;
+let topbarDragStartY = 0;
+
+windowTopbar.addEventListener("dblclick", (ev) => {
+  const t = ev.target as HTMLElement | null;
+  if (t?.closest(".windowTopbarBtn")) return;
+  void (async () => {
+    const maximized = await window.api.windowToggleMaximize();
+    winBtnMax.classList.toggle("is-maximized", !!maximized);
+  })();
+});
+
+windowTopbar.addEventListener("pointerdown", (ev) => {
+  if (ev.button !== 0) return;
+  const t = ev.target as HTMLElement | null;
+  if (t?.closest(".windowTopbarBtn")) return;
+
+  void (async () => {
+    const maximized = await window.api.windowIsMaximized();
+    if (!maximized) return;
+    ev.preventDefault();
+    const rect = windowTopbar.getBoundingClientRect();
+    const ratioRaw = (ev.clientX - rect.left) / Math.max(rect.width, 1);
+    topbarDragAnchorRatio = Math.max(0.05, Math.min(0.95, ratioRaw));
+    topbarDragActive = true;
+    topbarDragRestored = false;
+    topbarDragStartX = ev.screenX;
+    topbarDragStartY = ev.screenY;
+  })();
+});
+
+window.addEventListener("pointermove", (ev) => {
+  if (!topbarDragActive) return;
+
+  const deltaX = Math.abs(ev.screenX - topbarDragStartX);
+  const deltaY = Math.abs(ev.screenY - topbarDragStartY);
+  if (!topbarDragRestored && deltaX + deltaY < 2) return;
+
+  if (!topbarDragRestored) {
+    topbarDragRestored = true;
+    winBtnMax.classList.remove("is-maximized");
+    void window.api.windowDragRestore(ev.screenX, ev.screenY, topbarDragAnchorRatio);
+    return;
+  }
+  void window.api.windowDragMove(ev.screenX, ev.screenY, topbarDragAnchorRatio);
+});
+
+function stopTopbarDrag(screenY?: number) {
+  if (topbarDragActive && topbarDragRestored && Number.isFinite(screenY)) {
+    void (async () => {
+      const maximized = await window.api.windowDragEnd(Number(screenY));
+      winBtnMax.classList.toggle("is-maximized", !!maximized);
+    })();
+  } else if (topbarDragActive) {
+    void (async () => {
+      const maximized = await window.api.windowIsMaximized();
+      winBtnMax.classList.toggle("is-maximized", !!maximized);
+    })();
+  }
+  topbarDragActive = false;
+  topbarDragRestored = false;
+}
+
+window.addEventListener("pointerup", (ev) => stopTopbarDrag(ev.screenY));
+window.addEventListener("pointercancel", () => stopTopbarDrag());
 
 // Initial
 applySettingsToDom(getSettings());

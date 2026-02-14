@@ -97,6 +97,65 @@ export function registerIpc() {
     return owner.isMaximized();
   });
 
+  ipcMain.handle("window:isMaximized", async (e) => {
+    const owner = BrowserWindow.fromWebContents(e.sender);
+    if (!owner) return false;
+    return owner.isMaximized();
+  });
+
+  ipcMain.handle(
+    "window:dragRestore",
+    async (e, payload: { cursorX: number; cursorY: number; anchorRatio: number }) => {
+      const owner = BrowserWindow.fromWebContents(e.sender);
+      if (!owner) return false;
+      if (!owner.isMaximized()) return false;
+
+      const anchorRatio = Math.max(0.05, Math.min(0.95, Number(payload?.anchorRatio || 0.5)));
+      const cursorX = Math.round(Number(payload?.cursorX || 0));
+      const cursorY = Math.round(Number(payload?.cursorY || 0));
+
+      owner.unmaximize();
+      const bounds = owner.getBounds();
+      const nextX = Math.round(cursorX - bounds.width * anchorRatio);
+      const nextY = Math.round(cursorY - 10);
+      owner.setPosition(nextX, nextY);
+      return true;
+    }
+  );
+
+  ipcMain.handle(
+    "window:dragMove",
+    async (e, payload: { cursorX: number; cursorY: number; anchorRatio: number }) => {
+      const owner = BrowserWindow.fromWebContents(e.sender);
+      if (!owner) return false;
+      if (owner.isMaximized()) return false;
+
+      const anchorRatio = Math.max(0.05, Math.min(0.95, Number(payload?.anchorRatio || 0.5)));
+      const cursorX = Math.round(Number(payload?.cursorX || 0));
+      const cursorY = Math.round(Number(payload?.cursorY || 0));
+      const bounds = owner.getBounds();
+      const nextX = Math.round(cursorX - bounds.width * anchorRatio);
+      const nextY = Math.round(cursorY - 10);
+      owner.setPosition(nextX, nextY);
+      return true;
+    }
+  );
+
+  ipcMain.handle(
+    "window:dragEnd",
+    async (e, payload: { cursorY: number }) => {
+      const owner = BrowserWindow.fromWebContents(e.sender);
+      if (!owner) return false;
+      const cursorY = Math.round(Number(payload?.cursorY || 0));
+      // Emulate native "drag to top edge to maximize" for our custom drag path.
+      if (cursorY <= 2) {
+        owner.maximize();
+        return true;
+      }
+      return owner.isMaximized();
+    }
+  );
+
   ipcMain.handle("window:toggleFullscreen", async (e) => {
     const owner = BrowserWindow.fromWebContents(e.sender);
     if (!owner) return false;

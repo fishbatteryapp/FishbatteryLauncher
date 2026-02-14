@@ -37,6 +37,60 @@ if (!allowMultiInstance) {
 }
 
 let win: BrowserWindow | null = null;
+const windowStateFile = path.join(app.getPath("userData"), "window-state.json");
+
+type PersistedWindowState = {
+  width: number;
+  height: number;
+  x?: number;
+  y?: number;
+  maximized: boolean;
+  fullscreen: boolean;
+};
+
+function clampWindowDimension(value: unknown, fallback: number): number {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(700, Math.floor(n));
+}
+
+function readWindowState(): PersistedWindowState | null {
+  try {
+    const raw = fs.readFileSync(windowStateFile, "utf8");
+    const parsed = JSON.parse(raw || "{}") as Partial<PersistedWindowState>;
+    return {
+      width: clampWindowDimension(parsed.width, 1200),
+      height: clampWindowDimension(parsed.height, 780),
+      x: Number.isFinite(Number(parsed.x)) ? Math.floor(Number(parsed.x)) : undefined,
+      y: Number.isFinite(Number(parsed.y)) ? Math.floor(Number(parsed.y)) : undefined,
+      maximized: !!parsed.maximized,
+      fullscreen: !!parsed.fullscreen
+    };
+  } catch {
+    return null;
+  }
+}
+
+function writeWindowState(state: PersistedWindowState) {
+  try {
+    fs.mkdirSync(path.dirname(windowStateFile), { recursive: true });
+    fs.writeFileSync(windowStateFile, JSON.stringify(state, null, 2), "utf8");
+  } catch {
+    // Non-fatal: window state persistence is best-effort.
+  }
+}
+
+function captureWindowState(target: BrowserWindow): PersistedWindowState {
+  const normalBounds = target.getNormalBounds();
+  return {
+    width: Math.max(700, Math.floor(normalBounds.width || 1200)),
+    height: Math.max(700, Math.floor(normalBounds.height || 780)),
+    x: Number.isFinite(normalBounds.x) ? Math.floor(normalBounds.x) : undefined,
+    y: Number.isFinite(normalBounds.y) ? Math.floor(normalBounds.y) : undefined,
+    maximized: target.isMaximized(),
+    fullscreen: target.isFullScreen()
+  };
+}
 
 function buildRoundedWindowShape(width: number, height: number, radius: number) {
   const safeW = Math.max(1, Math.floor(width));
@@ -72,9 +126,15 @@ function applyRoundedShape(target: BrowserWindow) {
 }
 
 async function createWindow() {
-  win = new BrowserWindow({
-    width: 1200,
-    height: 780,
+  const saved = readWindowState();
+  const firstLaunch = !saved;
+  const width = saved?.width ?? 1200;
+  const height = saved?.height ?? 780;
+
+  const browserWindowOptions: Electron.BrowserWindowConstructorOptions = {
+    width,
+    height,
+    ...(saved?.x != null && saved?.y != null ? { x: saved.x, y: saved.y } : {}),
     backgroundColor: "#00000000",
     autoHideMenuBar: true,
     frame: false,
@@ -84,9 +144,33 @@ async function createWindow() {
       preload: path.join(__dirname, "../preload/preload.cjs"),
       contextIsolation: true
     }
+  };
+
+  win = new BrowserWindow({
+    ...browserWindowOptions
   });
 
   win.setMenuBarVisibility(false);
+  if (firstLaunch || saved?.maximized) {
+    win.maximize();
+  }
+  if (saved?.fullscreen) {
+    win.setFullScreen(true);
+  }
+
+  const persist = () => {
+    if (!win || win.isDestroyed()) return;
+    writeWindowState(captureWindowState(win));
+  };
+
+  win.on("move", persist);
+  win.on("resize", persist);
+  win.on("maximize", persist);
+  win.on("unmaximize", persist);
+  win.on("enter-full-screen", persist);
+  win.on("leave-full-screen", persist);
+  win.on("close", persist);
+
   applyRoundedShape(win);
   win.on("resize", () => applyRoundedShape(win!));
   win.on("maximize", () => applyRoundedShape(win!));

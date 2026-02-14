@@ -6,6 +6,10 @@ declare global {
       versionsList: () => Promise<any>;
       windowMinimize: () => Promise<boolean>;
       windowToggleMaximize: () => Promise<boolean>;
+      windowIsMaximized: () => Promise<boolean>;
+      windowDragRestore: (cursorX: number, cursorY: number, anchorRatio: number) => Promise<boolean>;
+      windowDragMove: (cursorX: number, cursorY: number, anchorRatio: number) => Promise<boolean>;
+      windowDragEnd: (cursorY: number) => Promise<boolean>;
       windowToggleFullscreen: () => Promise<boolean>;
       windowClose: () => Promise<boolean>;
       windowSetTitleBarTheme: (color: string, symbolColor: string) => Promise<boolean>;
