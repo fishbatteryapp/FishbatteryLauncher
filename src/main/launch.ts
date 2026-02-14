@@ -450,16 +450,21 @@ async function launchResolved(
 
   if (selectedLauncherCape) {
     const capeMetaPath = path.join(gameDir, ".fishbattery", "launcher-cape.json");
+    const cloudUrl = String(selectedLauncherCape.downloadUrl || "").trim();
+    const localPath = String(selectedLauncherCape.fullPath || "").trim();
+    const hasLocalFile = !!localPath && fs.existsSync(localPath) && fs.statSync(localPath).size > 0;
     const capeMeta = {
       accountId: account.id,
       capeId: selectedLauncherCape.id,
       tier: selectedLauncherCape.tier,
       fileName: selectedLauncherCape.fileName,
       fullPath: selectedLauncherCape.fullPath,
+      cloudUrl: cloudUrl || null,
       updatedAt: Date.now()
     };
     fs.writeFileSync(capeMetaPath, JSON.stringify(capeMeta, null, 2), "utf8");
-    customJavaArgs.push(`-Dfishbattery.launcherCape.path=${selectedLauncherCape.fullPath}`);
+    customJavaArgs.push(`-Dfishbattery.launcherCape.path=${hasLocalFile ? localPath : ""}`);
+    customJavaArgs.push(`-Dfishbattery.launcherCape.url=${cloudUrl}`);
     customJavaArgs.push(`-Dfishbattery.launcherCape.id=${selectedLauncherCape.id}`);
     customJavaArgs.push(`-Dfishbattery.launcherCape.tier=${selectedLauncherCape.tier}`);
     customJavaArgs.push(`-Dfishbattery.launcherCape.meta=${capeMetaPath}`);
@@ -470,6 +475,7 @@ async function launchResolved(
       if (fs.existsSync(capeMetaPath)) fs.rmSync(capeMetaPath, { force: true });
     } catch {}
     customJavaArgs.push("-Dfishbattery.launcherCape.path=");
+    customJavaArgs.push("-Dfishbattery.launcherCape.url=");
     onLog?.("[capes] Launcher-only cape disabled");
   }
 

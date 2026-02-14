@@ -45,6 +45,17 @@ function decodeDataUrl(input: string): Buffer | null {
   }
 }
 
+function mimeFromExt(extRaw: string): string {
+  const ext = String(extRaw || "").toLowerCase();
+  if (ext === ".jpg" || ext === ".jpeg") return "image/jpeg";
+  if (ext === ".webp") return "image/webp";
+  return "image/png";
+}
+
+function encodeDataUrl(bytes: Buffer, mime: string): string {
+  return `data:${mime};base64,${bytes.toString("base64")}`;
+}
+
 function titleFromFileName(fileName: string) {
   const base = path.basename(fileName, path.extname(fileName));
   return base
@@ -186,11 +197,28 @@ export async function listLocalCapes(forceRefresh = false): Promise<LocalCapeCat
       const fileName = pickFirstString(raw?.fileName, raw?.filename, `${sanitizeId(id)}.png`);
       const downloadUrl = resolveAbsoluteUrl(pickFirstString(raw?.downloadUrl, raw?.fileUrl, raw?.url) || null);
       const fileDataUrl = pickFirstString(raw?.fileDataUrl) || null;
-      let previewDataUrl = pickFirstString(raw?.previewDataUrl, raw?.thumbnailDataUrl);
-      if (!previewDataUrl) {
-        previewDataUrl = pickFirstString(raw?.previewUrl, raw?.thumbnailUrl, raw?.imageUrl, downloadUrl);
+      const previewDataInline = pickFirstString(raw?.previewDataUrl, raw?.thumbnailDataUrl);
+      const previewUrlRaw = previewDataInline
+        ? previewDataInline
+        : pickFirstString(raw?.previewUrl, raw?.thumbnailUrl, raw?.imageUrl, downloadUrl);
+      const previewUrl = resolveAbsoluteUrl(previewUrlRaw || null) || "";
+      let previewDataUrl = previewUrl;
+      if (previewDataInline?.startsWith("data:")) {
+        previewDataUrl = previewDataInline;
+      } else {
+        const previewSource = previewUrl || downloadUrl || "";
+        if (previewSource.startsWith("data:")) {
+          previewDataUrl = previewSource;
+        } else if (/^https?:\/\//i.test(previewSource)) {
+          try {
+            const bytes = await downloadBuffer(previewSource);
+            const ext = inferExt(fileName, previewSource);
+            previewDataUrl = encodeDataUrl(bytes, mimeFromExt(ext));
+          } catch {
+            previewDataUrl = previewSource;
+          }
+        }
       }
-      previewDataUrl = resolveAbsoluteUrl(previewDataUrl || null) || "";
       const fullPath = getCachedCapePath(id, fileName, downloadUrl || previewDataUrl || null);
       items.push({
         id,
@@ -271,7 +299,11 @@ export async function getSelectedLocalCapeForAccount(accountId: string): Promise
   const selected = catalog.items.find((item) => item.id === selectedId) ?? null;
   if (!selected) return null;
   const cachedPath = await ensureCachedCapeFile(selected);
-  if (!cachedPath) return null;
+  if (!cachedPath) {
+    // Keep cloud-backed selection even when local cache file could not be materialized.
+    // Bridge mods can still resolve via fishbattery.launcherCape.url.
+    return selected;
+  }
   return {
     ...selected,
     fullPath: cachedPath

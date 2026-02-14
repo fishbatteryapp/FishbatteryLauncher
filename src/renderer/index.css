@@ -1479,6 +1479,7 @@ pre{
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
   background: rgba(0,0,0,.28);
   border-bottom: 1px solid var(--border2);
 }

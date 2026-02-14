@@ -47,7 +47,7 @@ import { installVanillaVersion } from "./vanillaInstall";
 import { pickLoaderVersion, prepareLoaderInstall, type LoaderKind } from "./loaderSupport";
 import { launchInstance, isInstanceRunning, stopInstance } from "./launch";
 import type { LaunchRuntimePrefs } from "./launch";
-import { syncCapeBridgeModWithGithub } from "./capeBridge";
+import { applyCapeBridgeUpdateForInstance, checkCapeBridgeUpdateForInstance, syncCapeBridgeModWithGithub } from "./capeBridge";
 import { registerContentIpc } from "./content";
 import { exportDiagnosticsZip } from "./diagnostics";
 import { getLastPreflightChecks, runPreflightChecks } from "./preflight";
@@ -746,6 +746,20 @@ export function registerIpc() {
   ipcMain.handle("mods:fixDuplicates", async (_e, instanceId: string) => {
     if (!instanceId) throw new Error("mods:fixDuplicates: instanceId missing");
     return fixDuplicateMods(instanceId);
+  });
+  ipcMain.handle("mods:checkCapeBridgeUpdate", async (_e, instanceId: string) => {
+    if (!instanceId) throw new Error("mods:checkCapeBridgeUpdate: instanceId missing");
+    const db = listInstances();
+    const inst = db.instances.find((x: any) => x.id === instanceId);
+    if (!inst) throw new Error("mods:checkCapeBridgeUpdate: instance not found");
+    return checkCapeBridgeUpdateForInstance(inst);
+  });
+  ipcMain.handle("mods:applyCapeBridgeUpdate", async (_e, instanceId: string) => {
+    if (!instanceId) throw new Error("mods:applyCapeBridgeUpdate: instanceId missing");
+    const db = listInstances();
+    const inst = db.instances.find((x: any) => x.id === instanceId);
+    if (!inst) throw new Error("mods:applyCapeBridgeUpdate: instance not found");
+    return applyCapeBridgeUpdateForInstance(inst);
   });
 
   // ---------- Packs (recommended resourcepacks/shaderpacks) ----------

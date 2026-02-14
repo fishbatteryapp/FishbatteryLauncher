@@ -110,6 +110,8 @@ contextBridge.exposeInMainWorld("api", {
     ipcRenderer.invoke("mods:refreshSelected", instanceId, mcVersion, selectedIds),
   modsValidate: (instanceId: string) => ipcRenderer.invoke("mods:validate", instanceId),
   modsFixDuplicates: (instanceId: string) => ipcRenderer.invoke("mods:fixDuplicates", instanceId),
+  modsCheckCapeBridgeUpdate: (instanceId: string) => ipcRenderer.invoke("mods:checkCapeBridgeUpdate", instanceId),
+  modsApplyCapeBridgeUpdate: (instanceId: string) => ipcRenderer.invoke("mods:applyCapeBridgeUpdate", instanceId),
 
   // ---------- Recommended Packs (Modrinth) ----------
   packsList: (instanceId: string) => ipcRenderer.invoke("packs:list", instanceId),

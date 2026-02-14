@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import fetch from "node-fetch";
+import crypto from "node:crypto";
 import { InstanceConfig, getInstanceDir } from "./instances";
 import { downloadBuffer } from "./modrinth";
 import { getDataRoot } from "./paths";
@@ -49,6 +50,24 @@ function cleanBridgeJars(modsDir: string) {
     } catch {
       // best effort cleanup
     }
+  }
+}
+
+function listInstalledBridgeJars(modsDir: string): string[] {
+  if (!fs.existsSync(modsDir)) return [];
+  return fs
+    .readdirSync(modsDir)
+    .filter((entry) => entry.startsWith(BRIDGE_PREFIX) && entry.endsWith(".jar"))
+    .map((entry) => path.join(modsDir, entry));
+}
+
+function sha1File(filePath: string): string | null {
+  try {
+    if (!fs.existsSync(filePath) || !fs.statSync(filePath).size) return null;
+    const bytes = fs.readFileSync(filePath);
+    return crypto.createHash("sha1").update(bytes).digest("hex");
+  } catch {
+    return null;
   }
 }
 
@@ -186,13 +205,25 @@ export async function syncCapeBridgeModWithGithub(instance: InstanceConfig, onLo
   }
 
   let source: string | null = null;
-  try {
-    source = await resolveGithubBridgeJarPath(instance, onLog);
-  } catch (err: any) {
-    onLog?.(`[capes] GitHub bridge resolve failed: ${String(err?.message ?? err)}`);
+  const githubCapable = isGitHubBridgeLoader(instance.loader);
+  if (githubCapable) {
+    try {
+      source = await resolveGithubBridgeJarPath(instance, onLog);
+    } catch (err: any) {
+      onLog?.(`[capes] GitHub bridge resolve failed: ${String(err?.message ?? err)}`);
+    }
+    // For Fabric/Quilt, avoid falling back to a generic bundled jar that may target another MC version.
+    if (!source) {
+      onLog?.(
+        `[capes] Skipping bridge injection for ${instance.loader} ${instance.mcVersion}: no matching GitHub bridge release found.`
+      );
+      return;
+    }
+  } else {
+    source = resolveBridgeJarPath(instance.loader);
+    if (source) onLog?.("[capes] Using bundled cape bridge jar from launcher resources.");
   }
 
-  if (!source) source = resolveBridgeJarPath(instance.loader);
   if (!source) {
     onLog?.(
       `[capes] Cape bridge jar missing for ${instance.loader}. No GitHub release and no bundled fallback ${expectedBundledJarName(instance.loader)}`
@@ -203,4 +234,114 @@ export async function syncCapeBridgeModWithGithub(instance: InstanceConfig, onLo
   const target = path.join(modsDir, path.basename(source));
   fs.copyFileSync(source, target);
   onLog?.(`[capes] Injected launcher cape bridge mod: ${path.basename(target)}`);
+}
+
+export type CapeBridgeUpdateCheck = {
+  supported: boolean;
+  loader: InstanceConfig["loader"];
+  minecraft: string;
+  installedJar: string | null;
+  latestJar: string | null;
+  releaseTag: string | null;
+  updateAvailable: boolean;
+  reason: string;
+};
+
+export async function checkCapeBridgeUpdateForInstance(
+  instance: InstanceConfig,
+  onLog?: (line: string) => void
+): Promise<CapeBridgeUpdateCheck> {
+  const modsDir = path.join(getInstanceDir(instance.id), "mods");
+  fs.mkdirSync(modsDir, { recursive: true });
+  const installed = listInstalledBridgeJars(modsDir);
+  const installedJar = installed.length ? path.basename(installed[0]) : null;
+
+  if (!isLoaderWithBridge(instance.loader) || !isGitHubBridgeLoader(instance.loader)) {
+    return {
+      supported: false,
+      loader: instance.loader,
+      minecraft: instance.mcVersion,
+      installedJar,
+      latestJar: null,
+      releaseTag: null,
+      updateAvailable: false,
+      reason: "Cape bridge updates are not used for this loader."
+    };
+  }
+
+  const resolved = await resolveGithubBridgeRelease(instance.mcVersion, instance.loader, onLog);
+  if (!resolved) {
+    return {
+      supported: true,
+      loader: instance.loader,
+      minecraft: instance.mcVersion,
+      installedJar,
+      latestJar: null,
+      releaseTag: null,
+      updateAvailable: false,
+      reason: "No GitHub bridge release found for this loader/version."
+    };
+  }
+
+  const { cacheFile } = getBridgeCachePath(resolved.releaseTag, resolved.asset.name);
+  if (!fs.existsSync(cacheFile) || !fs.statSync(cacheFile).size) {
+    try {
+      fs.mkdirSync(path.dirname(cacheFile), { recursive: true });
+      const bytes = await downloadBuffer(resolved.asset.browser_download_url);
+      fs.writeFileSync(cacheFile, bytes);
+    } catch (err: any) {
+      return {
+        supported: true,
+        loader: instance.loader,
+        minecraft: instance.mcVersion,
+        installedJar,
+        latestJar: path.basename(cacheFile),
+        releaseTag: resolved.releaseTag,
+        updateAvailable: false,
+        reason: `Could not fetch latest bridge asset: ${String(err?.message ?? err)}`
+      };
+    }
+  }
+
+  const latestHash = sha1File(cacheFile);
+  const installedHash = installed.length ? sha1File(installed[0]) : null;
+  const updateAvailable = !installedHash || !latestHash || installedHash !== latestHash;
+
+  return {
+    supported: true,
+    loader: instance.loader,
+    minecraft: instance.mcVersion,
+    installedJar,
+    latestJar: path.basename(cacheFile),
+    releaseTag: resolved.releaseTag,
+    updateAvailable,
+    reason: updateAvailable ? "A newer cape bridge release is available." : "Cape bridge is up to date."
+  };
+}
+
+export async function applyCapeBridgeUpdateForInstance(instance: InstanceConfig, onLog?: (line: string) => void) {
+  const check = await checkCapeBridgeUpdateForInstance(instance, onLog);
+  if (!check.supported) return { ...check, updated: false };
+  if (!check.updateAvailable) return { ...check, updated: false };
+
+  if (!isLoaderWithBridge(instance.loader) || !isGitHubBridgeLoader(instance.loader)) {
+    return { ...check, updated: false };
+  }
+
+  const resolved = await resolveGithubBridgeRelease(instance.mcVersion, instance.loader, onLog);
+  if (!resolved) return { ...check, updated: false, reason: "Latest release could not be resolved." };
+  const { cacheFile } = getBridgeCachePath(resolved.releaseTag, resolved.asset.name);
+  if (!fs.existsSync(cacheFile) || !fs.statSync(cacheFile).size) {
+    fs.mkdirSync(path.dirname(cacheFile), { recursive: true });
+    const bytes = await downloadBuffer(resolved.asset.browser_download_url);
+    fs.writeFileSync(cacheFile, bytes);
+  }
+
+  const modsDir = path.join(getInstanceDir(instance.id), "mods");
+  fs.mkdirSync(modsDir, { recursive: true });
+  cleanBridgeJars(modsDir);
+  const target = path.join(modsDir, path.basename(cacheFile));
+  fs.copyFileSync(cacheFile, target);
+  onLog?.(`[capes] Updated cape bridge to ${resolved.releaseTag}: ${path.basename(target)}`);
+  return { ...check, updated: true, installedJar: path.basename(target), latestJar: path.basename(target) };
 }

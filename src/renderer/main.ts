@@ -1309,6 +1309,12 @@ async function renderCapesView(forceRefresh = false) {
     if (cfg.imageUrl) {
       const img = document.createElement("img");
       img.className = "capeTileImg";
+      img.onerror = () => {
+        img.remove();
+        const ghost = document.createElement("div");
+        ghost.className = "capeTileGhost";
+        preview.appendChild(ghost);
+      };
       void setCapePreviewImage(img, cfg.imageUrl);
       img.alt = `${cfg.label} cape`;
       preview.appendChild(img);
@@ -1404,6 +1410,18 @@ async function renderCapesView(forceRefresh = false) {
     localEmpty.textContent = "No launcher capes are available for your account right now.";
     localSection.appendChild(localEmpty);
   } else {
+    localGrid.appendChild(
+      buildTile({
+        label: "No Fishbattery Cape",
+        imageUrl: null,
+        active: !selectedLocalCapeId,
+        onSelect: async () => {
+          if (activeMcId) await window.api.capesSetLocalSelection(activeMcId, null);
+          setStatus("Launcher cape selection cleared.");
+          await renderCapesView(false);
+        }
+      })
+    );
     for (const localItem of sortedLocalItems) {
       localGrid.appendChild(
         buildTile({
@@ -1419,18 +1437,6 @@ async function renderCapesView(forceRefresh = false) {
         })
       );
     }
-    localGrid.appendChild(
-      buildTile({
-        label: "No Local Cape",
-        imageUrl: null,
-        active: !selectedLocalCapeId,
-        onSelect: async () => {
-          if (activeMcId) await window.api.capesSetLocalSelection(activeMcId, null);
-          setStatus("Launcher cape selection cleared.");
-          await renderCapesView(false);
-        }
-      })
-    );
   }
 }
 
@@ -1484,7 +1490,13 @@ async function buildCapePanelPreviewDataUrl(sourceUrl: string): Promise<string |
     return null;
   }
 
-  const patch = sctx.getImageData(sx, sy, sw, sh).data;
+  let patch: Uint8ClampedArray;
+  try {
+    patch = sctx.getImageData(sx, sy, sw, sh).data;
+  } catch {
+    capePreviewCache.set(src, null);
+    return null;
+  }
   let hasPixels = false;
   for (let i = 3; i < patch.length; i += 4) {
     if (patch[i] > 8) {
@@ -1522,8 +1534,12 @@ async function buildCapePanelPreviewDataUrl(sourceUrl: string): Promise<string |
 }
 
 async function setCapePreviewImage(imgEl: HTMLImageElement, sourceUrl: string) {
-  const preview = await buildCapePanelPreviewDataUrl(sourceUrl);
-  imgEl.src = preview || sourceUrl;
+  try {
+    const preview = await buildCapePanelPreviewDataUrl(sourceUrl);
+    imgEl.src = preview || sourceUrl;
+  } catch {
+    imgEl.src = sourceUrl;
+  }
 }
 
 function disposeCapesCharacterPreview() {
@@ -1571,8 +1587,13 @@ async function renderInteractiveCharacterPreview(
   try {
     await viewer.loadSkin(skinSrc);
     if (capeSrc) {
-      await viewer.loadCape(capeSrc);
-      if (viewer.playerObject?.cape) viewer.playerObject.cape.visible = true;
+      try {
+        await viewer.loadCape(capeSrc);
+        if (viewer.playerObject?.cape) viewer.playerObject.cape.visible = true;
+      } catch (err) {
+        console.warn("Cape preview load failed, continuing without cape", err);
+        if (viewer.playerObject?.cape) viewer.playerObject.cape.visible = false;
+      }
     } else if (viewer.playerObject?.cape) {
       viewer.playerObject.cape.visible = false;
     }
@@ -5872,8 +5893,9 @@ modalUpdateMods.onclick = () =>
     const inst = (state.instances?.instances ?? []).find((x: any) => x.id === editInstanceId) ?? null;
     if (!inst) return;
     setStatus("Analyzing mod updates...");
+    const capeBridgeCheck = await window.api.modsCheckCapeBridgeUpdate(inst.id);
     const plan = await window.api.modsPlanRefresh(inst.id, inst.mcVersion);
-    if (!plan?.updates?.length) {
+    if (!plan?.updates?.length && !capeBridgeCheck?.updateAvailable) {
       setStatus("");
       appendLog("[mods] Smart update: no compatible updates found.");
       if (plan?.blocked?.length) {
@@ -5884,9 +5906,29 @@ modalUpdateMods.onclick = () =>
       return;
     }
 
+    if (!plan?.updates?.length && capeBridgeCheck?.updateAvailable) {
+      setStatus("Applying cape bridge update...");
+      const res = await window.api.modsApplyCapeBridgeUpdate(inst.id);
+      await renderInstanceMods(inst.id);
+      await renderLocalContent(inst.id);
+      setStatus("");
+      if (res?.updated) {
+        appendLog(`[mods] Cape bridge updated: ${res.releaseTag || res.latestJar || "latest"}`);
+        alert(`Cape bridge updated.\n${res.releaseTag || res.latestJar || ""}`.trim());
+      } else {
+        appendLog(`[mods] Cape bridge update skipped: ${res?.reason || "No update applied."}`);
+        alert(`Cape bridge update not applied.\n${res?.reason || "No update applied."}`);
+      }
+      return;
+    }
+
     const summary = buildModUpdateSummary(plan);
+    const summaryWithCapeBridge =
+      capeBridgeCheck?.updateAvailable
+        ? `${summary}\n\nCape bridge update available: ${capeBridgeCheck.releaseTag || capeBridgeCheck.latestJar || "latest"}`
+        : summary;
     const choiceRaw = prompt(
-      `${summary}\n\nChoose action:\n- all\n- individual\n- skip`,
+      `${summaryWithCapeBridge}\n\nChoose action:\n- all\n- individual\n- skip`,
       "all"
     );
     const choice = String(choiceRaw || "skip").trim().toLowerCase();
@@ -5938,6 +5980,21 @@ modalUpdateMods.onclick = () =>
     }
     await renderInstanceMods(inst.id);
     await renderLocalContent(inst.id);
+    if (capeBridgeCheck?.updateAvailable) {
+      const updateCapeBridge = confirm(
+        `A cape bridge update is available (${capeBridgeCheck.releaseTag || capeBridgeCheck.latestJar || "latest"}).\nApply it now?`
+      );
+      if (updateCapeBridge) {
+        const bridgeRes = await window.api.modsApplyCapeBridgeUpdate(inst.id);
+        if (bridgeRes?.updated) {
+          appendLog(`[mods] Cape bridge updated: ${bridgeRes.releaseTag || bridgeRes.latestJar || "latest"}`);
+          await renderInstanceMods(inst.id);
+          await renderLocalContent(inst.id);
+        } else {
+          appendLog(`[mods] Cape bridge update skipped: ${bridgeRes?.reason || "No update applied."}`);
+        }
+      }
+    }
     const v = await window.api.modsValidate(inst.id);
     appendLog(`[validation] After refresh: ${v.summary} (${v.issues.length} issues)`);
     if (v.summary === "critical") {
