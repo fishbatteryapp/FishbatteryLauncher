@@ -197,9 +197,9 @@ export function syncCapeBridgeMod(instance: InstanceConfig, onLog?: (line: strin
 export async function syncCapeBridgeModWithGithub(instance: InstanceConfig, onLog?: (line: string) => void) {
   const modsDir = path.join(getInstanceDir(instance.id), "mods");
   fs.mkdirSync(modsDir, { recursive: true });
-  cleanBridgeJars(modsDir);
 
   if (!isLoaderWithBridge(instance.loader)) {
+    cleanBridgeJars(modsDir);
     onLog?.("[capes] Vanilla instance: skipping launcher cape bridge mod");
     return;
   }
@@ -214,6 +214,11 @@ export async function syncCapeBridgeModWithGithub(instance: InstanceConfig, onLo
     }
     // For Fabric/Quilt, avoid falling back to a generic bundled jar that may target another MC version.
     if (!source) {
+      const existing = listInstalledBridgeJars(modsDir);
+      if (existing.length) {
+        onLog?.(`[capes] Keeping existing bridge jar: ${path.basename(existing[0])}`);
+        return;
+      }
       onLog?.(
         `[capes] Skipping bridge injection for ${instance.loader} ${instance.mcVersion}: no matching GitHub bridge release found.`
       );
@@ -225,12 +230,18 @@ export async function syncCapeBridgeModWithGithub(instance: InstanceConfig, onLo
   }
 
   if (!source) {
+    const existing = listInstalledBridgeJars(modsDir);
+    if (existing.length) {
+      onLog?.(`[capes] Keeping existing bridge jar: ${path.basename(existing[0])}`);
+      return;
+    }
     onLog?.(
       `[capes] Cape bridge jar missing for ${instance.loader}. No GitHub release and no bundled fallback ${expectedBundledJarName(instance.loader)}`
     );
     return;
   }
 
+  cleanBridgeJars(modsDir);
   const target = path.join(modsDir, path.basename(source));
   fs.copyFileSync(source, target);
   onLog?.(`[capes] Injected launcher cape bridge mod: ${path.basename(target)}`);

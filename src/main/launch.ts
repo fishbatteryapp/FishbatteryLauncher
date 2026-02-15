@@ -10,7 +10,7 @@ import { installFabricVersion } from "./fabricInstall";
 import { pickLoaderVersion, prepareLoaderInstall, resolveForgeInstallerPath } from "./loaderSupport";
 import crypto from "node:crypto";
 import { getDataRoot, getAssetsRoot, getLibrariesRoot, getVersionsRoot } from "./paths";
-import { getSelectedLocalCapeForAccount, setSelectedLocalCapeId } from "./capes";
+import { getSelectedLocalCapeForAccount, listLocalCapes, setSelectedLocalCapeId } from "./capes";
 import { syncCapeBridgeModWithGithub } from "./capeBridge";
 import { autoInstallMissingDependenciesForInstance } from "./dependencyAutoInstall";
 import { hasLauncherFounderAccess, hasLauncherPremiumAccess } from "./launcherAccount";
@@ -25,6 +25,39 @@ export type LaunchRuntimePrefs = {
   postExit?: string;
   serverAddress?: string;
 };
+
+function encodeCatalogField(value: string | null | undefined) {
+  return encodeURIComponent(String(value ?? ""));
+}
+
+function writeLauncherCapeCatalogFile(
+  filePath: string,
+  selectedCapeId: string | null,
+  items: Array<{
+    id: string;
+    name: string;
+    tier: "free" | "premium" | "founder";
+    fullPath: string;
+    downloadUrl?: string | null;
+  }>
+) {
+  const lines: string[] = [];
+  lines.push("# fishbattery launcher capes v1");
+  lines.push(`selected=${encodeCatalogField(selectedCapeId || "")}`);
+  for (const item of items) {
+    lines.push(
+      [
+        "cape",
+        encodeCatalogField(item.id),
+        encodeCatalogField(item.name),
+        encodeCatalogField(item.tier),
+        encodeCatalogField(item.fullPath || ""),
+        encodeCatalogField(item.downloadUrl || "")
+      ].join("\t")
+    );
+  }
+  fs.writeFileSync(filePath, `${lines.join("\n")}\n`, "utf8");
+}
 
 function ensureDirs(p: string) {
   fs.mkdirSync(p, { recursive: true });
@@ -430,9 +463,21 @@ async function launchResolved(
   const assetsDir = getAssetsRoot();
   const javaExe = pickJavaExecutable(onLog);
   const customJavaArgs = splitShellWords(String(runtimePrefs?.jvmArgs ?? "").trim());
+  const founderAllowed = await hasLauncherFounderAccess();
+  const premiumAllowed = founderAllowed || (await hasLauncherPremiumAccess());
+
+  const fullLauncherCatalog = await listLocalCapes(true);
+  const allowedLauncherCatalogItems = (fullLauncherCatalog.items || []).filter((item) => {
+    if (item.tier === "founder") return founderAllowed;
+    if (item.tier === "premium") return premiumAllowed;
+    return true;
+  });
+  const capeCatalogPath = path.join(gameDir, ".fishbattery", "launcher-capes.txt");
+  writeLauncherCapeCatalogFile(capeCatalogPath, null, allowedLauncherCatalogItems);
+  customJavaArgs.push(`-Dfishbattery.launcherCape.catalog=${capeCatalogPath}`);
+
   let selectedLauncherCape = await getSelectedLocalCapeForAccount(account.id);
   if (selectedLauncherCape?.tier === "founder") {
-    const founderAllowed = await hasLauncherFounderAccess();
     if (!founderAllowed) {
       selectedLauncherCape = null;
       setSelectedLocalCapeId(account.id, null);
@@ -440,7 +485,6 @@ async function launchResolved(
     }
   }
   if (selectedLauncherCape?.tier === "premium") {
-    const premiumAllowed = await hasLauncherPremiumAccess();
     if (!premiumAllowed) {
       selectedLauncherCape = null;
       setSelectedLocalCapeId(account.id, null);
@@ -463,6 +507,7 @@ async function launchResolved(
       updatedAt: Date.now()
     };
     fs.writeFileSync(capeMetaPath, JSON.stringify(capeMeta, null, 2), "utf8");
+    writeLauncherCapeCatalogFile(capeCatalogPath, selectedLauncherCape.id, allowedLauncherCatalogItems);
     customJavaArgs.push(`-Dfishbattery.launcherCape.path=${hasLocalFile ? localPath : ""}`);
     customJavaArgs.push(`-Dfishbattery.launcherCape.url=${cloudUrl}`);
     customJavaArgs.push(`-Dfishbattery.launcherCape.id=${selectedLauncherCape.id}`);
@@ -474,8 +519,11 @@ async function launchResolved(
     try {
       if (fs.existsSync(capeMetaPath)) fs.rmSync(capeMetaPath, { force: true });
     } catch {}
+    writeLauncherCapeCatalogFile(capeCatalogPath, null, allowedLauncherCatalogItems);
     customJavaArgs.push("-Dfishbattery.launcherCape.path=");
     customJavaArgs.push("-Dfishbattery.launcherCape.url=");
+    customJavaArgs.push("-Dfishbattery.launcherCape.id=");
+    customJavaArgs.push("-Dfishbattery.launcherCape.tier=");
     onLog?.("[capes] Launcher-only cape disabled");
   }
 
