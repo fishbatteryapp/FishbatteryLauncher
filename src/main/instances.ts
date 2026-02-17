@@ -2,6 +2,7 @@ import path from "node:path";
 import fs from "node:fs";
 import crypto from "node:crypto";
 import { getInstancesRoot } from "./paths";
+import { installBridgeToMods } from "./bridgeInstaller";
 import { readJsonFile, writeJsonFile } from "./store";
 
 
@@ -95,9 +96,7 @@ export function createInstance(cfg: Omit<InstanceConfig, "createdAt">) {
     // Attempt to install bridge for this instance (best-effort, no logging available here).
     // Import dynamically to avoid circular imports at module load time.
     try {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const installer = require("./bridgeInstaller") as typeof import("./bridgeInstaller");
-      void installer.installBridgeToMods(modsDir, full.mcVersion, full.loader).catch((err) => {
+      void installBridgeToMods(modsDir, full.mcVersion, full.loader).catch((err) => {
         try {
           // Log installer error to main process console for diagnostics
           // eslint-disable-next-line no-console
@@ -105,7 +104,7 @@ export function createInstance(cfg: Omit<InstanceConfig, "createdAt">) {
         } catch {}
       });
     } catch (e) {
-      try { console.error("[bridgeInstaller] Failed to require installer: %O", e); } catch {}
+      try { console.error("[bridgeInstaller] Pre-install throw: %O", e); } catch {}
     }
   } catch {}
 
