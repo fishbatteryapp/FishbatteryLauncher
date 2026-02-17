@@ -56,10 +56,6 @@
       {
         "from": "runtime/java21",
         "to": "runtime/java21"
-      },
-      {
-        "from": "launcher-cape-bridges",
-        "to": "launcher-cape-bridges"
       }
     ],
     "asar": true,

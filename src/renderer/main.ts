@@ -5893,9 +5893,8 @@ modalUpdateMods.onclick = () =>
     const inst = (state.instances?.instances ?? []).find((x: any) => x.id === editInstanceId) ?? null;
     if (!inst) return;
     setStatus("Analyzing mod updates...");
-    const capeBridgeCheck = await window.api.modsCheckCapeBridgeUpdate(inst.id);
     const plan = await window.api.modsPlanRefresh(inst.id, inst.mcVersion);
-    if (!plan?.updates?.length && !capeBridgeCheck?.updateAvailable) {
+    if (!plan?.updates?.length) {
       setStatus("");
       appendLog("[mods] Smart update: no compatible updates found.");
       if (plan?.blocked?.length) {
@@ -5906,29 +5905,9 @@ modalUpdateMods.onclick = () =>
       return;
     }
 
-    if (!plan?.updates?.length && capeBridgeCheck?.updateAvailable) {
-      setStatus("Applying cape bridge update...");
-      const res = await window.api.modsApplyCapeBridgeUpdate(inst.id);
-      await renderInstanceMods(inst.id);
-      await renderLocalContent(inst.id);
-      setStatus("");
-      if (res?.updated) {
-        appendLog(`[mods] Cape bridge updated: ${res.releaseTag || res.latestJar || "latest"}`);
-        alert(`Cape bridge updated.\n${res.releaseTag || res.latestJar || ""}`.trim());
-      } else {
-        appendLog(`[mods] Cape bridge update skipped: ${res?.reason || "No update applied."}`);
-        alert(`Cape bridge update not applied.\n${res?.reason || "No update applied."}`);
-      }
-      return;
-    }
-
     const summary = buildModUpdateSummary(plan);
-    const summaryWithCapeBridge =
-      capeBridgeCheck?.updateAvailable
-        ? `${summary}\n\nCape bridge update available: ${capeBridgeCheck.releaseTag || capeBridgeCheck.latestJar || "latest"}`
-        : summary;
     const choiceRaw = prompt(
-      `${summaryWithCapeBridge}\n\nChoose action:\n- all\n- individual\n- skip`,
+      `${summary}\n\nChoose action:\n- all\n- individual\n- skip`,
       "all"
     );
     const choice = String(choiceRaw || "skip").trim().toLowerCase();
@@ -5980,21 +5959,6 @@ modalUpdateMods.onclick = () =>
     }
     await renderInstanceMods(inst.id);
     await renderLocalContent(inst.id);
-    if (capeBridgeCheck?.updateAvailable) {
-      const updateCapeBridge = confirm(
-        `A cape bridge update is available (${capeBridgeCheck.releaseTag || capeBridgeCheck.latestJar || "latest"}).\nApply it now?`
-      );
-      if (updateCapeBridge) {
-        const bridgeRes = await window.api.modsApplyCapeBridgeUpdate(inst.id);
-        if (bridgeRes?.updated) {
-          appendLog(`[mods] Cape bridge updated: ${bridgeRes.releaseTag || bridgeRes.latestJar || "latest"}`);
-          await renderInstanceMods(inst.id);
-          await renderLocalContent(inst.id);
-        } else {
-          appendLog(`[mods] Cape bridge update skipped: ${bridgeRes?.reason || "No update applied."}`);
-        }
-      }
-    }
     const v = await window.api.modsValidate(inst.id);
     appendLog(`[validation] After refresh: ${v.summary} (${v.issues.length} issues)`);
     if (v.summary === "critical") {

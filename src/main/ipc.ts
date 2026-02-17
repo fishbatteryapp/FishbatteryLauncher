@@ -47,7 +47,6 @@ import { installVanillaVersion } from "./vanillaInstall";
 import { pickLoaderVersion, prepareLoaderInstall, type LoaderKind } from "./loaderSupport";
 import { launchInstance, isInstanceRunning, stopInstance } from "./launch";
 import type { LaunchRuntimePrefs } from "./launch";
-import { applyCapeBridgeUpdateForInstance, checkCapeBridgeUpdateForInstance, syncCapeBridgeModWithGithub } from "./capeBridge";
 import { registerContentIpc } from "./content";
 import { exportDiagnosticsZip } from "./diagnostics";
 import { getLastPreflightChecks, runPreflightChecks } from "./preflight";
@@ -205,22 +204,22 @@ export function registerIpc() {
   });
   ipcMain.handle("capes:getLocalSelection", async (_e, accountId: string) => {
     if (!accountId) throw new Error("capes:getLocalSelection: accountId missing");
-    const selectedId = getSelectedLocalCapeId(accountId);
+    const selectedId = await getSelectedLocalCapeId(accountId);
     if (!selectedId) return { accountId, capeId: null };
 
     const catalog = await listLocalCapes();
     const selected = catalog.items.find((x) => x.id === selectedId) ?? null;
     if (!selected) {
-      setSelectedLocalCapeId(accountId, null);
+      await setSelectedLocalCapeId(accountId, null);
       return { accountId, capeId: null };
     }
 
     if (selected.tier === "founder" && !(await hasLauncherFounderAccess())) {
-      setSelectedLocalCapeId(accountId, null);
+      await setSelectedLocalCapeId(accountId, null);
       return { accountId, capeId: null };
     }
     if (selected.tier === "premium" && !(await hasLauncherPremiumAccess())) {
-      setSelectedLocalCapeId(accountId, null);
+      await setSelectedLocalCapeId(accountId, null);
       return { accountId, capeId: null };
     }
 
@@ -240,7 +239,7 @@ export function registerIpc() {
         throw new Error("Launcher Premium is required to use premium capes.");
       }
     }
-    return setSelectedLocalCapeId(accountId, normalizedCapeId);
+    return await setSelectedLocalCapeId(accountId, normalizedCapeId);
   });
 
   ipcMain.handle("window:setTitleBarTheme", async (e, payload: { color?: string; symbolColor?: string }) => {
@@ -271,9 +270,7 @@ export function registerIpc() {
 
   ipcMain.handle("instances:create", async (_e, cfg) => {
     if (!cfg) throw new Error("instances:create: cfg missing");
-    const created = createInstance(cfg);
-    await syncCapeBridgeModWithGithub(created);
-    return created;
+    return createInstance(cfg);
   });
 
   ipcMain.handle("instances:update", async (_e, id: string, patch: any) => {
@@ -746,20 +743,6 @@ export function registerIpc() {
   ipcMain.handle("mods:fixDuplicates", async (_e, instanceId: string) => {
     if (!instanceId) throw new Error("mods:fixDuplicates: instanceId missing");
     return fixDuplicateMods(instanceId);
-  });
-  ipcMain.handle("mods:checkCapeBridgeUpdate", async (_e, instanceId: string) => {
-    if (!instanceId) throw new Error("mods:checkCapeBridgeUpdate: instanceId missing");
-    const db = listInstances();
-    const inst = db.instances.find((x: any) => x.id === instanceId);
-    if (!inst) throw new Error("mods:checkCapeBridgeUpdate: instance not found");
-    return checkCapeBridgeUpdateForInstance(inst);
-  });
-  ipcMain.handle("mods:applyCapeBridgeUpdate", async (_e, instanceId: string) => {
-    if (!instanceId) throw new Error("mods:applyCapeBridgeUpdate: instanceId missing");
-    const db = listInstances();
-    const inst = db.instances.find((x: any) => x.id === instanceId);
-    if (!inst) throw new Error("mods:applyCapeBridgeUpdate: instance not found");
-    return applyCapeBridgeUpdateForInstance(inst);
   });
 
   // ---------- Packs (recommended resourcepacks/shaderpacks) ----------

@@ -10,10 +10,10 @@ import { installFabricVersion } from "./fabricInstall";
 import { pickLoaderVersion, prepareLoaderInstall, resolveForgeInstallerPath } from "./loaderSupport";
 import crypto from "node:crypto";
 import { getDataRoot, getAssetsRoot, getLibrariesRoot, getVersionsRoot } from "./paths";
-import { getSelectedLocalCapeForAccount, listLocalCapes, setSelectedLocalCapeId } from "./capes";
-import { syncCapeBridgeModWithGithub } from "./capeBridge";
 import { autoInstallMissingDependenciesForInstance } from "./dependencyAutoInstall";
-import { hasLauncherFounderAccess, hasLauncherPremiumAccess } from "./launcherAccount";
+import { getSelectedLocalCapeForAccount } from "./capes";
+import https from "node:https";
+import { pipeline } from "node:stream/promises";
 
 const running = new Map<string, any>(); // instanceId -> child process
 const launching = new Set<string>(); // instanceId currently in launcher bootstrap
@@ -25,39 +25,6 @@ export type LaunchRuntimePrefs = {
   postExit?: string;
   serverAddress?: string;
 };
-
-function encodeCatalogField(value: string | null | undefined) {
-  return encodeURIComponent(String(value ?? ""));
-}
-
-function writeLauncherCapeCatalogFile(
-  filePath: string,
-  selectedCapeId: string | null,
-  items: Array<{
-    id: string;
-    name: string;
-    tier: "free" | "premium" | "founder";
-    fullPath: string;
-    downloadUrl?: string | null;
-  }>
-) {
-  const lines: string[] = [];
-  lines.push("# fishbattery launcher capes v1");
-  lines.push(`selected=${encodeCatalogField(selectedCapeId || "")}`);
-  for (const item of items) {
-    lines.push(
-      [
-        "cape",
-        encodeCatalogField(item.id),
-        encodeCatalogField(item.name),
-        encodeCatalogField(item.tier),
-        encodeCatalogField(item.fullPath || ""),
-        encodeCatalogField(item.downloadUrl || "")
-      ].join("\t")
-    );
-  }
-  fs.writeFileSync(filePath, `${lines.join("\n")}\n`, "utf8");
-}
 
 function ensureDirs(p: string) {
   fs.mkdirSync(p, { recursive: true });
@@ -415,8 +382,6 @@ async function launchResolved(
     });
   }
 
-  await syncCapeBridgeModWithGithub(instance, onLog);
-
   if (instance.loader === "fabric" || instance.loader === "quilt") {
     const depFix = await autoInstallMissingDependenciesForInstance({
       instanceId: instance.id,
@@ -463,72 +428,34 @@ async function launchResolved(
   const assetsDir = getAssetsRoot();
   const javaExe = pickJavaExecutable(onLog);
   const customJavaArgs = splitShellWords(String(runtimePrefs?.jvmArgs ?? "").trim());
-  const founderAllowed = await hasLauncherFounderAccess();
-  const premiumAllowed = founderAllowed || (await hasLauncherPremiumAccess());
-
-  const fullLauncherCatalog = await listLocalCapes(true);
-  const allowedLauncherCatalogItems = (fullLauncherCatalog.items || []).filter((item) => {
-    if (item.tier === "founder") return founderAllowed;
-    if (item.tier === "premium") return premiumAllowed;
-    return true;
-  });
-  const capeCatalogPath = path.join(gameDir, ".fishbattery", "launcher-capes.txt");
-  writeLauncherCapeCatalogFile(capeCatalogPath, null, allowedLauncherCatalogItems);
-  customJavaArgs.push(`-Dfishbattery.launcherCape.catalog=${capeCatalogPath}`);
-
-  let selectedLauncherCape = await getSelectedLocalCapeForAccount(account.id);
-  if (selectedLauncherCape?.tier === "founder") {
-    if (!founderAllowed) {
-      selectedLauncherCape = null;
-      setSelectedLocalCapeId(account.id, null);
-      onLog?.("[capes] Founder cape selection cleared: founder account required.");
-    }
-  }
-  if (selectedLauncherCape?.tier === "premium") {
-    if (!premiumAllowed) {
-      selectedLauncherCape = null;
-      setSelectedLocalCapeId(account.id, null);
-      onLog?.("[capes] Premium cape selection cleared: Launcher Premium is required.");
-    }
-  }
-
-  if (selectedLauncherCape) {
-    const capeMetaPath = path.join(gameDir, ".fishbattery", "launcher-cape.json");
-    const cloudUrl = String(selectedLauncherCape.downloadUrl || "").trim();
-    const localPath = String(selectedLauncherCape.fullPath || "").trim();
-    const hasLocalFile = !!localPath && fs.existsSync(localPath) && fs.statSync(localPath).size > 0;
-    const capeMeta = {
-      accountId: account.id,
-      capeId: selectedLauncherCape.id,
-      tier: selectedLauncherCape.tier,
-      fileName: selectedLauncherCape.fileName,
-      fullPath: selectedLauncherCape.fullPath,
-      cloudUrl: cloudUrl || null,
-      updatedAt: Date.now()
-    };
-    fs.writeFileSync(capeMetaPath, JSON.stringify(capeMeta, null, 2), "utf8");
-    writeLauncherCapeCatalogFile(capeCatalogPath, selectedLauncherCape.id, allowedLauncherCatalogItems);
-    customJavaArgs.push(`-Dfishbattery.launcherCape.path=${hasLocalFile ? localPath : ""}`);
-    customJavaArgs.push(`-Dfishbattery.launcherCape.url=${cloudUrl}`);
-    customJavaArgs.push(`-Dfishbattery.launcherCape.id=${selectedLauncherCape.id}`);
-    customJavaArgs.push(`-Dfishbattery.launcherCape.tier=${selectedLauncherCape.tier}`);
-    customJavaArgs.push(`-Dfishbattery.launcherCape.meta=${capeMetaPath}`);
-    onLog?.(`[capes] Launcher-only cape enabled: ${selectedLauncherCape.name} (${selectedLauncherCape.tier})`);
-  } else {
-    const capeMetaPath = path.join(gameDir, ".fishbattery", "launcher-cape.json");
-    try {
-      if (fs.existsSync(capeMetaPath)) fs.rmSync(capeMetaPath, { force: true });
-    } catch {}
-    writeLauncherCapeCatalogFile(capeCatalogPath, null, allowedLauncherCatalogItems);
-    customJavaArgs.push("-Dfishbattery.launcherCape.path=");
-    customJavaArgs.push("-Dfishbattery.launcherCape.url=");
-    customJavaArgs.push("-Dfishbattery.launcherCape.id=");
-    customJavaArgs.push("-Dfishbattery.launcherCape.tier=");
-    onLog?.("[capes] Launcher-only cape disabled");
-  }
 
   if (String(runtimePrefs?.preLaunch ?? "").trim()) {
     await runHookCommand("pre-launch", String(runtimePrefs?.preLaunch), onLog);
+  }
+
+  // If a launcher-local cape is selected for this account, materialize a copy
+  // inside the instance folder and inject a JVM property so the bridge mod
+  // can locate & load it at runtime.
+  try {
+    const selectedCape = await getSelectedLocalCapeForAccount((account as any).id);
+    if (selectedCape?.fullPath) {
+      try {
+        const capeDir = path.join(gameDir, ".fishbattery");
+        fs.mkdirSync(capeDir, { recursive: true });
+        const dest = path.join(capeDir, path.basename(selectedCape.fullPath));
+        try {
+          fs.copyFileSync(selectedCape.fullPath, dest);
+          customJavaArgs.push(`-Dfishbattery.cape.path=${dest}`);
+          onLog?.(`[capes] Injected launcher cape: ${dest}`);
+        } catch (err) {
+          onLog?.(`[capes] Failed to copy selected cape: ${String((err as any)?.message ?? err)}`);
+        }
+      } catch (err) {
+        onLog?.(`[capes] Could not prepare instance cape folder: ${String((err as any)?.message ?? err)}`);
+      }
+    }
+  } catch (err) {
+    onLog?.(`[capes] Could not read selected launcher cape: ${String((err as any)?.message ?? err)}`);
   }
 
   const launchOpts: any = {
@@ -593,6 +520,51 @@ async function launchResolved(
   launcher.on("data", (e: any) => onLog?.(`${String(e)}`));
   launcher.on("progress", (e: any) => onLog?.(`[progress] ${JSON.stringify(e)}`));
 
+  // Validate injected cape file and check for bridge mod presence before launching.
+  try {
+    const capeArg = customJavaArgs.find((a) => String(a || "").startsWith("-Dfishbattery.cape.path="));
+    if (capeArg) {
+      const destPath = String(capeArg).split("=")[1] || "";
+      try {
+        if (destPath && fs.existsSync(destPath) && fs.statSync(destPath).size > 0) {
+          onLog?.(`[capes] Cape file present at launch: ${destPath} (${formatBytes(fs.statSync(destPath).size)})`);
+        } else {
+          onLog?.(`[capes] Cape file missing or empty at expected path: ${destPath}`);
+        }
+      } catch (err) {
+        onLog?.(`[capes] Error checking cape file at ${destPath}: ${String((err as any)?.message ?? err)}`);
+      }
+    } else {
+      onLog?.(`[capes] No launcher cape JVM property present`);
+    }
+
+    try {
+      const modsDir = path.join(gameDir, "mods");
+      const mods = fs.existsSync(modsDir) ? fs.readdirSync(modsDir) : [];
+      const bridgeRegex = /fishbattery.*bridge|cape-bridge|fishbattery-cape-bridge/i;
+      const found = mods.find((f: string) => bridgeRegex.test(f));
+      if (found) {
+        const fp = path.join(modsDir, found);
+        let size = 0;
+        try {
+          size = fs.statSync(fp).size || 0;
+        } catch {}
+        onLog?.(`[capes] Bridge mod found in instance mods: ${found} (${formatBytes(size)})`);
+      } else {
+        onLog?.(`[capes] Bridge mod not found in instance mods (${modsDir}). Attempting to fetch release and install bridge.`);
+        try {
+          await tryInstallBridgeFromGithub(modsDir, instance.mcVersion, instance.loader, onLog);
+        } catch (err) {
+          onLog?.(`[capes] Failed to install bridge mod: ${String((err as any)?.message ?? err)}`);
+        }
+      }
+    } catch (err) {
+      onLog?.(`[capes] Error checking mods folder for bridge mod: ${String((err as any)?.message ?? err)}`);
+    }
+  } catch (err) {
+    onLog?.(`[capes] Pre-launch cape/bridge validation failed: ${String((err as any)?.message ?? err)}`);
+  }
+
   let child: any;
   try {
     child = await launcher.launch(launchOpts);
@@ -638,6 +610,58 @@ async function launchResolved(
   });
 
   return true;
+}
+
+async function tryInstallBridgeFromGithub(modsDir: string, mcVersion: string, loader: string, onLog?: (m: string) => void) {
+  const owner = "fishbatteryapp";
+  const repo = "fishbattery-cape-bridge";
+  const tag = "v1.2.2"; // target release
+
+  const apiUrl = `https://api.github.com/repos/${owner}/${repo}/releases/tags/${tag}`;
+  const headers: any = { "User-Agent": "FishbatteryLauncher/1.0", Accept: "application/vnd.github.v3+json" };
+  if (process.env.GITHUB_TOKEN) headers.Authorization = `token ${process.env.GITHUB_TOKEN}`;
+
+  const release = await new Promise<any>((resolve, reject) => {
+    const req = https.get(apiUrl, { headers }, (res) => {
+      const chunks: Buffer[] = [];
+      res.on("data", (c) => chunks.push(Buffer.from(c)));
+      res.on("end", () => {
+        try {
+          const body = Buffer.concat(chunks).toString("utf8");
+          if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
+            resolve(JSON.parse(body));
+          } else {
+            reject(new Error(`GitHub API ${res.statusCode}: ${body}`));
+          }
+        } catch (e) { reject(e); }
+      });
+    });
+    req.on("error", reject);
+    req.end();
+  });
+
+  const assets: any[] = release.assets || [];
+  const desired = assets.find(a => {
+    const name = String(a.name || "").toLowerCase();
+    return name.includes(String(mcVersion).toLowerCase()) && name.includes(String(loader || "fabric").toLowerCase()) && name.endsWith('.jar');
+  }) || assets.find(a => String(a.name || "").toLowerCase().includes('fabric') && a.name.endsWith('.jar'));
+
+  if (!desired) throw new Error('No suitable bridge JAR found in release assets');
+
+  const outPath = path.join(modsDir, desired.name);
+  onLog?.(`[capes] Downloading bridge asset ${desired.name} to ${outPath}`);
+
+  await new Promise<void>((resolve, reject) => {
+    const fileStream = fs.createWriteStream(outPath);
+    const headers2: any = { "User-Agent": "FishbatteryLauncher/1.0" };
+    if (process.env.GITHUB_TOKEN) headers2.Authorization = `token ${process.env.GITHUB_TOKEN}`;
+    https.get(desired.browser_download_url, { headers: headers2 }, (res) => {
+      if (res.statusCode && (res.statusCode < 200 || res.statusCode >= 300)) return reject(new Error(`Download failed: ${res.statusCode}`));
+      pipeline(res, fileStream).then(() => resolve()).catch(reject);
+    }).on('error', reject);
+  });
+
+  onLog?.(`[capes] Bridge asset installed: ${outPath}`);
 }
 
 

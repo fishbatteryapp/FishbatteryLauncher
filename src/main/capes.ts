@@ -32,7 +32,11 @@ const CAPE_IMAGE_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".webp"]);
 const CAPE_CACHE_TTL_MS = 60_000;
 const CAPE_CATALOG_PATH = String(process.env.FISHBATTERY_ACCOUNT_CAPES_PATH || "/v1/capes/launcher").trim();
 const CAPE_CATALOG_PUBLIC_PATH = String(process.env.FISHBATTERY_ACCOUNT_CAPES_PUBLIC_PATH || "/v1/capes/launcher/public").trim();
+const CAPE_SELECTED_PATH = String(
+  process.env.FISHBATTERY_ACCOUNT_CAPES_SELECTED_PATH || "/v1/capes/launcher/selected"
+).trim();
 let catalogCache: { at: number; catalog: LocalCapeCatalog } | null = null;
+let selectedCapeEndpointUnsupported = false;
 
 function decodeDataUrl(input: string): Buffer | null {
   const raw = String(input || "").trim();
@@ -121,6 +125,23 @@ function saveSelectionDb(db: LauncherCapeSelectionDb) {
   writeJsonFile(getSelectionPath(), db);
 }
 
+function readCachedSelection(accountId: string): string | null {
+  const key = String(accountId || "").trim();
+  if (!key) return null;
+  const db = loadSelectionDb();
+  const raw = db.byAccountId?.[key];
+  return raw == null ? null : String(raw);
+}
+
+function writeCachedSelection(accountId: string, capeId: string | null) {
+  const key = String(accountId || "").trim();
+  if (!key) return;
+  const db = loadSelectionDb();
+  db.byAccountId = db.byAccountId || {};
+  db.byAccountId[key] = capeId ? String(capeId) : null;
+  saveSelectionDb(db);
+}
+
 function toEmptyCatalog(): LocalCapeCatalog {
   return { roots: ["cloud"], items: [] };
 }
@@ -144,6 +165,39 @@ function resolveAbsoluteUrl(raw: string | null): string | null {
   } catch {
     return value;
   }
+}
+
+function normalizeSelectedCapeId(raw: unknown): string | null {
+  if (!raw) return null;
+  const value = String(raw).trim();
+  return value || null;
+}
+
+function isSelectedCapeEndpointMissingError(err: unknown): boolean {
+  const message = String((err as any)?.message || err || "").toLowerCase();
+  return (
+    message.includes("returned 404") ||
+    message.includes("cannot get") ||
+    message.includes("cannot put") ||
+    message.includes("not found")
+  );
+}
+
+async function fetchSelectedCapeIdFromAccountApi(): Promise<string | null> {
+  if (selectedCapeEndpointUnsupported) throw new Error("selected endpoint unsupported");
+  const payload = (await requestLauncherAccountAuthed(CAPE_SELECTED_PATH, {
+    method: "GET"
+  })) as any;
+  return normalizeSelectedCapeId(payload?.selectedCapeId ?? payload?.capeId ?? null);
+}
+
+async function persistSelectedCapeIdToAccountApi(capeId: string | null): Promise<string | null> {
+  if (selectedCapeEndpointUnsupported) throw new Error("selected endpoint unsupported");
+  const payload = (await requestLauncherAccountAuthed(CAPE_SELECTED_PATH, {
+    method: "PUT",
+    body: { capeId: capeId || null }
+  })) as any;
+  return normalizeSelectedCapeId(payload?.selectedCapeId ?? payload?.capeId ?? capeId);
 }
 
 async function fetchPublicCapeCatalogPayload(): Promise<any | null> {
@@ -243,22 +297,32 @@ export async function listLocalCapes(forceRefresh = false): Promise<LocalCapeCat
   }
 }
 
-export function getSelectedLocalCapeId(accountId: string): string | null {
+export async function getSelectedLocalCapeId(accountId: string): Promise<string | null> {
   const key = String(accountId || "").trim();
   if (!key) return null;
-  const db = loadSelectionDb();
-  const raw = db.byAccountId?.[key];
-  return raw == null ? null : String(raw);
+  try {
+    const selectedCapeId = await fetchSelectedCapeIdFromAccountApi();
+    writeCachedSelection(key, selectedCapeId);
+    return selectedCapeId;
+  } catch (err) {
+    if (isSelectedCapeEndpointMissingError(err)) selectedCapeEndpointUnsupported = true;
+    return readCachedSelection(key);
+  }
 }
 
-export function setSelectedLocalCapeId(accountId: string, capeId: string | null) {
+export async function setSelectedLocalCapeId(accountId: string, capeId: string | null) {
   const key = String(accountId || "").trim();
   if (!key) throw new Error("setSelectedLocalCapeId: accountId missing");
-  const db = loadSelectionDb();
-  db.byAccountId = db.byAccountId || {};
-  db.byAccountId[key] = capeId ? String(capeId) : null;
-  saveSelectionDb(db);
-  return { accountId: key, capeId: db.byAccountId[key] };
+  const normalizedCapeId = capeId ? String(capeId) : null;
+  try {
+    const selectedCapeId = await persistSelectedCapeIdToAccountApi(normalizedCapeId);
+    writeCachedSelection(key, selectedCapeId);
+    return { accountId: key, capeId: selectedCapeId };
+  } catch (err) {
+    if (isSelectedCapeEndpointMissingError(err)) selectedCapeEndpointUnsupported = true;
+    writeCachedSelection(key, normalizedCapeId);
+    return { accountId: key, capeId: normalizedCapeId };
+  }
 }
 
 async function ensureCachedCapeFile(item: LocalCapeItem): Promise<string | null> {
@@ -293,7 +357,7 @@ async function ensureCachedCapeFile(item: LocalCapeItem): Promise<string | null>
 }
 
 export async function getSelectedLocalCapeForAccount(accountId: string): Promise<LocalCapeItem | null> {
-  const selectedId = getSelectedLocalCapeId(accountId);
+  const selectedId = await getSelectedLocalCapeId(accountId);
   if (!selectedId) return null;
   const catalog = await listLocalCapes();
   const selected = catalog.items.find((item) => item.id === selectedId) ?? null;
@@ -301,7 +365,6 @@ export async function getSelectedLocalCapeForAccount(accountId: string): Promise
   const cachedPath = await ensureCachedCapeFile(selected);
   if (!cachedPath) {
     // Keep cloud-backed selection even when local cache file could not be materialized.
-    // Bridge mods can still resolve via fishbattery.launcherCape.url.
     return selected;
   }
   return {

@@ -391,27 +391,6 @@ declare global {
         }>;
       }>;
       modsFixDuplicates: (instanceId: string) => Promise<{ removed: string[] }>;
-      modsCheckCapeBridgeUpdate: (instanceId: string) => Promise<{
-        supported: boolean;
-        loader: string;
-        minecraft: string;
-        installedJar: string | null;
-        latestJar: string | null;
-        releaseTag: string | null;
-        updateAvailable: boolean;
-        reason: string;
-      }>;
-      modsApplyCapeBridgeUpdate: (instanceId: string) => Promise<{
-        supported: boolean;
-        loader: string;
-        minecraft: string;
-        installedJar: string | null;
-        latestJar: string | null;
-        releaseTag: string | null;
-        updateAvailable: boolean;
-        reason: string;
-        updated: boolean;
-      }>;
 
       // Recommended packs (Modrinth)
       packsList: (instanceId: string) => Promise<{
