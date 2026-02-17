@@ -44,33 +44,53 @@ export async function installBridgeToMods(modsDir: string, mcVersion: string, lo
   const tmpPath = outPath + ".partial";
   onLog?.(`[capes] Downloading bridge asset ${desired.name} to ${outPath}`);
 
-  await new Promise<void>((resolve, reject) => {
-    const fileStream = fs.createWriteStream(tmpPath);
-    const headers2: any = { "User-Agent": "FishbatteryLauncher/1.0" };
-    if (process.env.GITHUB_TOKEN) headers2.Authorization = `token ${process.env.GITHUB_TOKEN}`;
-    https.get(desired.browser_download_url, { headers: headers2 }, (res) => {
-      if (res.statusCode && (res.statusCode < 200 || res.statusCode >= 300)) return reject(new Error(`Download failed: ${res.statusCode}`));
-      pipeline(res, fileStream)
-        .then(() => {
-          try {
-            const stat = fs.statSync(tmpPath);
-            if (!stat.isFile() || stat.size === 0) {
-              try { fs.unlinkSync(tmpPath); } catch (e) {}
-              return reject(new Error('Downloaded bridge JAR is empty'));
-            }
-            fs.renameSync(tmpPath, outPath);
-            return resolve();
-          } catch (e) {
-            try { fs.unlinkSync(tmpPath); } catch (__) {}
-            return reject(e);
+  // Helper: download a URL with simple redirect following (up to maxRedirects)
+  async function downloadWithRedirect(url: string, headersObj: any, destPath: string, maxRedirects = 5) {
+    return new Promise<void>((resolve, reject) => {
+      const req = https.get(url, { headers: headersObj }, (res) => {
+        // Handle redirects
+        if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+          if (maxRedirects <= 0) {
+            res.resume();
+            return reject(new Error('Too many redirects'));
           }
-        })
-        .catch((err) => {
-          try { fs.unlinkSync(tmpPath); } catch (__) {}
-          reject(err);
-        });
-    }).on('error', (err) => { try { fs.unlinkSync(tmpPath); } catch (__) {} ; reject(err); });
-  });
+          const loc = String(res.headers.location);
+          // Resolve relative redirects against the previous URL
+          const nextUrl = loc.startsWith('http') ? loc : new URL(loc, url).toString();
+          res.resume();
+          return downloadWithRedirect(nextUrl, headersObj, destPath, maxRedirects - 1).then(resolve).catch(reject);
+        }
+
+        if (!res.statusCode || res.statusCode < 200 || res.statusCode >= 300) {
+          res.resume();
+          return reject(new Error(`Download failed: ${res.statusCode}`));
+        }
+
+        const fileStream = fs.createWriteStream(destPath);
+        pipeline(res, fileStream)
+          .then(() => resolve())
+          .catch(reject);
+      });
+
+      req.on('error', (err) => reject(err));
+    });
+  }
+
+  const headers2: any = { "User-Agent": "FishbatteryLauncher/1.0" };
+  if (process.env.GITHUB_TOKEN) headers2.Authorization = `token ${process.env.GITHUB_TOKEN}`;
+  try {
+    await downloadWithRedirect(desired.browser_download_url, headers2, tmpPath, 6);
+    // Validate file
+    const stat = fs.statSync(tmpPath);
+    if (!stat.isFile() || stat.size === 0) {
+      try { fs.unlinkSync(tmpPath); } catch (e) {}
+      throw new Error('Downloaded bridge JAR is empty');
+    }
+    fs.renameSync(tmpPath, outPath);
+  } catch (err) {
+    try { fs.unlinkSync(tmpPath); } catch (__) {}
+    throw err;
+  }
 
   onLog?.(`[capes] Bridge asset installed: ${outPath}`);
 }
