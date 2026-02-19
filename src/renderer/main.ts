@@ -306,6 +306,7 @@ type SponsoredFeedAd = {
 const SPONSORED_FEED_URLS = ["https://fishbatteryapp.github.io/fishbattery-web/assets/ads.json"];
 const DISCORD_INVITE_URL = "https://discord.gg/yT5zRsRXsf";
 
+// Get selected icon transform payload.
 function getSelectedIconTransformPayload() {
   return {
     scale: Math.max(0.2, Math.min(5, selectedIconScalePct / 100)),
@@ -314,6 +315,7 @@ function getSelectedIconTransformPayload() {
   };
 }
 
+// Render icon transform ui.
 function renderIconTransformUi() {
   instanceIconScale.value = String(selectedIconScalePct);
   instanceIconScaleValue.textContent = `${selectedIconScalePct}%`;
@@ -324,6 +326,7 @@ function renderIconTransformUi() {
   renderIconPreviewTransform();
 }
 
+// Reset selected icon transform.
 function resetSelectedIconTransform() {
   selectedIconScalePct = 100;
   selectedIconOffsetXPct = 0;
@@ -331,6 +334,7 @@ function resetSelectedIconTransform() {
   renderIconTransformUi();
 }
 
+// Path to file url.
 function pathToFileUrl(p: string) {
   const normalized = String(p || "").replace(/\\/g, "/");
   if (!normalized) return "";
@@ -339,10 +343,12 @@ function pathToFileUrl(p: string) {
   return encodeURI(`file://${escaped}`);
 }
 
+// Set icon preview source.
 function setIconPreviewSource(filePath: string | null) {
   void setIconPreviewSourceAsync(filePath);
 }
 
+// Set icon preview source async.
 async function setIconPreviewSourceAsync(filePath: string | null) {
   if (!filePath) {
     instanceIconPreviewWrap.style.display = "none";
@@ -379,6 +385,7 @@ async function setIconPreviewSourceAsync(filePath: string | null) {
   renderIconPreviewTransform();
 }
 
+// Get icon preview layout.
 function getIconPreviewLayout() {
   const frame = instanceIconPreviewFrame as HTMLElement;
   const frameW = Math.max(1, frame.clientWidth || 240);
@@ -398,6 +405,7 @@ function getIconPreviewLayout() {
   return { left, top, width: displayW, height: displayH, maxShiftX, maxShiftY };
 }
 
+// Render icon preview transform.
 function renderIconPreviewTransform() {
   if (!selectedCreateIconPath || !iconPreviewNaturalW || !iconPreviewNaturalH) return;
   const layout = getIconPreviewLayout();
@@ -540,6 +548,7 @@ const PREMIUM_THEMES = new Set<ThemeId>([
   "developer-mode"
 ]);
 
+// Get launcher tier.
 function getLauncherTier(): "free" | "premium" | "founder" {
   const fromStatus = state.launcherSubscription?.tier;
   if (fromStatus === "premium" || fromStatus === "founder") return fromStatus;
@@ -548,17 +557,20 @@ function getLauncherTier(): "free" | "premium" | "founder" {
   return "free";
 }
 
+// Has premium.
 function hasPremium(): boolean {
   const tier = getLauncherTier();
   return tier === "premium" || tier === "founder";
 }
 
+// Local cape tier label.
 function localCapeTierLabel(tier: "free" | "premium" | "founder") {
   if (tier === "founder") return "Founder";
   if (tier === "premium") return "Premium";
   return "Free";
 }
 
+// Open upgrade flow.
 async function openUpgradeFlow() {
   const opened = await window.api.launcherAccountOpenUpgradePage();
   if (!opened) {
@@ -762,6 +774,7 @@ const MOD_ALTERNATIVES: Record<string, string[]> = {
   distanthorizons: ["Use Max FPS preset for stable vanilla-distance rendering.", "Try C2ME + Noisium workflow for worldgen speed."]
 };
 
+// Get settings.
 function getSettings(): AppSettings {
   try {
     const raw = { ...defaultSettings, ...(JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}") || {}) };
@@ -818,6 +831,7 @@ function getSettings(): AppSettings {
   }
 }
 
+// Set settings.
 function setSettings(patch: Partial<AppSettings>, opts?: { touchUpdatedAt?: boolean }) {
   const next = { ...getSettings(), ...patch };
   if (opts?.touchUpdatedAt !== false && !Object.prototype.hasOwnProperty.call(patch, "settingsUpdatedAt")) {
@@ -832,6 +846,7 @@ function setSettings(patch: Partial<AppSettings>, opts?: { touchUpdatedAt?: bool
   applySettingsToDom(next);
 }
 
+// Hex to rgb triplet.
 function hexToRgbTriplet(hex: string) {
   const m = String(hex || "").trim().match(/^#?([a-fA-F0-9]{6})$/);
   if (!m) return "61,220,132";
@@ -842,12 +857,14 @@ function hexToRgbTriplet(hex: string) {
   return `${r},${g},${b}`;
 }
 
+// Get system accent color.
 function getSystemAccentColor() {
   if (navigator.platform.toLowerCase().includes("win")) return "#4cc2ff";
   if (navigator.platform.toLowerCase().includes("mac")) return "#5ac8fa";
   return "#50d1b8";
 }
 
+// Css color to hex.
 function cssColorToHex(input: string): string | null {
   const raw = String(input || "").trim();
   const hex6 = raw.match(/^#([0-9a-fA-F]{6})$/);
@@ -864,6 +881,7 @@ function cssColorToHex(input: string): string | null {
   return `#${nums.map((n) => n.toString(16).padStart(2, "0")).join("")}`;
 }
 
+// Ideal symbol color.
 function idealSymbolColor(bgHex: string): string {
   const m = String(bgHex || "").trim().match(/^#([0-9a-fA-F]{6})$/);
   if (!m) return "#d9ebfb";
@@ -875,6 +893,7 @@ function idealSymbolColor(bgHex: string): string {
   return luminance > 0.55 ? "#101820" : "#d9ebfb";
 }
 
+// Resolve effective theme.
 function resolveEffectiveTheme(theme: ThemeId): Exclude<ThemeId, "system-default" | "time-of-day"> {
   if (theme === "system-default") {
     const dark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
@@ -891,12 +910,14 @@ function resolveEffectiveTheme(theme: ThemeId): Exclude<ThemeId, "system-default
   return theme;
 }
 
+// Default accent for theme.
 function defaultAccentForTheme(theme: ThemeId): string {
   if (theme === "system-default") return getSystemAccentColor();
   const effective = resolveEffectiveTheme(theme);
   return THEME_DEFAULT_ACCENT[effective] || "#3ddc84";
 }
 
+// Apply settings to dom.
 function applySettingsToDom(s: AppSettings) {
   const effectiveTheme = resolveEffectiveTheme(s.theme);
 
@@ -946,10 +967,12 @@ function appendLog(line: string) {
   if (status) setStatus(status);
 }
 
+// Set status.
 function setStatus(text: string) {
   statusText.textContent = text || "";
 }
 
+// Summarize log for status.
 function summarizeLogForStatus(line: string) {
   const raw = String(line || "").trim();
   if (!raw) return "";
@@ -960,11 +983,13 @@ function summarizeLogForStatus(line: string) {
   return cleaned;
 }
 
+// Render debug logs visibility.
 function renderDebugLogsVisibility() {
   logsEl.style.display = debugLogsVisible ? "" : "none";
   btnToggleDebugLogs.textContent = debugLogsVisible ? "Hide Debug Logs" : "Show Debug Logs";
 }
 
+// Find diagnosis evidence.
 function findDiagnosisEvidence(diag: any, lines: string[]) {
   const recent = (lines || []).slice(-200);
   const patterns: Record<string, string[]> = {
@@ -983,6 +1008,7 @@ function findDiagnosisEvidence(diag: any, lines: string[]) {
   return null;
 }
 
+// Redact sensitive.
 function redactSensitive(text: string) {
   return String(text || "")
     .replace(/\bgho_[A-Za-z0-9_]+\b/g, "gho_[REDACTED]")
@@ -991,6 +1017,7 @@ function redactSensitive(text: string) {
     .replace(/\bbearer\s+[A-Za-z0-9._-]+/gi, "Bearer [REDACTED]");
 }
 
+// Render launch diagnosis.
 function renderLaunchDiagnosis(diag: any | null) {
   latestDiagnosis = diag;
   if (!diag) {
@@ -1023,6 +1050,7 @@ function renderLaunchDiagnosis(diag: any | null) {
   btnToggleDiagnosisDetails.textContent = diagnosisDetailsOpen ? "Hide details" : "Details";
 }
 
+// Run launch diagnosis.
 async function runLaunchDiagnosis(instanceId: string | null) {
   if (!instanceId) return null;
   const diag = await window.api.launchDiagnose(instanceId, launchLogBuffer);
@@ -1031,6 +1059,7 @@ async function runLaunchDiagnosis(instanceId: string | null) {
   return diag;
 }
 
+// Describe rollback reason.
 function describeRollbackReason(reason: string) {
   if (reason === "instance-preset") return "instance preset apply";
   if (reason === "mods-refresh") return "mods refresh";
@@ -1038,6 +1067,7 @@ function describeRollbackReason(reason: string) {
   return "manual change";
 }
 
+// Maybe offer rollback.
 async function maybeOfferRollback(instanceId: string, diag: any | null) {
   if (!diag || diag.severity !== "critical") return;
   const latest = await window.api.rollbackGetLatest(instanceId);
@@ -1056,6 +1086,7 @@ async function maybeOfferRollback(instanceId: string, diag: any | null) {
   appendLog(`[rollback] Restored snapshot from ${stamp} (${reason}).`);
 }
 
+// Guarded.
 async function guarded(fn: () => Promise<void>) {
   if (busy) return;
   busy = true;
@@ -1068,11 +1099,13 @@ async function guarded(fn: () => Promise<void>) {
   }
 }
 
+// Has ads free subscription.
 function hasAdsFreeSubscription(): boolean {
   if (hasPremium()) return true;
   return !!state.launcherSubscription?.features?.adsFree;
 }
 
+// Should hide sponsored banner.
 async function shouldHideSponsoredBanner() {
   if (hasAdsFreeSubscription()) return true;
   if (busy) return true;
@@ -1086,6 +1119,7 @@ async function shouldHideSponsoredBanner() {
   }
 }
 
+// Load sponsored banners from feed.
 async function loadSponsoredBannersFromFeed() {
   const fallback = sponsoredBanners;
   for (const url of SPONSORED_FEED_URLS) {
@@ -1128,6 +1162,7 @@ async function loadSponsoredBannersFromFeed() {
   sponsoredBanners = fallback;
 }
 
+// Render sponsored banner state.
 async function renderSponsoredBannerState() {
   if (!sidebarSponsored) return;
   const hide = await shouldHideSponsoredBanner();
@@ -1143,6 +1178,7 @@ async function renderSponsoredBannerState() {
   sponsoredCurrentLink = entry.link;
 }
 
+// Set view.
 function setView(which: "library" | "capes" | "settings") {
   viewLibrary.style.display = which === "library" ? "" : "none";
   viewCapes.style.display = which === "capes" ? "" : "none";
@@ -1158,6 +1194,7 @@ function setView(which: "library" | "capes" | "settings") {
   }
 }
 
+// Render capes view.
 async function renderCapesView(forceRefresh = false) {
   capesPanelRoot.innerHTML = "";
   const accounts = state.accounts?.accounts ?? [];
@@ -1454,6 +1491,7 @@ async function renderCapesView(forceRefresh = false) {
 
 const capePreviewCache = new Map<string, string | null>();
 
+// Build cape panel preview data url.
 async function buildCapePanelPreviewDataUrl(sourceUrl: string): Promise<string | null> {
   const src = String(sourceUrl || "").trim();
   if (!src) return null;
@@ -1545,6 +1583,7 @@ async function buildCapePanelPreviewDataUrl(sourceUrl: string): Promise<string |
   return preview;
 }
 
+// Set cape preview image.
 async function setCapePreviewImage(imgEl: HTMLImageElement, sourceUrl: string) {
   try {
     const preview = await buildCapePanelPreviewDataUrl(sourceUrl);
@@ -1554,6 +1593,7 @@ async function setCapePreviewImage(imgEl: HTMLImageElement, sourceUrl: string) {
   }
 }
 
+// Dispose capes character preview.
 function disposeCapesCharacterPreview() {
   try {
     capesSkinControls?.dispose?.();
@@ -1565,6 +1605,7 @@ function disposeCapesCharacterPreview() {
   capesSkinViewer = null;
 }
 
+// Render interactive character preview.
 async function renderInteractiveCharacterPreview(
   hostEl: HTMLElement,
   skinSourceUrl: string | null,
@@ -1635,15 +1676,18 @@ async function renderInteractiveCharacterPreview(
   }
 }
 
+// Open modal.
 function openModal() {
   modalBackdrop.classList.add("open");
   setModalTab("general");
 }
 
+// Close modal.
 function closeModal() {
   modalBackdrop.classList.remove("open");
 }
 
+// Set modal tab.
 function setModalTab(which: "general" | "mods" | "packs") {
   const canShowInstanceTabs = modalMode === "edit" && !!editInstanceId;
   const showMods = which === "mods" && canShowInstanceTabs;
@@ -1673,6 +1717,7 @@ modalTabPacks.onclick = async () => {
   await renderLocalContent(editInstanceId);
 };
 
+// Format bytes.
 function formatBytes(n: number) {
   const units = ["B", "KB", "MB", "GB"];
   let i = 0;
@@ -1685,6 +1730,7 @@ function formatBytes(n: number) {
   return `${rounded} ${units[i]}`;
 }
 
+// Format playtime.
 function formatPlaytime(ms: number) {
   const totalMinutes = Math.max(0, Math.floor(Number(ms || 0) / 60000));
   const hours = Math.floor(totalMinutes / 60);
@@ -1696,6 +1742,7 @@ function formatPlaytime(ms: number) {
   return `${days}d ${remHours}h`;
 }
 
+// Format preset label.
 function formatPresetLabel(presetId: string | null | undefined) {
   const id = String(presetId || "none");
   if (id === "none") return "None";
@@ -1703,6 +1750,7 @@ function formatPresetLabel(presetId: string | null | undefined) {
   return preset?.name || id;
 }
 
+// Render profile image.
 function renderProfileImage(summary: Awaited<ReturnType<typeof window.api.profileGetSummary>>, tierLabel: string) {
   const canvas = document.createElement("canvas");
   canvas.width = 1200;
@@ -1750,6 +1798,7 @@ function renderProfileImage(summary: Awaited<ReturnType<typeof window.api.profil
   return canvas;
 }
 
+// Encode public profile payload.
 function encodePublicProfilePayload(payload: unknown) {
   const json = JSON.stringify(payload);
   const bytes = new TextEncoder().encode(json);
@@ -1849,12 +1898,14 @@ function clearPanel(el: HTMLElement) {
   el.innerHTML = "";
 }
 
+// Make h3.
 function makeH3(text: string) {
   const h = document.createElement("h3");
   h.textContent = text;
   return h;
 }
 
+// Make row.
 function makeRow(label: string, help?: string) {
   const row = document.createElement("div");
   row.className = "setRow";
@@ -1880,6 +1931,7 @@ function makeRow(label: string, help?: string) {
   return { row, left };
 }
 
+// Make switch.
 function makeSwitch(checked: boolean, onChange: (v: boolean) => void) {
   const wrap = document.createElement("label");
   wrap.className = "switch";
@@ -1914,6 +1966,7 @@ function makeSwitch(checked: boolean, onChange: (v: boolean) => void) {
   return wrap;
 }
 
+// Make select.
 function makeSelect(options: Array<{ value: string; label: string }>, value: string, onChange: (v: string) => void) {
   const sel = document.createElement("select");
   sel.className = "setControl";
@@ -1928,6 +1981,7 @@ function makeSelect(options: Array<{ value: string; label: string }>, value: str
   return sel;
 }
 
+// Make input.
 function makeInput(value: string, placeholder: string, onChange: (v: string) => void) {
   const inp = document.createElement("input");
   inp.className = "setControl";
@@ -1937,6 +1991,7 @@ function makeInput(value: string, placeholder: string, onChange: (v: string) => 
   return inp;
 }
 
+// Make textarea.
 function makeTextarea(value: string, placeholder: string, onChange: (v: string) => void) {
   const ta = document.createElement("textarea");
   ta.className = "setControl";
@@ -1947,6 +2002,7 @@ function makeTextarea(value: string, placeholder: string, onChange: (v: string) 
   return ta;
 }
 
+// Pick image as data url.
 async function pickImageAsDataUrl(): Promise<string | null> {
   return new Promise((resolve) => {
     const inp = document.createElement("input");
@@ -1972,6 +2028,7 @@ async function pickImageAsDataUrl(): Promise<string | null> {
   });
 }
 
+// Updater status text.
 function updaterStatusText(s: UpdaterUiState) {
   const msg = s.message?.trim();
   if (msg) return msg;
@@ -1985,6 +2042,7 @@ function updaterStatusText(s: UpdaterUiState) {
   return "Updater error.";
 }
 
+// Preflight summary text.
 function preflightSummaryText(p: any) {
   if (!p) return "No preflight run yet.";
   if (p.summary === "healthy") return "Preflight healthy.";
@@ -1992,6 +2050,7 @@ function preflightSummaryText(p: any) {
   return "Preflight detected critical issues.";
 }
 
+// Cloud sync status text.
 function cloudSyncStatusText(state: CloudSyncUiState) {
   if (!state) return "Cloud sync has not run yet.";
   if (state.lastStatus === "up-to-date") return "Cloud sync is up to date.";
@@ -2002,17 +2061,20 @@ function cloudSyncStatusText(state: CloudSyncUiState) {
   return "Cloud sync is idle.";
 }
 
+// Apply remote synced settings.
 function applyRemoteSyncedSettings(patch: Record<string, unknown> | null | undefined) {
   if (!patch || typeof patch !== "object") return;
   setSettings(patch as Partial<AppSettings>, { touchUpdatedAt: false });
   ensureCloudSyncTimer();
 }
 
+// Run cloud sync.
 async function runCloudSync(manual: boolean, forcedPolicy?: "prefer-local" | "prefer-cloud") {
   const s = getSettings();
   if (!s.cloudSyncEnabled) return;
   if (!state.launcherAccount?.activeAccountId) return;
 
+  // "ask" delegates user decision only during manual sync; automated sync uses configured policy.
   const policy = forcedPolicy || s.cloudSyncConflictPolicy || "ask";
   const result = await window.api.cloudSyncSyncNow({
     settings: getSettings() as unknown as Record<string, unknown>,
@@ -2033,12 +2095,14 @@ async function runCloudSync(manual: boolean, forcedPolicy?: "prefer-local" | "pr
   };
 
   if (result.status === "pulled" && result.settingsPatch) {
+    // Apply cloud-delivered settings immediately and refresh instance cards.
     applyRemoteSyncedSettings(result.settingsPatch);
     state.instances = await window.api.instancesList();
     await renderInstances();
   }
 
   if (result.status === "conflict" && manual && policy === "ask") {
+    // Interactive conflict resolution for user-triggered sync runs.
     const useCloud = confirm(
       "Cloud sync conflict detected.\n\nOK = use cloud state\nCancel = keep local state\n\nYou can change this behavior in:\nSettings > Install > Conflict policy"
     );
@@ -2054,6 +2118,7 @@ async function runCloudSync(manual: boolean, forcedPolicy?: "prefer-local" | "pr
   }
 }
 
+// Ensure cloud sync timer.
 function ensureCloudSyncTimer() {
   if (cloudSyncIntervalId != null) {
     window.clearInterval(cloudSyncIntervalId);
@@ -2061,6 +2126,7 @@ function ensureCloudSyncTimer() {
   }
   const s = getSettings();
   if (!s.cloudSyncEnabled || !s.cloudSyncAuto) return;
+  // Periodic background sync (5 min cadence) keeps settings/instances fresh across devices.
   cloudSyncIntervalId = window.setInterval(() => {
     void guarded(async () => {
       await runCloudSync(false);
@@ -2069,8 +2135,10 @@ function ensureCloudSyncTimer() {
   }, 5 * 60 * 1000);
 }
 
+// Ensure running status poll.
 function ensureRunningStatusPoll() {
   if (runningStatusPollId != null) return;
+  // Lightweight running-state refresh used by topbar pill + play/stop affordances.
   runningStatusPollId = window.setInterval(() => {
     void guarded(async () => {
       if (!state.instances?.instances?.length) {
@@ -2082,10 +2150,12 @@ function ensureRunningStatusPoll() {
   }, 3000);
 }
 
+// All instance preset ids.
 function allInstancePresetIds(): InstancePresetId[] {
   return ["none", ...Object.keys(INSTANCE_PRESETS)] as InstancePresetId[];
 }
 
+// Available preset ids for loader.
 function availablePresetIdsForLoader(loader: LoaderKind): InstancePresetId[] {
   const ids: InstancePresetId[] = ["none"];
   for (const id of Object.keys(INSTANCE_PRESETS) as Array<Exclude<InstancePresetId, "none">>) {
@@ -2094,6 +2164,7 @@ function availablePresetIdsForLoader(loader: LoaderKind): InstancePresetId[] {
   return ids;
 }
 
+// Fill instance preset dropdown.
 function fillInstancePresetDropdown(selectedId: string | null, loader: LoaderKind = "fabric") {
   instancePreset.innerHTML = "";
 
@@ -2103,6 +2174,7 @@ function fillInstancePresetDropdown(selectedId: string | null, loader: LoaderKin
   instancePreset.appendChild(none);
 
   for (const id of Object.keys(INSTANCE_PRESETS) as Array<Exclude<InstancePresetId, "none">>) {
+    // Only show presets that provide a variant for the current loader.
     if (!INSTANCE_PRESETS[id].variants?.[loader]) continue;
     const p = INSTANCE_PRESETS[id];
     const opt = document.createElement("option");
@@ -2117,6 +2189,7 @@ function fillInstancePresetDropdown(selectedId: string | null, loader: LoaderKin
   instancePreset.value = safe;
 }
 
+// Apply instance preset.
 async function applyInstancePreset(instanceId: string, mcVersion: string, loader: LoaderKind, presetId: InstancePresetId) {
   if (presetId === "none") return;
   const preset = INSTANCE_PRESETS[presetId];
@@ -2191,6 +2264,7 @@ async function applyInstancePreset(instanceId: string, mcVersion: string, loader
   }
 }
 
+// Optimize active modal instance.
 async function optimizeActiveModalInstance() {
   const id = editInstanceId;
   if (!id) {
@@ -2220,6 +2294,7 @@ async function optimizeActiveModalInstance() {
   appendLog(`[optimizer] Applied ${profile} optimization.`);
 }
 
+// Restore active modal optimization.
 async function restoreActiveModalOptimization() {
   const id = editInstanceId;
   if (!id) {
@@ -2234,6 +2309,7 @@ async function restoreActiveModalOptimization() {
   appendLog("[optimizer] Restored optimization defaults.");
 }
 
+// Run active modal benchmark.
 async function runActiveModalBenchmark() {
   const id = editInstanceId;
   if (!id) {
@@ -2257,6 +2333,7 @@ async function runActiveModalBenchmark() {
   appendLog(`[benchmark] ${run.avgFps} avg / ${run.low1Fps} low1 / ${run.maxMemoryMb}MB max`);
 }
 
+// Render settings panels.
 function renderSettingsPanels() {
   const s = getSettings();
   const premium = hasPremium();
@@ -2948,6 +3025,7 @@ function renderSettingsPanels() {
   settingsPanelProfile.appendChild(loading);
 }
 
+// Render profile settings panel.
 async function renderProfileSettingsPanel() {
   const token = ++profileRenderToken;
   clearPanel(settingsPanelProfile);
@@ -3192,6 +3270,7 @@ async function renderProfileSettingsPanel() {
   }
 }
 
+// Set settings tab.
 function setSettingsTab(tab: "general" | "theme" | "install" | "window" | "java" | "hooks" | "profile") {
   const btns: Record<string, HTMLElement> = {
     general: settingsTabGeneral,
@@ -3230,6 +3309,7 @@ settingsTabJava.onclick = () => setSettingsTab("java");
 settingsTabHooks.onclick = () => setSettingsTab("hooks");
 settingsTabProfile.onclick = () => setSettingsTab("profile");
 
+// Render server entries.
 async function renderServerEntries(instanceId: string | null) {
   serverList.innerHTML = "";
   editServerId = null;
@@ -3308,6 +3388,7 @@ async function renderServerEntries(instanceId: string | null) {
   }
 }
 
+// Ensure fabric api for fabric instance.
 async function ensureFabricApiForFabricInstance(instanceId: string, mcVersion: string, loader: LoaderKind) {
   if (loader !== "fabric") return;
   const hasFabricApi = CATALOG.some((m) => m.id === "fabric-api");
@@ -3321,6 +3402,7 @@ async function ensureFabricApiForFabricInstance(instanceId: string, mcVersion: s
   }
 }
 
+// Find preferred server target.
 async function findPreferredServerTarget() {
   const instances = state.instances?.instances ?? [];
   if (!instances.length) return null;
@@ -3342,6 +3424,7 @@ async function findPreferredServerTarget() {
   return null;
 }
 
+// Launch for instance.
 async function launchForInstance(inst: any, serverAddress?: string) {
   const accounts = state.accounts?.accounts ?? [];
   const accountId = inst.accountId || state.accounts?.activeId || (accounts[0]?.id ?? null);
@@ -3445,6 +3528,7 @@ async function renderLocalContent(instanceId: string | null) {
   );
 }
 
+// Pick and add.
 async function pickAndAdd(kind: "mods" | "resourcepacks" | "shaderpacks") {
   if (!editInstanceId) return;
   const files = await window.api.contentPickFiles(kind);
@@ -3522,6 +3606,7 @@ async function renderRecommendedPacks(instanceId: string | null) {
   }
 }
 
+// Get mod compatibility reason.
 function getModCompatibilityReason(mod: any, mcVersion: string) {
   if (mod?.status === "ok") return null;
   if (mod?.status === "unavailable") {
@@ -3532,6 +3617,7 @@ function getModCompatibilityReason(mod: any, mcVersion: string) {
   return `Compatibility check failed for Minecraft ${mcVersion}.`;
 }
 
+// Validation issue suggestions.
 function validationIssueSuggestions(issue: any) {
   const code = String(issue?.code || "");
   const mods = Array.isArray(issue?.modIds) ? issue.modIds : [];
@@ -3563,6 +3649,7 @@ function validationIssueSuggestions(issue: any) {
   return [];
 }
 
+// Is blocking validation issue.
 function isBlockingValidationIssue(issue: any) {
   const code = String(issue?.code || "");
   const severity = String(issue?.severity || "");
@@ -3571,6 +3658,7 @@ function isBlockingValidationIssue(issue: any) {
   return true;
 }
 
+// Build mod update summary.
 function buildModUpdateSummary(plan: any) {
   const lines: string[] = [];
   lines.push(`Smart update analysis (${new Date(plan?.checkedAt || Date.now()).toLocaleString()})`);
@@ -3596,6 +3684,7 @@ function buildModUpdateSummary(plan: any) {
   return lines.join("\n");
 }
 
+// Render compatibility guidance.
 async function renderCompatibilityGuidance(instanceId: string | null) {
   modalCompatGuidance.innerHTML = "";
   if (!instanceId) return;
@@ -3901,10 +3990,12 @@ function getAccountLabel(a: any) {
   return a?.name ?? a?.username ?? a?.profileName ?? a?.id ?? "Account";
 }
 
+// Get launcher display name.
 function getLauncherDisplayName(a: any) {
   return a?.displayName ?? a?.email ?? a?.id ?? "Launcher account";
 }
 
+// Run launcher account action.
 async function runLauncherAccountAction(fn: () => Promise<void>) {
   try {
     await fn();
@@ -3916,6 +4007,7 @@ async function runLauncherAccountAction(fn: () => Promise<void>) {
   }
 }
 
+// Refresh launcher subscription.
 async function refreshLauncherSubscription() {
   if (!state.launcherAccount?.activeAccountId) {
     state.launcherSubscription = null;
@@ -3946,6 +4038,7 @@ type LauncherProfileFormResult = {
   avatarUrl: string | null;
 } | null;
 
+// Open launcher two factor dialog.
 async function openLauncherTwoFactorDialog(): Promise<string | null> {
   return new Promise((resolve) => {
     const backdrop = document.createElement("div");
@@ -4044,6 +4137,7 @@ async function openLauncherTwoFactorDialog(): Promise<string | null> {
   });
 }
 
+// Open launcher auth dialog.
 async function openLauncherAuthDialog(mode: "login" | "register"): Promise<LauncherAuthFormResult> {
   return new Promise((resolve) => {
     const backdrop = document.createElement("div");
@@ -4284,6 +4378,7 @@ async function openLauncherAuthDialog(mode: "login" | "register"): Promise<Launc
   });
 }
 
+// Open launcher profile dialog.
 async function openLauncherProfileDialog(current: {
   displayName?: string | null;
   avatarUrl?: string | null;
@@ -4472,6 +4567,7 @@ async function openLauncherProfileDialog(current: {
   });
 }
 
+// Fallback avatar data url.
 function fallbackAvatarDataUrl(label: string) {
   const txt =
     String(label || "?")
@@ -4487,6 +4583,7 @@ function fallbackAvatarDataUrl(label: string) {
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 }
 
+// Render accounts.
 async function renderAccounts() {
   const launcherState = state.launcherAccount;
   const launcherSubscription = state.launcherSubscription;
@@ -4833,6 +4930,7 @@ type RunningSnapshot = {
   byId: Map<string, boolean>;
 };
 
+// Update topbar running pill.
 function updateTopbarRunningPill(runningCount: number) {
   if (!windowTopbarPill) return;
   if (runningCount <= 0) {
@@ -4842,6 +4940,7 @@ function updateTopbarRunningPill(runningCount: number) {
   windowTopbarPill.textContent = runningCount === 1 ? "1 instance running" : `${runningCount} instances running`;
 }
 
+// Get running snapshot.
 async function getRunningSnapshot(instances: any[]): Promise<RunningSnapshot> {
   const byId = new Map<string, boolean>();
   if (!instances.length) return { count: 0, byId };
@@ -4867,6 +4966,7 @@ async function getRunningSnapshot(instances: any[]): Promise<RunningSnapshot> {
   return { count, byId };
 }
 
+// Render instances.
 async function renderInstances() {
   const items = filteredInstances();
   const active = state.instances?.activeInstanceId ?? null;
@@ -5090,6 +5190,7 @@ async function renderInstances() {
   }
 }
 
+// Fill instance account dropdown.
 async function fillInstanceAccountDropdown(selectedId: string | null) {
   const accounts = state.accounts?.accounts ?? [];
   instanceAccount.innerHTML = "";
@@ -5109,6 +5210,7 @@ async function fillInstanceAccountDropdown(selectedId: string | null) {
   instanceAccount.value = selectedId ?? "";
 }
 
+// Fill create version options.
 function fillCreateVersionOptions() {
   const includeReleases = createIncludeReleases;
   const includeSnapshots = createIncludeSnapshots;
@@ -5132,11 +5234,13 @@ function fillCreateVersionOptions() {
   }
 }
 
+// Render create filter buttons.
 function renderCreateFilterButtons() {
   createFilterReleases.classList.toggle("active", createIncludeReleases);
   createFilterSnapshots.classList.toggle("active", createIncludeSnapshots);
 }
 
+// Update create loader ui.
 function updateCreateLoaderUi() {
   const loader = String(createLoaderType.value || "fabric");
   if (loader === "fabric" || loader === "quilt" || loader === "forge" || loader === "neoforge") {
@@ -5155,11 +5259,13 @@ function updateCreateLoaderUi() {
   createLoaderHint.textContent = "Select a supported loader.";
 }
 
+// Render modal instance sync toggle.
 function renderModalInstanceSyncToggle() {
   instanceSyncEnabled.classList.toggle("active", modalInstanceSyncEnabled);
   instanceSyncEnabled.textContent = modalInstanceSyncEnabled ? "Enabled" : "Disabled";
 }
 
+// Set create source.
 function setCreateSource(next: "custom" | "import" | "modrinth" | "curseforge" | "technic" | "atlauncher" | "ftb") {
   createSource = next;
   const isCustom = next === "custom";
@@ -5237,6 +5343,7 @@ function setCreateSource(next: "custom" | "import" | "modrinth" | "curseforge" |
   }
 }
 
+// Fallback pack icon data url.
 function fallbackPackIconDataUrl(label: string, theme: "blue" | "green" = "blue") {
   const text = String(label || "?")
     .split(/\s+/)
@@ -5258,6 +5365,7 @@ function fallbackPackIconDataUrl(label: string, theme: "blue" | "green" = "blue"
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 }
 
+// Run modrinth search.
 async function runModrinthSearch() {
   const q = String(modrinthSearchInput.value || "").trim();
   const isPopular = !q;
@@ -5326,6 +5434,7 @@ async function runModrinthSearch() {
   }
 }
 
+// Run provider search.
 async function runProviderSearch() {
   const provider =
     createSource === "curseforge" || createSource === "technic" || createSource === "atlauncher" || createSource === "ftb"
@@ -5403,9 +5512,11 @@ async function runProviderSearch() {
 async function refreshAll() {
   setStatus("Loading...");
 
+  // 1) Pull immutable/version metadata first (used by create modal and compatibility UI).
   const manifest = await window.api.versionsList();
   state.versions = manifest?.versions ?? [];
 
+  // 2) Hydrate account/session-facing state before rendering top-level panels.
   const s = getSettings();
   await window.api.updaterSetChannel(s.updateChannel);
   state.accounts = await window.api.accountsList();
@@ -5424,6 +5535,7 @@ async function refreshAll() {
   }
   await refreshLauncherSubscription();
   try {
+    // Keep a local snapshot of sync status so settings panel can render without waiting on manual sync.
     const remoteSyncState = await window.api.cloudSyncGetState();
     cloudSyncState = {
       lastSyncedAt: remoteSyncState?.lastSyncedAt ?? null,
@@ -5443,6 +5555,7 @@ async function refreshAll() {
   updaterState = await window.api.updaterGetState();
   preflightState = await window.api.preflightGetLast();
 
+  // 3) Render all visible top-level sections from freshly loaded state.
   await renderAccounts();
   await renderInstances();
   await loadSponsoredBannersFromFeed();
@@ -5452,6 +5565,7 @@ async function refreshAll() {
 
   if (!preflightState) {
     try {
+      // Run preflight once when no cached result exists.
       preflightState = await window.api.preflightRun();
       appendLog(`[preflight] ${preflightSummaryText(preflightState)}`);
     } catch (err: any) {
@@ -5462,6 +5576,7 @@ async function refreshAll() {
   if (!hasAutoCheckedUpdates) {
     hasAutoCheckedUpdates = true;
     try {
+      // Non-blocking startup update check.
       await window.api.updaterCheck();
     } catch {
       // Keep startup silent if update check fails.
@@ -5471,6 +5586,7 @@ async function refreshAll() {
   if (getSettings().cloudSyncEnabled && state.launcherAccount?.activeAccountId) {
     void guarded(async () => {
       try {
+        // Best-effort initial cloud sync keeps local launcher state aligned after startup.
         await runCloudSync(false);
         renderSettingsPanels();
       } catch (err: any) {
@@ -5529,6 +5645,7 @@ sidebarDiscordBtn.onclick = () => {
 };
 
 // ---------------- Event wiring ----------------
+// Primary nav and account interactions.
 navLibrary.onclick = () => setView("library");
 navCapes.onclick = () => setView("capes");
 navSettings.onclick = () => setView("settings");
@@ -5542,6 +5659,7 @@ accountAdd.onclick = () =>
   });
 
 searchInstances.oninput = () => renderInstances();
+// Create modal filters never allow both release/snapshot toggles to be off.
 createFilterReleases.onclick = () => {
   createIncludeReleases = !createIncludeReleases;
   if (!createIncludeReleases && !createIncludeSnapshots) createIncludeSnapshots = true;
@@ -5555,6 +5673,7 @@ createFilterSnapshots.onclick = () => {
   fillCreateVersionOptions();
 };
 createLoaderType.onchange = () => {
+  // Loader selection drives both loader-version input affordance and preset availability.
   updateCreateLoaderUi();
   fillInstancePresetDropdown(instancePreset.value || "none", (createLoaderType.value || "fabric") as LoaderKind);
 };
@@ -5589,6 +5708,7 @@ providerSearchInput.onkeydown = (e) => {
 };
 btnCreateImportNow.onclick = () =>
   guarded(async () => {
+    // Fast-path import button in create modal.
     const res = await window.api.instancesImport();
     if (!res.ok || res.canceled) return;
     if (res.instance?.id && res.instance?.mcVersion && res.instance?.loader) {
@@ -5608,6 +5728,7 @@ btnCreateImportNow.onclick = () =>
   });
 btnProviderImportArchive.onclick = () =>
   guarded(async () => {
+    // Provider archive import path (CurseForge/Technic/ATLauncher/FTB).
     const provider =
       createSource === "curseforge" || createSource === "technic" || createSource === "atlauncher" || createSource === "ftb"
         ? createSource
@@ -5623,6 +5744,7 @@ btnProviderImportArchive.onclick = () =>
     });
     if (!res.ok || res.canceled) return;
     if (res.result?.instance?.id) {
+      // Prefer user-selected icon override; fallback to provider icon/fallback badge.
       if (selectedCreateIconPath) {
         try {
           await window.api.instancesSetIconFromFile(
@@ -5699,6 +5821,7 @@ instanceIconPreviewFrame.onmousedown = (ev: MouseEvent) => {
 };
 window.addEventListener("mousemove", (ev) => {
   if (!iconPreviewDragging) return;
+  // Convert drag delta into percentage offsets so transform is resolution-independent.
   const dx = ev.clientX - iconPreviewDragStartX;
   const dy = ev.clientY - iconPreviewDragStartY;
   const nextX =
@@ -5720,6 +5843,7 @@ window.addEventListener("mouseup", () => {
 });
 instanceIconPreviewFrame.onwheel = (ev: WheelEvent) => {
   if (!selectedCreateIconPath) return;
+  // Zoom in/out preview to compose icon crop before save.
   ev.preventDefault();
   const delta = ev.deltaY < 0 ? 4 : -4;
   selectedIconScalePct = Math.max(50, Math.min(250, selectedIconScalePct + delta));
@@ -5794,6 +5918,7 @@ modalCancel.onclick = closeModal;
 modalCreate.onclick = () =>
   guarded(async () => {
     if (modalMode === "create") {
+      // Source-specific create flow.
       if (createSource === "import") {
         const res = await window.api.instancesImport();
         if (!res.ok || res.canceled) return;
@@ -5826,6 +5951,7 @@ modalCreate.onclick = () =>
         createSource === "ftb"
       ) {
         if (createSource !== "modrinth") {
+          // Non-Modrinth provider flow.
           if (createSource === "atlauncher" || createSource === "ftb") {
             if (!selectedProviderPack?.id) {
               alert("Select a pack from search results first.");
@@ -5872,6 +5998,7 @@ modalCreate.onclick = () =>
             closeModal();
             return;
           } else {
+            // Archive-based provider flow (user picks a provider export/modpack archive).
             const res = await window.api.packArchiveImport({
               provider: createSource,
               defaults: {
@@ -5918,6 +6045,7 @@ modalCreate.onclick = () =>
             return;
           }
         }
+        // Modrinth catalog install flow.
         if (!selectedModrinthPack) {
           alert("Select a Modrinth pack first.");
           return;
@@ -5996,6 +6124,7 @@ modalCreate.onclick = () =>
 
       if (loader !== "vanilla") {
         setStatus(`Resolving ${loader} loader...`);
+        // Resolve concrete loader build (or honor explicit override from UI).
         const resolved = (createLoaderVersion.value || "").trim() || (await window.api.loaderPickVersion(loader as any, mcVersion)) || "";
         if (loader === "fabric") cfg.fabricLoaderVersion = resolved;
         if (loader === "quilt") cfg.quiltLoaderVersion = resolved;
@@ -6034,6 +6163,7 @@ modalCreate.onclick = () =>
       await ensureFabricApiForFabricInstance(id, mcVersion, loader as LoaderKind);
 
       if (selectedPreset !== "none") {
+        // Apply preset immediately after instance creation for predictable defaults.
         await applyInstancePreset(id, mcVersion, loader as LoaderKind, selectedPreset);
       }
 
@@ -6045,6 +6175,7 @@ modalCreate.onclick = () =>
     }
 
     if (modalMode === "edit" && editInstanceId) {
+      // Existing instance edit flow.
       const selectedPreset = (instancePreset.value || "none") as InstancePresetId;
       const inst = (state.instances?.instances ?? []).find((x: any) => x.id === editInstanceId) ?? null;
       const nextLoaderRaw = String(createLoaderType.value || inst?.loader || "fabric");
@@ -6064,6 +6195,7 @@ modalCreate.onclick = () =>
       let nextForgeVersion: string | undefined = undefined;
       let nextNeoForgeVersion: string | undefined = undefined;
       if (nextLoader !== "vanilla") {
+        // Resolve loader version for edited runtime when custom value is not provided.
         const resolved = (createLoaderVersion.value || "").trim() || (await window.api.loaderPickVersion(nextLoader as any, nextVersion)) || "";
         if (nextLoader === "fabric") nextFabricLoaderVersion = resolved;
         if (nextLoader === "quilt") nextQuiltLoaderVersion = resolved;
@@ -6454,6 +6586,7 @@ window.api.onLaunchLog((line) => {
       lower.includes("duplicate") ||
       lower.includes("unsupportedclassversionerror"))
   ) {
+    // Run diagnostics automatically when common failure signatures appear in logs.
     void runLaunchDiagnosis(active);
   }
 });
@@ -6469,6 +6602,7 @@ window.api.onUpdaterEvent((evt) => {
   if (msg && !isDevNoopMsg) appendLog(`[updater] ${msg}`);
 
   if (evt?.status === "update-available") {
+    // Prompt at most once per version during a renderer session.
     const v = String(evt.latestVersion ?? "");
     if (v && promptedUpdateVersion !== v) {
       promptedUpdateVersion = v;
@@ -6512,18 +6646,21 @@ let topbarDragNeedsRestore = false;
 let topbarDragMoveQueued: { cursorX: number; cursorY: number } | null = null;
 let topbarDragMoveInFlight = false;
 
+// Queue topbar drag move.
 function queueTopbarDragMove(cursorX: number, cursorY: number) {
   topbarDragMoveQueued = { cursorX, cursorY };
   if (topbarDragMoveInFlight) return;
   topbarDragMoveInFlight = true;
 
   void (async () => {
+    // Collapse high-frequency pointer moves into one async drain loop.
     while (topbarDragMoveQueued && topbarDragActive) {
       const next = topbarDragMoveQueued;
       topbarDragMoveQueued = null;
       if (!next) break;
 
       if (topbarDragNeedsRestore) {
+        // Restore from maximized first so drag can continue with a normal window frame.
         const restored = await window.api.windowDragRestore(next.cursorX, next.cursorY, topbarDragAnchorRatio);
         if (restored) {
           topbarDragNeedsRestore = false;
@@ -6538,17 +6675,20 @@ function queueTopbarDragMove(cursorX: number, cursorY: number) {
   })();
 }
 
+// Stop topbar drag.
 async function stopTopbarDrag(cursorY?: number) {
   if (!topbarDragActive) return;
   topbarDragActive = false;
   topbarDragMoveQueued = null;
 
   if (cursorY != null) {
+    // Delegates snap/maximize behavior (drag-to-top / edges) to native window handling.
     await window.api.windowDragEnd(cursorY);
   }
   await syncWindowMaxButtonState();
 }
 
+// Sync window max button state.
 async function syncWindowMaxButtonState() {
   const maximized = await window.api.windowIsMaximized();
   winBtnMax.classList.toggle("is-maximized", !!maximized);
