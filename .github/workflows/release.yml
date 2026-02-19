@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: write
+  id-token: write
 
 jobs:
   release:
@@ -19,8 +20,10 @@ jobs:
         include:
           - os: windows-latest
             build_command: npm run dist:win -- --publish always
+            windows_sign: true
           - os: macos-latest
             build_command: npm run dist:mac -- --publish always
+            windows_sign: false
 
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -39,5 +42,20 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Azure login (Trusted Signing)
+        if: matrix.windows_sign && secrets.AZURE_CLIENT_ID != '' && secrets.AZURE_TENANT_ID != '' && secrets.AZURE_SUBSCRIPTION_ID != ''
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
       - name: Build and publish artifacts
         run: ${{ matrix.build_command }}
+        env:
+          WINDOWS_TRUSTED_SIGNING: ${{ matrix.windows_sign && secrets.AZURE_CLIENT_ID != '' && secrets.AZURE_TENANT_ID != '' && secrets.AZURE_SUBSCRIPTION_ID != '' && vars.AZURE_TRUSTED_SIGNING_ENDPOINT != '' && vars.AZURE_TRUSTED_SIGNING_ACCOUNT_NAME != '' && vars.AZURE_TRUSTED_SIGNING_CERT_PROFILE_NAME != '' && vars.AZURE_TRUSTED_SIGNING_PUBLISHER_NAME != '' }}
+          AZURE_TRUSTED_SIGNING_ENDPOINT: ${{ vars.AZURE_TRUSTED_SIGNING_ENDPOINT }}
+          AZURE_TRUSTED_SIGNING_ACCOUNT_NAME: ${{ vars.AZURE_TRUSTED_SIGNING_ACCOUNT_NAME }}
+          AZURE_TRUSTED_SIGNING_CERT_PROFILE_NAME: ${{ vars.AZURE_TRUSTED_SIGNING_CERT_PROFILE_NAME }}
+          AZURE_TRUSTED_SIGNING_PUBLISHER_NAME: ${{ vars.AZURE_TRUSTED_SIGNING_PUBLISHER_NAME }}
+          AZURE_TRUSTED_SIGNING_TIMESTAMP_URL: ${{ vars.AZURE_TRUSTED_SIGNING_TIMESTAMP_URL }}

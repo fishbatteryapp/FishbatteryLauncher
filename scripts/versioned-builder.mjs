@@ -14,8 +14,10 @@ const outputDir = `release/v${version}`;
 const builderArgs = process.argv.slice(2);
 const cmd = process.execPath;
 const builderCli = path.join(rootDir, "node_modules", "electron-builder", "cli.js");
+const builderConfig = path.join(rootDir, "electron-builder.config.cjs");
 const args = [
   builderCli,
+  `--config=${builderConfig}`,
   `--config.directories.output=${outputDir}`,
   ...builderArgs
 ];
