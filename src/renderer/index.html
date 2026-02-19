@@ -20,7 +20,7 @@
         <span class="windowTopbarBrand">Fishbattery Launcher</span>
       </div>
       <div class="windowTopbarCenter">
-        <span class="windowTopbarPill">No instances running</span>
+        <span id="windowTopbarPill" class="windowTopbarPill">No instances running</span>
       </div>
       <div class="windowTopbarRight">
         <button id="winBtnMin" class="windowTopbarBtn windowTopbarBtnMin" type="button" aria-label="Minimize"></button>
@@ -60,7 +60,12 @@
           </div>
         </div>
 
-        <div class="sidebarFooter">Data is stored per instance in your launcher folder.</div>
+        <div class="sidebarFooter">
+          <div>Data is stored per instance in your launcher folder.</div>
+          <div class="row" style="margin-top:8px; justify-content:flex-start">
+            <button id="sidebarDiscordBtn" class="btn" type="button">Join Discord</button>
+          </div>
+        </div>
       </aside>
 
       <section class="main">
