@@ -209,6 +209,61 @@ declare global {
           remoteInstancesUpdatedAt: number;
         };
       }>;
+      profileGetSummary: () => Promise<{
+        generatedAt: string;
+        activeInstanceId: string | null;
+        activeInstance: {
+          id: string;
+          name: string;
+          mcVersion: string;
+          loader: string;
+          presetId: string | null;
+        } | null;
+        totals: {
+          instances: number;
+          installedMods: number;
+          totalPlaytimeMs: number;
+          sessions: number;
+          lastPlayedAt: number | null;
+        };
+        hardware: { cpuModel: string; cpuCores: number; totalRamMb: number; gpuModel: string | null };
+        hardwarePublic: { cpuCores: number; ram: string; gpu: string };
+        latestBenchmark: {
+          createdAt: string;
+          profile: string;
+          avgFps: number;
+          low1Fps: number;
+          maxMemoryMb: number;
+          instanceName: string;
+        } | null;
+        bestBenchmark: {
+          createdAt: string;
+          profile: string;
+          avgFps: number;
+          low1Fps: number;
+          maxMemoryMb: number;
+          instanceName: string;
+        } | null;
+        setups: Array<{
+          instanceId: string;
+          name: string;
+          mcVersion: string;
+          loader: string;
+          presetId: string | null;
+          installedMods: number;
+          playtimeMs: number;
+          latestBenchmark: {
+            createdAt: string;
+            profile: string;
+            avgFps: number;
+            low1Fps: number;
+            maxMemoryMb: number;
+          } | null;
+        }>;
+        visibility: { publicEnabled: boolean; updatedAt: number };
+      }>;
+      profileGetVisibility: () => Promise<{ publicEnabled: boolean; updatedAt: number }>;
+      profileSetVisibility: (publicEnabled: boolean) => Promise<{ publicEnabled: boolean; updatedAt: number }>;
 
       instancesList: () => Promise<any>;
       instancesCreate: (cfg: any) => Promise<any>;

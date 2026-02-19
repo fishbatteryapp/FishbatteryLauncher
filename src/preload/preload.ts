@@ -55,6 +55,9 @@ contextBridge.exposeInMainWorld("api", {
     policy?: "ask" | "newer-wins" | "prefer-local" | "prefer-cloud";
     resolveConflict?: boolean;
   }) => ipcRenderer.invoke("cloudSync:syncNow", payload),
+  profileGetSummary: () => ipcRenderer.invoke("profile:getSummary"),
+  profileGetVisibility: () => ipcRenderer.invoke("profile:getVisibility"),
+  profileSetVisibility: (publicEnabled: boolean) => ipcRenderer.invoke("profile:setVisibility", publicEnabled),
 
   instancesList: () => ipcRenderer.invoke("instances:list"),
   instancesCreate: (cfg: any) => ipcRenderer.invoke("instances:create", cfg),

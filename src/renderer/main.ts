@@ -66,6 +66,7 @@ const settingsTabInstall = $("settingsTabInstall");
 const settingsTabWindow = $("settingsTabWindow");
 const settingsTabJava = $("settingsTabJava");
 const settingsTabHooks = $("settingsTabHooks");
+const settingsTabProfile = $("settingsTabProfile");
 
 const settingsPanelGeneral = $("settingsPanelGeneral");
 const settingsPanelTheme = $("settingsPanelTheme");
@@ -73,6 +74,7 @@ const settingsPanelInstall = $("settingsPanelInstall");
 const settingsPanelWindow = $("settingsPanelWindow");
 const settingsPanelJava = $("settingsPanelJava");
 const settingsPanelHooks = $("settingsPanelHooks");
+const settingsPanelProfile = $("settingsPanelProfile");
 
 // Modal
 const modalBackdrop = $("modalBackdrop");
@@ -219,6 +221,7 @@ let cloudSyncState: CloudSyncUiState = {
   lastRemoteRevision: null
 };
 let cloudSyncIntervalId: number | null = null;
+let profileRenderToken = 0;
 let preflightState: any = null;
 let hasAutoCheckedUpdates = false;
 let promptedUpdateVersion: string | null = null;
@@ -1673,6 +1676,79 @@ function formatBytes(n: number) {
   return `${rounded} ${units[i]}`;
 }
 
+function formatPlaytime(ms: number) {
+  const totalMinutes = Math.max(0, Math.floor(Number(ms || 0) / 60000));
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (hours <= 0) return `${minutes}m`;
+  if (hours < 24) return `${hours}h ${minutes}m`;
+  const days = Math.floor(hours / 24);
+  const remHours = hours % 24;
+  return `${days}d ${remHours}h`;
+}
+
+function formatPresetLabel(presetId: string | null | undefined) {
+  const id = String(presetId || "none");
+  if (id === "none") return "None";
+  const preset = (INSTANCE_PRESETS as Record<string, InstancePreset>)[id];
+  return preset?.name || id;
+}
+
+function renderProfileImage(summary: Awaited<ReturnType<typeof window.api.profileGetSummary>>, tierLabel: string) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 1200;
+  canvas.height = 630;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+
+  const gradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+  gradient.addColorStop(0, "#07131b");
+  gradient.addColorStop(1, "#0d2434");
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  ctx.fillStyle = "rgba(255,255,255,0.08)";
+  ctx.fillRect(40, 40, canvas.width - 80, canvas.height - 80);
+
+  ctx.fillStyle = "#e8f6ff";
+  ctx.font = "bold 46px 'Segoe UI', sans-serif";
+  ctx.fillText("Fishbattery Profile Showcase", 70, 120);
+
+  ctx.fillStyle = "#9fc2d8";
+  ctx.font = "24px 'Segoe UI', sans-serif";
+  ctx.fillText(`Tier: ${tierLabel}`, 70, 165);
+  ctx.fillText(`Generated: ${new Date(summary.generatedAt).toLocaleString()}`, 70, 200);
+
+  const cards = [
+    `Playtime: ${formatPlaytime(summary.totals.totalPlaytimeMs)}`,
+    `Installed mods: ${summary.totals.installedMods}`,
+    `Instances: ${summary.totals.instances}`,
+    `Active preset: ${formatPresetLabel(summary.activeInstance?.presetId)}`,
+    summary.bestBenchmark
+      ? `Best benchmark: ${summary.bestBenchmark.avgFps} FPS (${summary.bestBenchmark.instanceName})`
+      : "Best benchmark: none",
+    `Hardware (public): ${summary.hardwarePublic.cpuCores} cores, ${summary.hardwarePublic.ram} RAM`
+  ];
+
+  ctx.font = "bold 28px 'Segoe UI', sans-serif";
+  let y = 270;
+  for (const line of cards) {
+    ctx.fillStyle = "#dff5ff";
+    ctx.fillText(line, 80, y);
+    y += 56;
+  }
+
+  return canvas;
+}
+
+function encodePublicProfilePayload(payload: unknown) {
+  const json = JSON.stringify(payload);
+  const bytes = new TextEncoder().encode(json);
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += 1) binary += String.fromCharCode(bytes[i]);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+
 // ---------------- Simple display names (catalog id__filename) ----------------
 function getPrettyName(kind: "mods" | "resourcepacks" | "shaderpacks", fileName: string) {
   const clean = fileName.replace(/\.disabled$/, "");
@@ -2840,16 +2916,254 @@ function renderSettingsPanels() {
     row.appendChild(ta);
     settingsPanelHooks.appendChild(row);
   }
+
+  // Profile
+  clearPanel(settingsPanelProfile);
+  settingsPanelProfile.appendChild(makeH3("Profile Showcase"));
+  const loading = document.createElement("div");
+  loading.className = "setHelp";
+  loading.textContent = "Loading profile summary...";
+  settingsPanelProfile.appendChild(loading);
 }
 
-function setSettingsTab(tab: "general" | "theme" | "install" | "window" | "java" | "hooks") {
+async function renderProfileSettingsPanel() {
+  const token = ++profileRenderToken;
+  clearPanel(settingsPanelProfile);
+  settingsPanelProfile.appendChild(makeH3("Profile Showcase"));
+
+  const loading = document.createElement("div");
+  loading.className = "setHelp";
+  loading.textContent = "Collecting aggregated stats...";
+  settingsPanelProfile.appendChild(loading);
+
+  try {
+    const [summary, visibility] = await Promise.all([window.api.profileGetSummary(), window.api.profileGetVisibility()]);
+    if (token !== profileRenderToken) return;
+
+    clearPanel(settingsPanelProfile);
+    settingsPanelProfile.appendChild(makeH3("Profile Showcase"));
+
+    const tierLabel = getLauncherTier();
+    const cards = document.createElement("div");
+    cards.className = "grid";
+
+    const cardData = [
+      { title: "Total playtime", value: formatPlaytime(summary.totals.totalPlaytimeMs) },
+      { title: "Installed mods", value: String(summary.totals.installedMods) },
+      { title: "Active preset", value: formatPresetLabel(summary.activeInstance?.presetId) },
+      { title: "Subscription", value: tierLabel },
+      {
+        title: "Hardware",
+        value: `${summary.hardware.cpuCores} cores / ${summary.hardwarePublic.ram} RAM / GPU ${summary.hardwarePublic.gpu}`
+      },
+      {
+        title: "Benchmark",
+        value: summary.bestBenchmark
+          ? `${summary.bestBenchmark.avgFps} FPS best (${summary.bestBenchmark.instanceName})`
+          : "No benchmark runs yet"
+      }
+    ];
+
+    for (const item of cardData) {
+      const card = document.createElement("div");
+      card.className = "setRow";
+      card.style.marginBottom = "0";
+      const left = document.createElement("div");
+      left.style.display = "flex";
+      left.style.flexDirection = "column";
+      const t = document.createElement("div");
+      t.className = "setLabel";
+      t.textContent = item.title;
+      const v = document.createElement("div");
+      v.className = "setHelp";
+      v.style.fontSize = "13px";
+      v.style.color = "var(--text)";
+      v.textContent = item.value;
+      left.appendChild(t);
+      left.appendChild(v);
+      card.appendChild(left);
+      cards.appendChild(card);
+    }
+
+    settingsPanelProfile.appendChild(cards);
+
+    const hardwareLocal = document.createElement("div");
+    hardwareLocal.className = "setHelp";
+    hardwareLocal.style.marginTop = "10px";
+    hardwareLocal.textContent =
+      `Local hardware detail: ${summary.hardware.cpuModel}` +
+      `${summary.hardware.gpuModel ? ` | ${summary.hardware.gpuModel}` : " | GPU unknown"}`;
+    settingsPanelProfile.appendChild(hardwareLocal);
+
+    const visibilityRow = makeRow(
+      "Public profile",
+      "When enabled, share uses a public profile link and only public-safe hardware details."
+    );
+    const visibilityWrap = document.createElement("div");
+    visibilityWrap.className = "row";
+    visibilityWrap.style.justifyContent = "flex-end";
+    visibilityWrap.style.gap = "8px";
+    const visibilityLabel = document.createElement("span");
+    visibilityLabel.className = "muted";
+    visibilityLabel.style.fontSize = "12px";
+    visibilityLabel.textContent = visibility.publicEnabled ? "Public" : "Private";
+    const visibilitySwitch = makeSwitch(visibility.publicEnabled, (next) => {
+      void guarded(async () => {
+        await window.api.profileSetVisibility(next);
+        await renderProfileSettingsPanel();
+      });
+    });
+    visibilityWrap.appendChild(visibilityLabel);
+    visibilityWrap.appendChild(visibilitySwitch);
+    visibilityRow.row.appendChild(visibilityWrap);
+    settingsPanelProfile.appendChild(visibilityRow.row);
+
+    const shareRow = document.createElement("div");
+    shareRow.className = "row";
+    shareRow.style.justifyContent = "flex-start";
+    shareRow.style.gap = "8px";
+    shareRow.style.marginTop = "10px";
+
+    const btnShare = document.createElement("button");
+    btnShare.className = "btn btnPrimary";
+    btnShare.textContent = "Share Profile";
+    btnShare.onclick = async () => {
+      const publicPayload = {
+        generatedAt: summary.generatedAt,
+        player: {
+          displayName: String(
+            state.launcherAccount?.activeAccount?.displayName ||
+              accountName.textContent ||
+              "Fishbattery Player"
+          ),
+          tier: tierLabel
+        },
+        totals: {
+          playtime: formatPlaytime(summary.totals.totalPlaytimeMs),
+          installedMods: summary.totals.installedMods,
+          instances: summary.totals.instances,
+          sessions: summary.totals.sessions
+        },
+        activePreset: formatPresetLabel(summary.activeInstance?.presetId),
+        hardware: summary.hardwarePublic,
+        benchmark: summary.bestBenchmark
+          ? {
+              avgFps: summary.bestBenchmark.avgFps,
+              low1Fps: summary.bestBenchmark.low1Fps,
+              profile: summary.bestBenchmark.profile,
+              instanceName: summary.bestBenchmark.instanceName
+            }
+          : null,
+        setups: summary.setups.slice(0, 8).map((setup) => ({
+          name: setup.name,
+          version: setup.mcVersion,
+          loader: setup.loader,
+          installedMods: setup.installedMods,
+          playtime: formatPlaytime(setup.playtimeMs),
+          preset: formatPresetLabel(setup.presetId),
+          benchmarkFps: setup.latestBenchmark?.avgFps ?? null
+        }))
+      };
+      const encoded = encodePublicProfilePayload(publicPayload);
+      const profileUrl = `https://fishbatteryapp.github.io/fishbattery-web/profile.html?p=${encodeURIComponent(
+        encoded
+      )}`;
+      const publicSnippet =
+        `Fishbattery profile: ${formatPlaytime(summary.totals.totalPlaytimeMs)} playtime, ` +
+        `${summary.totals.installedMods} installed mods, ` +
+        `${summary.bestBenchmark ? `${summary.bestBenchmark.avgFps} FPS best` : "no benchmark yet"}, ` +
+        `${summary.hardwarePublic.cpuCores} cores / ${summary.hardwarePublic.ram} RAM.`;
+      const payload = visibility.publicEnabled && profileUrl ? `${publicSnippet}\n${profileUrl}` : publicSnippet;
+      try {
+        await navigator.clipboard.writeText(payload);
+        appendLog("[profile] Copied share payload to clipboard.");
+        alert(visibility.publicEnabled && profileUrl ? "Profile link copied." : "Profile summary copied.");
+      } catch (err: any) {
+        alert(`Could not copy profile share payload: ${String(err?.message ?? err)}`);
+      }
+    };
+
+    const btnExport = document.createElement("button");
+    btnExport.className = "btn";
+    btnExport.textContent = "Export Image";
+    btnExport.onclick = () => {
+      const canvas = renderProfileImage(summary, tierLabel);
+      if (!canvas) {
+        alert("Could not render profile image.");
+        return;
+      }
+      const href = canvas.toDataURL("image/png");
+      const a = document.createElement("a");
+      a.href = href;
+      a.download = "fishbattery-profile-summary.png";
+      a.click();
+      appendLog("[profile] Exported profile summary image.");
+    };
+
+    shareRow.appendChild(btnShare);
+    shareRow.appendChild(btnExport);
+    settingsPanelProfile.appendChild(shareRow);
+
+    const setupsTitle = document.createElement("div");
+    setupsTitle.className = "setLabel";
+    setupsTitle.style.marginTop = "12px";
+    setupsTitle.textContent = "Installed mod setups";
+    settingsPanelProfile.appendChild(setupsTitle);
+
+    const setupsHelp = document.createElement("div");
+    setupsHelp.className = "setHelp";
+    setupsHelp.textContent = "Per-instance setup summary (mods, preset, playtime, latest benchmark).";
+    settingsPanelProfile.appendChild(setupsHelp);
+
+    const setupRows = summary.setups.slice(0, 12);
+    if (!setupRows.length) {
+      const empty = document.createElement("div");
+      empty.className = "setHelp";
+      empty.style.marginTop = "8px";
+      empty.textContent = "No instances created yet.";
+      settingsPanelProfile.appendChild(empty);
+    } else {
+      for (const setup of setupRows) {
+        const row = document.createElement("div");
+        row.className = "setRow";
+        const left = document.createElement("div");
+        left.style.display = "flex";
+        left.style.flexDirection = "column";
+        const label = document.createElement("div");
+        label.className = "setLabel";
+        label.textContent = `${setup.name} (${setup.mcVersion} ${setup.loader})`;
+        const meta = document.createElement("div");
+        meta.className = "setHelp";
+        meta.textContent =
+          `${setup.installedMods} mods | ${formatPresetLabel(setup.presetId)} | ` +
+          `${formatPlaytime(setup.playtimeMs)} playtime` +
+          (setup.latestBenchmark ? ` | ${setup.latestBenchmark.avgFps} FPS` : " | no benchmark");
+        left.appendChild(label);
+        left.appendChild(meta);
+        row.appendChild(left);
+        settingsPanelProfile.appendChild(row);
+      }
+    }
+  } catch (err: any) {
+    if (token !== profileRenderToken) return;
+    clearPanel(settingsPanelProfile);
+    settingsPanelProfile.appendChild(makeH3("Profile Showcase"));
+    const failed = document.createElement("div");
+    failed.className = "setHelp";
+    failed.textContent = `Profile summary failed to load: ${String(err?.message ?? err)}`;
+    settingsPanelProfile.appendChild(failed);
+  }
+}
+
+function setSettingsTab(tab: "general" | "theme" | "install" | "window" | "java" | "hooks" | "profile") {
   const btns: Record<string, HTMLElement> = {
     general: settingsTabGeneral,
     theme: settingsTabTheme,
     install: settingsTabInstall,
     window: settingsTabWindow,
     java: settingsTabJava,
-    hooks: settingsTabHooks
+    hooks: settingsTabHooks,
+    profile: settingsTabProfile
   };
 
   const panels: Record<string, HTMLElement> = {
@@ -2858,13 +3172,17 @@ function setSettingsTab(tab: "general" | "theme" | "install" | "window" | "java"
     install: settingsPanelInstall,
     window: settingsPanelWindow,
     java: settingsPanelJava,
-    hooks: settingsPanelHooks
+    hooks: settingsPanelHooks,
+    profile: settingsPanelProfile
   };
 
   for (const k of Object.keys(btns)) btns[k].classList.toggle("active", k === tab);
   for (const k of Object.keys(panels)) panels[k].style.display = k === tab ? "" : "none";
 
   renderSettingsPanels();
+  if (tab === "profile") {
+    void renderProfileSettingsPanel();
+  }
 }
 
 settingsTabGeneral.onclick = () => setSettingsTab("general");
@@ -2873,6 +3191,7 @@ settingsTabInstall.onclick = () => setSettingsTab("install");
 settingsTabWindow.onclick = () => setSettingsTab("window");
 settingsTabJava.onclick = () => setSettingsTab("java");
 settingsTabHooks.onclick = () => setSettingsTab("hooks");
+settingsTabProfile.onclick = () => setSettingsTab("profile");
 
 async function renderServerEntries(instanceId: string | null) {
   serverList.innerHTML = "";

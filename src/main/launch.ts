@@ -13,10 +13,12 @@ import { getDataRoot, getAssetsRoot, getLibrariesRoot, getVersionsRoot } from ".
 import { autoInstallMissingDependenciesForInstance } from "./dependencyAutoInstall";
 import { getSelectedLocalCapeForAccount } from "./capes";
 import { installBridgeToMods } from "./bridgeInstaller";
+import { recordPlaySession } from "./profileShowcase";
 
 const running = new Map<string, any>(); // instanceId -> child process
 const launching = new Set<string>(); // instanceId currently in launcher bootstrap
 const cancelRequested = new Set<string>(); // stop requested before child process is available
+const runningStartedAt = new Map<string, number>(); // instanceId -> launch start timestamp
 
 export type LaunchRuntimePrefs = {
   jvmArgs?: string;
@@ -162,6 +164,11 @@ function killChildProcess(child: any) {
 export function stopInstance(instanceId: string) {
   const p = running.get(instanceId);
   if (p) {
+    const startedAt = runningStartedAt.get(instanceId);
+    if (startedAt && Number.isFinite(startedAt)) {
+      recordPlaySession(instanceId, Math.max(0, Date.now() - startedAt));
+    }
+    runningStartedAt.delete(instanceId);
     killChildProcess(p);
     running.delete(instanceId);
     launching.delete(instanceId);
@@ -627,16 +634,23 @@ async function launchResolved(
   if (cancelRequested.has(instance.id)) {
     onLog?.("[launcher] Stop requested during launch. Terminating process.");
     killChildProcess(child);
+    runningStartedAt.delete(instance.id);
     launching.delete(instance.id);
     cancelRequested.delete(instance.id);
     return false;
   }
 
   running.set(instance.id, child);
+  runningStartedAt.set(instance.id, Date.now());
   launching.delete(instance.id);
   cancelRequested.delete(instance.id);
 
   child.on?.("close", () => {
+    const startedAt = runningStartedAt.get(instance.id);
+    if (startedAt && Number.isFinite(startedAt)) {
+      recordPlaySession(instance.id, Math.max(0, Date.now() - startedAt));
+    }
+    runningStartedAt.delete(instance.id);
     running.delete(instance.id);
     launching.delete(instance.id);
     cancelRequested.delete(instance.id);
@@ -651,6 +665,11 @@ async function launchResolved(
   });
 
   child.on?.("error", (err: any) => {
+    const startedAt = runningStartedAt.get(instance.id);
+    if (startedAt && Number.isFinite(startedAt)) {
+      recordPlaySession(instance.id, Math.max(0, Date.now() - startedAt));
+    }
+    runningStartedAt.delete(instance.id);
     running.delete(instance.id);
     launching.delete(instance.id);
     cancelRequested.delete(instance.id);

@@ -88,6 +88,7 @@ import {
   quitAndInstallUpdate,
   setUpdateChannel
 } from "./updater";
+import { getProfileSummary, getProfileVisibility, setProfileVisibility } from "./profileShowcase";
 
 export function registerIpc() {
   ipcMain.handle("window:minimize", async (e) => {
@@ -630,6 +631,11 @@ export function registerIpc() {
         resolveConflict?: boolean;
       }
     ) => syncCloudNow(payload)
+  );
+  ipcMain.handle("profile:getSummary", async () => getProfileSummary());
+  ipcMain.handle("profile:getVisibility", async () => getProfileVisibility());
+  ipcMain.handle("profile:setVisibility", async (_e, publicEnabled: boolean) =>
+    setProfileVisibility(!!publicEnabled)
   );
 
   // ---------- Versions ----------
