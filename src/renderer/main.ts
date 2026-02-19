@@ -55,8 +55,6 @@ const accountAvatarImg = $("accountAvatarImg") as HTMLImageElement;
 const btnCreate = $("btnCreate");
 const btnImport = $("btnImport");
 const btnJoinPreferred = $("btnJoinPreferred");
-const btnPlayActive = $("btnPlayActive");
-const btnStopActive = $("btnStopActive");
 const btnClearLogs = $("btnClearLogs");
 const btnAnalyzeLogs = $("btnAnalyzeLogs");
 const btnApplyDiagnosisFix = $("btnApplyDiagnosisFix") as HTMLButtonElement;
@@ -2155,17 +2153,37 @@ function allInstancePresetIds(): InstancePresetId[] {
   return ["none", ...Object.keys(INSTANCE_PRESETS)] as InstancePresetId[];
 }
 
+type ResolvedPresetVariant = {
+  variant: InstancePresetVariant;
+  sourceLoader: LoaderKind;
+};
+
+// Resolve a preset variant for any loader by preferring exact match and then safe fallbacks.
+function resolvePresetVariantForLoader(
+  preset: InstancePreset,
+  loader: LoaderKind
+): ResolvedPresetVariant | null {
+  const exact = preset.variants?.[loader];
+  if (exact) return { variant: exact, sourceLoader: loader };
+
+  const fallbackOrder: LoaderKind[] = ["fabric", "vanilla", "quilt", "forge", "neoforge"];
+  for (const candidate of fallbackOrder) {
+    const v = preset.variants?.[candidate];
+    if (v) return { variant: v, sourceLoader: candidate };
+  }
+  return null;
+}
+
 // Available preset ids for loader.
 function availablePresetIdsForLoader(loader: LoaderKind): InstancePresetId[] {
-  const ids: InstancePresetId[] = ["none"];
-  for (const id of Object.keys(INSTANCE_PRESETS) as Array<Exclude<InstancePresetId, "none">>) {
-    if (INSTANCE_PRESETS[id].variants?.[loader]) ids.push(id);
-  }
-  return ids;
+  // Presets are now shown for all loaders and resolved via fallback at apply time.
+  void loader;
+  return allInstancePresetIds();
 }
 
 // Fill instance preset dropdown.
 function fillInstancePresetDropdown(selectedId: string | null, loader: LoaderKind = "fabric") {
+  void loader;
   instancePreset.innerHTML = "";
 
   const none = document.createElement("option");
@@ -2174,8 +2192,6 @@ function fillInstancePresetDropdown(selectedId: string | null, loader: LoaderKin
   instancePreset.appendChild(none);
 
   for (const id of Object.keys(INSTANCE_PRESETS) as Array<Exclude<InstancePresetId, "none">>) {
-    // Only show presets that provide a variant for the current loader.
-    if (!INSTANCE_PRESETS[id].variants?.[loader]) continue;
     const p = INSTANCE_PRESETS[id];
     const opt = document.createElement("option");
     opt.value = id;
@@ -2194,16 +2210,23 @@ async function applyInstancePreset(instanceId: string, mcVersion: string, loader
   if (presetId === "none") return;
   const preset = INSTANCE_PRESETS[presetId];
   if (!preset) return;
-  const variant = preset.variants?.[loader];
-  if (!variant) {
-    appendLog(`[preset] "${preset.name}" is not available for loader ${loader}.`);
+  const resolved = resolvePresetVariantForLoader(preset, loader);
+  if (!resolved) {
+    appendLog(`[preset] "${preset.name}" has no usable variant definition.`);
     return;
   }
+  const variant = resolved.variant;
+  const usesFallback = resolved.sourceLoader !== loader;
 
   setStatus(`Applying instance preset "${preset.name}"...`);
 
   try {
     appendLog(`[preset] Selecting "${preset.name}" for instance ${instanceId}.`);
+    if (usesFallback) {
+      appendLog(
+        `[preset] Using ${resolved.sourceLoader} preset profile as fallback for loader ${loader}.`
+      );
+    }
     try {
       await window.api.rollbackCreateSnapshot(
         instanceId,
@@ -2223,6 +2246,10 @@ async function applyInstancePreset(instanceId: string, mcVersion: string, loader
           appendLog(`[preset] Failed toggling mod ${mod.id}: ${String(err?.message ?? err)}`);
         }
       }
+    } else if (variant.enableMods.length) {
+      appendLog(
+        `[preset] Loader ${loader} does not use catalog mod preset toggles; applying memory/packs only.`
+      );
     }
 
     for (const pack of PACK_CATALOG) {
@@ -3878,8 +3905,9 @@ async function renderCompatibilityGuidance(instanceId: string | null) {
 
   for (const id of Object.keys(INSTANCE_PRESETS) as Array<Exclude<InstancePresetId, "none">>) {
     const preset = INSTANCE_PRESETS[id];
-    const variant = preset.variants?.[inst.loader as LoaderKind];
-    if (!variant) continue;
+    const resolved = resolvePresetVariantForLoader(preset, inst.loader as LoaderKind);
+    if (!resolved) continue;
+    const variant = resolved.variant;
     const needed = isFabricLoader ? variant.enableMods.filter((m) => byId.has(m)) : [];
     const missing = isFabricLoader ? needed.filter((m) => byId.get(m)?.status !== "ok") : [];
 
@@ -3899,7 +3927,9 @@ async function renderCompatibilityGuidance(instanceId: string | null) {
     sub.className = "setHelp";
     sub.textContent =
       !isFabricLoader
-        ? "Ready for this loader profile."
+        ? resolved.sourceLoader === (inst.loader as LoaderKind)
+          ? "Ready for this loader profile."
+          : `Uses ${resolved.sourceLoader} profile fallback for this loader.`
         : missing.length === 0
         ? "Ready for this version."
         : `Missing compatibility: ${missing.join(", ")}`;
@@ -5114,24 +5144,18 @@ async function renderInstances() {
     const btnPlay = document.createElement("button");
     btnPlay.className = "btn btnPrimary";
     const isRunning = !!runningSnapshot.byId.get(String(i.id || ""));
-    btnPlay.textContent = isRunning ? "Running" : "Play";
-    btnPlay.disabled = isRunning;
+    btnPlay.textContent = isRunning ? "Stop" : "Play";
     btnPlay.onclick = async () => {
+      if (isRunning) {
+        await window.api.launchStop(i.id);
+        return;
+      }
       if (state.instances?.activeInstanceId !== i.id) {
         await window.api.instancesSetActive(i.id);
         state.instances = await window.api.instancesList();
         await renderInstances();
       }
       await launchForInstance(i);
-    };
-
-    const btnUse = document.createElement("button");
-    btnUse.className = "btn";
-    btnUse.textContent = i.id === active ? "Active" : "Set Active";
-    btnUse.onclick = async () => {
-      await window.api.instancesSetActive(i.id);
-      state.instances = await window.api.instancesList();
-      await renderInstances();
     };
 
     // Delete button
@@ -5156,27 +5180,7 @@ async function renderInstances() {
       alert(`Instance exported:\n${res.path}`);
     };
 
-    const btnJoin = document.createElement("button");
-    btnJoin.className = "btn";
-    btnJoin.textContent = "Join Server";
-    btnJoin.onclick = async () => {
-      const s = await window.api.serversList(i.id);
-      const preferred = (s?.servers ?? []).find((x: any) => x.id === s.preferredServerId) ?? null;
-      if (!preferred) {
-        alert("No preferred server set for this instance.");
-        return;
-      }
-      if (state.instances?.activeInstanceId !== i.id) {
-        await window.api.instancesSetActive(i.id);
-        state.instances = await window.api.instancesList();
-        await renderInstances();
-      }
-      await launchForInstance(i, String(preferred.address || "").trim());
-    };
-
     actions.appendChild(btnPlay);
-    actions.appendChild(btnUse);
-    actions.appendChild(btnJoin);
     actions.appendChild(btnExport);
     actions.appendChild(btnDelete);
 
@@ -6258,16 +6262,6 @@ modalCreate.onclick = () =>
     }
   });
 
-btnPlayActive.onclick = () =>
-  guarded(async () => {
-    const active = state.instances?.activeInstanceId ?? null;
-    if (!active) return;
-
-    const inst = (state.instances?.instances ?? []).find((x: any) => x.id === active) ?? null;
-    if (!inst) return;
-    await launchForInstance(inst);
-  });
-
 btnJoinPreferred.onclick = () =>
   guarded(async () => {
     const target = await findPreferredServerTarget();
@@ -6283,13 +6277,6 @@ btnJoinPreferred.onclick = () =>
     }
 
     await launchForInstance(target.instance, String(target.server.address || "").trim());
-  });
-
-btnStopActive.onclick = () =>
-  guarded(async () => {
-    const active = state.instances?.activeInstanceId ?? null;
-    if (!active) return;
-    await window.api.launchStop(active);
   });
 
 btnClearLogs.onclick = () => {
