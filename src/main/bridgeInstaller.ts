@@ -3,12 +3,19 @@ import fs from "node:fs";
 import path from "node:path";
 import { pipeline } from "node:stream/promises";
 
+export type BridgeInstallResult = {
+  installed: boolean;
+  assetName: string;
+  tag: string;
+};
+
 export async function installBridgeToMods(modsDir: string, mcVersion: string, loader: string, onLog?: (m: string) => void) {
   const owner = "fishbatteryapp";
   const repo = "fishbattery-cape-bridge";
-  const tag = "v1.2.3"; // release we publish (updated)
-
-  const apiUrl = `https://api.github.com/repos/${owner}/${repo}/releases/tags/${tag}`;
+  const tag = String(process.env.FISHBATTERY_CAPE_BRIDGE_TAG || "").trim();
+  const apiUrl = tag
+    ? `https://api.github.com/repos/${owner}/${repo}/releases/tags/${tag}`
+    : `https://api.github.com/repos/${owner}/${repo}/releases/latest`;
   const headers: any = { "User-Agent": "FishbatteryLauncher/1.0", Accept: "application/vnd.github.v3+json" };
   if (process.env.GITHUB_TOKEN) headers.Authorization = `token ${process.env.GITHUB_TOKEN}`;
 
@@ -38,10 +45,26 @@ export async function installBridgeToMods(modsDir: string, mcVersion: string, lo
   }) || assets.find(a => String(a.name || "").toLowerCase().includes('fabric') && a.name.endsWith('.jar'));
 
   if (!desired) throw new Error('No suitable bridge JAR found in release assets');
+  const releaseTag = String(release?.tag_name || tag || "latest");
 
   fs.mkdirSync(modsDir, { recursive: true });
   const outPath = path.join(modsDir, desired.name);
   const tmpPath = outPath + ".partial";
+  const bridgeRegex = /fishbattery.*bridge|cape-bridge|fishbattery-cape-bridge/i;
+  try {
+    if (fs.existsSync(outPath) && fs.statSync(outPath).isFile() && fs.statSync(outPath).size > 0) {
+      onLog?.(`[capes] Bridge already up to date: ${desired.name}`);
+      return { installed: false, assetName: desired.name, tag: releaseTag };
+    }
+  } catch {}
+  for (const fileName of fs.readdirSync(modsDir)) {
+    if (!bridgeRegex.test(fileName)) continue;
+    if (fileName === desired.name) continue;
+    try {
+      fs.rmSync(path.join(modsDir, fileName), { force: true });
+      onLog?.(`[capes] Removed old bridge mod: ${fileName}`);
+    } catch {}
+  }
   onLog?.(`[capes] Downloading bridge asset ${desired.name} to ${outPath}`);
 
   // Helper: download a URL with simple redirect following (up to maxRedirects)
@@ -93,4 +116,5 @@ export async function installBridgeToMods(modsDir: string, mcVersion: string, lo
   }
 
   onLog?.(`[capes] Bridge asset installed: ${outPath}`);
+  return { installed: true, assetName: desired.name, tag: releaseTag };
 }

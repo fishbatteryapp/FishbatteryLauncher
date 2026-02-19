@@ -589,7 +589,8 @@ async function launchResolved(
       const modsDir = path.join(gameDir, "mods");
       const mods = fs.existsSync(modsDir) ? fs.readdirSync(modsDir) : [];
       const bridgeRegex = /fishbattery.*bridge|cape-bridge|fishbattery-cape-bridge/i;
-      const found = mods.find((f: string) => bridgeRegex.test(f));
+      const bridgeMods = mods.filter((f: string) => bridgeRegex.test(f));
+      const found = bridgeMods[0];
       if (found) {
         const fp = path.join(modsDir, found);
         let size = 0;
@@ -598,12 +599,12 @@ async function launchResolved(
         } catch {}
         onLog?.(`[capes] Bridge mod found in instance mods: ${found} (${formatBytes(size)})`);
       } else {
-        onLog?.(`[capes] Bridge mod not found in instance mods (${modsDir}). Attempting to fetch release and install bridge.`);
-        try {
-          await installBridgeToMods(modsDir, instance.mcVersion, instance.loader, onLog);
-        } catch (err) {
-          onLog?.(`[capes] Failed to install bridge mod: ${String((err as any)?.message ?? err)}`);
-        }
+        onLog?.(`[capes] Bridge mod not found in instance mods (${modsDir}).`);
+      }
+      try {
+        await installBridgeToMods(modsDir, instance.mcVersion, instance.loader, onLog);
+      } catch (err) {
+        onLog?.(`[capes] Failed to install bridge mod: ${String((err as any)?.message ?? err)}`);
       }
     } catch (err) {
       onLog?.(`[capes] Error checking mods folder for bridge mod: ${String((err as any)?.message ?? err)}`);
@@ -660,5 +661,3 @@ async function launchResolved(
 }
 
 // Bridge install moved to src/main/bridgeInstaller.ts
-
-

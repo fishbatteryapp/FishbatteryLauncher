@@ -104,7 +104,7 @@ function getCapeCacheRoot() {
 
 function getCachedCapePath(capeId: string, fileName: string, fallbackUrl?: string | null) {
   const ext = inferExt(fileName, fallbackUrl);
-  return path.join(getCapeCacheRoot(), `${sanitizeId(capeId)}${ext}`);
+  return path.join(getCapeCacheRoot(), `${sanitizeId(capeId)}-asset-v2${ext}`);
 }
 
 function getSelectionRoot() {
@@ -326,20 +326,20 @@ export async function setSelectedLocalCapeId(accountId: string, capeId: string |
 }
 
 async function ensureCachedCapeFile(item: LocalCapeItem): Promise<string | null> {
+  let existingPath: string | null = null;
   try {
-    if (fs.existsSync(item.fullPath) && fs.statSync(item.fullPath).size > 0) return item.fullPath;
+    if (fs.existsSync(item.fullPath) && fs.statSync(item.fullPath).size > 0) {
+      existingPath = item.fullPath;
+    }
   } catch {
-    // continue
+    existingPath = null;
   }
 
   fs.mkdirSync(path.dirname(item.fullPath), { recursive: true });
   let bytes: Buffer | null = null;
 
-  if (item.fileDataUrl) {
-    bytes = decodeDataUrl(item.fileDataUrl);
-  }
-
-  if (!bytes && item.downloadUrl) {
+  // Prefer authoritative binary asset URL first; fileDataUrl can be a preview/icon payload.
+  if (item.downloadUrl) {
     try {
       bytes = await downloadBuffer(item.downloadUrl);
     } catch {
@@ -347,11 +347,13 @@ async function ensureCachedCapeFile(item: LocalCapeItem): Promise<string | null>
     }
   }
 
-  if (!bytes && item.previewDataUrl?.startsWith("data:")) {
-    bytes = decodeDataUrl(item.previewDataUrl);
+  if (!bytes && item.fileDataUrl) {
+    bytes = decodeDataUrl(item.fileDataUrl);
   }
 
-  if (!bytes) return null;
+  // Never use preview/thumbnail bytes as the runtime cape texture:
+  // those assets are often UI cards/icons, not cape UV textures.
+  if (!bytes) return existingPath;
   fs.writeFileSync(item.fullPath, bytes);
   return item.fullPath;
 }

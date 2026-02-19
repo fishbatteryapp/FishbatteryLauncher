@@ -65,6 +65,7 @@ import {
 import { buildOptimizerPreview, applyOptimizer, restoreOptimizerDefaults } from "./optimizer";
 import { listBenchmarks, runBenchmark } from "./benchmark";
 import { fixDuplicateMods, validateInstanceMods } from "./modValidation";
+import { installBridgeToMods } from "./bridgeInstaller";
 import {
   createRollbackSnapshot,
   getLatestRollbackSnapshot,
@@ -743,6 +744,19 @@ export function registerIpc() {
   ipcMain.handle("mods:fixDuplicates", async (_e, instanceId: string) => {
     if (!instanceId) throw new Error("mods:fixDuplicates: instanceId missing");
     return fixDuplicateMods(instanceId);
+  });
+  ipcMain.handle("mods:syncBridge", async (_e, instanceId: string, mcVersion?: string) => {
+    if (!instanceId) throw new Error("mods:syncBridge: instanceId missing");
+    const db = listInstances();
+    const inst = db.instances.find((x: any) => x.id === instanceId);
+    const version = String(mcVersion || inst?.mcVersion || "").trim();
+    const loader = String(inst?.loader || "fabric").trim().toLowerCase();
+    if (!version) throw new Error("mods:syncBridge: mcVersion missing");
+    if (loader !== "fabric" && loader !== "quilt") {
+      return { installed: false, skipped: true, reason: `unsupported loader ${loader}` };
+    }
+    const modsDir = path.join(getInstanceDir(instanceId), "mods");
+    return installBridgeToMods(modsDir, version, loader);
   });
 
   // ---------- Packs (recommended resourcepacks/shaderpacks) ----------

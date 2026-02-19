@@ -5892,10 +5892,28 @@ modalUpdateMods.onclick = () =>
     if (!editInstanceId) return;
     const inst = (state.instances?.instances ?? []).find((x: any) => x.id === editInstanceId) ?? null;
     if (!inst) return;
+    let bridgeUpdated = false;
+    try {
+      const bridgeRes = await window.api.modsSyncBridge(inst.id, inst.mcVersion);
+      bridgeUpdated = !!bridgeRes?.installed;
+      if (bridgeUpdated) {
+        appendLog(`[mods] Updated cape bridge to latest (${bridgeRes.assetName ?? "bridge asset"}).`);
+      }
+    } catch (err: any) {
+      appendLog(`[mods] Cape bridge sync skipped: ${String(err?.message ?? err)}`);
+    }
     setStatus("Analyzing mod updates...");
     const plan = await window.api.modsPlanRefresh(inst.id, inst.mcVersion);
     if (!plan?.updates?.length) {
       setStatus("");
+      if (bridgeUpdated) {
+        appendLog("[mods] Smart update: bridge updated; no catalog mod updates found.");
+        await renderInstanceMods(inst.id);
+        const v = await window.api.modsValidate(inst.id);
+        renderCompatibilityState(v);
+        alert("Cape bridge updated to latest. No other mod updates available.");
+        return;
+      }
       appendLog("[mods] Smart update: no compatible updates found.");
       if (plan?.blocked?.length) {
         alert(`No applicable updates.\nBlocked mods: ${plan.blocked.map((x: any) => x.id).join(", ")}`);

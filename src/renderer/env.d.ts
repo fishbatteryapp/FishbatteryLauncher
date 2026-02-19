@@ -380,6 +380,13 @@ declare global {
         counts: { safe: number; caution: number; breaking: number };
       }>;
       modsRefreshSelected: (instanceId: string, mcVersion: string, selectedIds: string[]) => Promise<any>;
+      modsSyncBridge: (instanceId: string, mcVersion?: string) => Promise<{
+        installed: boolean;
+        assetName?: string;
+        tag?: string;
+        skipped?: boolean;
+        reason?: string;
+      }>;
       modsValidate: (instanceId: string) => Promise<{
         summary: "no-issues" | "warnings" | "critical";
         issues: Array<{
