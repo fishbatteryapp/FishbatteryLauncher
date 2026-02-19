@@ -237,7 +237,9 @@ async function requestAuth(
     const msg =
       (payload && typeof payload === "object" && "message" in payload && String((payload as any).message)) ||
       `Account API returned ${res.status}`;
-    throw new Error(msg);
+    const err: any = new Error(msg);
+    err.statusCode = Number(res.status || 0);
+    throw err;
   }
   if (!payload || typeof payload !== "object") return {};
   return payload as AuthResponse;
@@ -430,10 +432,26 @@ export async function getLauncherAccountState(): Promise<LauncherAccountState> {
     });
     return applyAuthResponse(response, session.accountId ?? null);
   } catch (err: unknown) {
-    saveSession(null);
-    const db: LauncherAccountDb = { activeAccountId: null, accounts: [], updatedAt: Date.now() };
-    writeDb(db);
-    return stateFromDb(db, String((err as Error)?.message || err));
+    const statusCode = Number((err as any)?.statusCode || 0);
+    const msg = String((err as Error)?.message || err || "");
+    const lowered = msg.toLowerCase();
+    const authInvalid =
+      statusCode === 401 ||
+      statusCode === 403 ||
+      lowered.includes("unauthorized") ||
+      lowered.includes("forbidden") ||
+      lowered.includes("token expired") ||
+      lowered.includes("invalid token");
+
+    if (authInvalid) {
+      saveSession(null);
+      const db: LauncherAccountDb = { activeAccountId: null, accounts: [], updatedAt: Date.now() };
+      writeDb(db);
+      return stateFromDb(db, msg);
+    }
+
+    // Transient API/network failure: keep local session/account state.
+    return stateFromDb(readDb(), msg);
   }
 }
 
