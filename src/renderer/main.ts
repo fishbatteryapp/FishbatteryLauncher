@@ -629,6 +629,7 @@ const defaultSettings: AppSettings = {
 };
 
 const THEME_ID_SET = new Set<ThemeId>(THEME_OPTIONS.map((o) => o.value));
+const CATALOG_ID_SET = new Set(CATALOG.map((m) => m.id));
 
 const INSTANCE_PRESETS: Record<Exclude<InstancePresetId, "none">, InstancePreset> = {
   "max-fps": {
@@ -765,11 +766,67 @@ const INSTANCE_PRESETS: Record<Exclude<InstancePresetId, "none">, InstancePreset
   }
 };
 
+type PresetModFallbackChains = Partial<Record<Exclude<InstancePresetId, "none">, Record<string, string[]>>>;
+const PRESET_MOD_FALLBACKS: PresetModFallbackChains = {
+  "max-fps": {
+    c2me: ["noisium", "starlight", "modernfix"],
+    starlight: ["noisium", "modernfix"],
+    indium: ["sodium-extra", "reeses-sodium-options"]
+  },
+  "shader-friendly": {
+    iris: ["indium", "sodium-extra", "dynamic-fps"],
+    indium: ["sodium-extra", "reeses-sodium-options"]
+  },
+  "distant-horizons-worldgen": {
+    distanthorizons: ["c2me", "noisium", "starlight"],
+    c2me: ["noisium", "starlight", "modernfix"]
+  },
+  pvp: {
+    "pvp-essentials-refined": ["dynamic-fps", "entityculling", "sodium-extra", "mod-menu"],
+    sodium: ["immediatelyfast", "entityculling", "dynamic-fps"]
+  }
+};
+
+const PRESET_SHARED_FALLBACKS: Partial<Record<Exclude<InstancePresetId, "none">, string[]>> = {
+  "max-fps": ["dynamic-fps", "entityculling", "immediatelyfast", "modernfix", "lithium", "ferrite-core"],
+  "shader-friendly": ["dynamic-fps", "entityculling", "immediatelyfast", "lithium", "ferrite-core", "sodium-extra"],
+  "distant-horizons-worldgen": ["noisium", "starlight", "c2me", "modernfix", "dynamic-fps", "entityculling"],
+  pvp: ["dynamic-fps", "entityculling", "immediatelyfast", "sodium-extra", "lithium", "ferrite-core", "mod-menu"]
+};
+
+const GLOBAL_SAFE_FALLBACKS = [
+  "dynamic-fps",
+  "entityculling",
+  "immediatelyfast",
+  "lithium",
+  "ferrite-core",
+  "modernfix",
+  "sodium-extra",
+  "reeses-sodium-options",
+  "mod-menu"
+];
+
+function uniqueCatalogIds(ids: string[]): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of ids) {
+    const id = String(raw || "").trim();
+    if (!id || seen.has(id) || !CATALOG_ID_SET.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+  }
+  return out;
+}
+
 const MOD_ALTERNATIVES: Record<string, string[]> = {
   sodium: ["Try the Shader Friendly path (Iris + Sodium).", "Use Max FPS preset for a known-good baseline."],
   iris: ["Use Max FPS preset when shaders are not required.", "Try Complementary Unbound/Photon after refreshing packs."],
   c2me: ["Use Noisium + Starlight as fallback worldgen optimization.", "Use Distant Horizons preset without C2ME."],
-  distanthorizons: ["Use Max FPS preset for stable vanilla-distance rendering.", "Try C2ME + Noisium workflow for worldgen speed."]
+  distanthorizons: ["Use Max FPS preset for stable vanilla-distance rendering.", "Try C2ME + Noisium workflow for worldgen speed."],
+  "pvp-essentials-refined": [
+    "Use Dynamic FPS + Entity Culling as a cross-version competitive fallback.",
+    "Keep the PvP resource packs enabled for readability while mod fallback activates."
+  ]
 };
 
 // Get settings.
@@ -2266,6 +2323,66 @@ async function applyInstancePreset(instanceId: string, mcVersion: string, loader
     // Resolve and install only enabled entries.
     if (loader === "fabric") {
       await window.api.modsRefresh(instanceId, mcVersion);
+
+      // Preset-specific fallback chain:
+      // If a target preset mod is unavailable for this MC version, attempt alternatives.
+      const typedPresetId = presetId as Exclude<InstancePresetId, "none">;
+      const fallbackChains = PRESET_MOD_FALLBACKS[typedPresetId] ?? {};
+      const sharedPool = PRESET_SHARED_FALLBACKS[typedPresetId] ?? [];
+      const desiredMods = variant.enableMods.filter((id) => CATALOG_ID_SET.has(id));
+      const modsAfterInitialRefresh = await window.api.modsList(instanceId);
+      const statusById = new Map<string, any>((modsAfterInitialRefresh?.mods || []).map((m: any) => [String(m.id), m]));
+
+      for (const wantedId of desiredMods) {
+        const wanted = statusById.get(wantedId);
+        if (wanted?.status === "ok") continue;
+
+        const chain = uniqueCatalogIds([
+          ...(fallbackChains[wantedId] || []),
+          ...sharedPool,
+          ...GLOBAL_SAFE_FALLBACKS
+        ]).filter((id) => id !== wantedId);
+        if (!chain.length) continue;
+
+        appendLog(
+          `[preset] ${wantedId} unavailable for ${mcVersion}; trying fallbacks: ${chain.join(", ")}`
+        );
+
+        let resolvedFallback: string | null = null;
+        for (const candidateId of chain) {
+          const known = statusById.get(candidateId);
+          // Fast path: already resolved/installed from earlier preset toggles.
+          if (known?.status === "ok") {
+            resolvedFallback = candidateId;
+            break;
+          }
+
+          try {
+            await window.api.modsSetEnabled(instanceId, candidateId, true);
+            await window.api.modsRefreshSelected(instanceId, mcVersion, [candidateId]);
+            const afterCandidate = await window.api.modsList(instanceId);
+            const candidate = (afterCandidate?.mods || []).find((m: any) => String(m.id) === candidateId);
+            if (candidate) statusById.set(candidateId, candidate);
+            if (candidate?.status === "ok") {
+              resolvedFallback = candidateId;
+              break;
+            }
+          } catch (err: any) {
+            appendLog(
+              `[preset] Fallback candidate ${candidateId} failed: ${String(err?.message ?? err)}`
+            );
+          }
+        }
+
+        if (resolvedFallback) {
+          try {
+            await window.api.modsSetEnabled(instanceId, wantedId, false);
+          } catch {}
+          appendLog(`[preset] Replaced ${wantedId} with fallback ${resolvedFallback}.`);
+        } else {
+          appendLog(`[preset] No compatible fallback found for ${wantedId} on ${mcVersion} (${loader}).`);
+        }
+      }
     }
     await window.api.packsRefresh(instanceId, mcVersion);
 
