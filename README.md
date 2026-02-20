@@ -139,6 +139,6 @@ If you find a bug:
 ## License
 
 Fishbattery Launcher  
-Copyright © 2026 Fishbattery
+© Copyright 2026 Fishbattery
 
 Licensed under the GNU General Public License v3.0.
