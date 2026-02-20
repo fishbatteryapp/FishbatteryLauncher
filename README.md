@@ -64,7 +64,7 @@ If you find a bug, include steps to reproduce and the relevant logs.
 ## License
 
 ### FishbatteryLauncher  
-Copyright (C) 2026 Gudmundur Magnus Johannsson  
+Copyright (C) 2026 Fishbattery
 
 Licensed under the GNU General Public License v3.0.
 
