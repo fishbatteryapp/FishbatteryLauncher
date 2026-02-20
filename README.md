@@ -142,3 +142,6 @@ Fishbattery Launcher
 © Copyright 2026 Fishbattery
 
 Licensed under the GNU General Public License v3.0.
+
+Fishbattery and the Fishbattery logo are not affiliated with Mojang or Microsoft.
+“Fishbattery” and related branding are the property of Fishbattery and may not be used without permission.
