@@ -1,5 +1,5 @@
-﻿// FishbatteryLauncher
-// Copyright (C) 2026 Gudmundur Magnus Johannsson
+// FishbatteryLauncher
+// Copyright (C) 2026 Fishbattery
 // Licensed under GPL v3
 //
 // Renderer overview:
