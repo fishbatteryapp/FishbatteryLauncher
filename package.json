@@ -31,7 +31,7 @@
     "semver": "^7.6.3",
     "skinview3d": "^3.2.0",
     "unzipper": "^0.12.3",
-    "zod": "^3.23.8"
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
