@@ -24,7 +24,7 @@
     "@types/adm-zip": "^0.5.7",
     "adm-zip": "^0.5.16",
     "electron-updater": "^6.7.3",
-    "electron-vite": "^2.3.0",
+    "electron-vite": "^5.0.0",
     "minecraft-launcher-core": "^3.17.2",
     "msmc": "^5.0.5",
     "node-fetch": "^3.3.2",
