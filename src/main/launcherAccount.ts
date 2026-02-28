@@ -185,25 +185,55 @@ function saveSession(session: LauncherSession | null): void {
   }
 
   memorySessionFallback = session;
-  const payload = Buffer.from(JSON.stringify(session), "utf8");
-  if (!safeStorage.isEncryptionAvailable()) return;
-
-  const encrypted = safeStorage.encryptString(payload.toString("utf8"));
   fs.mkdirSync(path.dirname(sessionPath), { recursive: true });
-  fs.writeFileSync(sessionPath, encrypted);
+  const plainPayload = JSON.stringify({
+    format: "plain",
+    session
+  });
+  if (!safeStorage.isEncryptionAvailable()) {
+    fs.writeFileSync(sessionPath, plainPayload, "utf8");
+    return;
+  }
+
+  try {
+    const encrypted = safeStorage.encryptString(JSON.stringify(session));
+    fs.writeFileSync(sessionPath, encrypted);
+  } catch {
+    // Fallback: keep session persistence even if secure storage is unavailable at runtime.
+    fs.writeFileSync(sessionPath, plainPayload, "utf8");
+  }
 }
 
 function loadSession(): LauncherSession | null {
   const sessionPath = getLauncherSessionPath();
-  if (fs.existsSync(sessionPath) && safeStorage.isEncryptionAvailable()) {
+  if (fs.existsSync(sessionPath)) {
+    const raw = fs.readFileSync(sessionPath);
+
+    if (safeStorage.isEncryptionAvailable()) {
+      try {
+        const decrypted = safeStorage.decryptString(raw);
+        const parsed = JSON.parse(decrypted) as LauncherSession;
+        if (parsed?.accessToken) return parsed;
+      } catch {
+        // Not encrypted or decrypt failed; try plain JSON fallback next.
+      }
+    }
+
     try {
-      const encrypted = fs.readFileSync(sessionPath);
-      const decrypted = safeStorage.decryptString(encrypted);
-      const parsed = JSON.parse(decrypted) as LauncherSession;
-      if (!parsed?.accessToken) return null;
-      return parsed;
+      const text = raw.toString("utf8");
+      const parsed = JSON.parse(text) as
+        | LauncherSession
+        | {
+            format?: string;
+            session?: LauncherSession;
+          };
+      const session =
+        parsed && typeof parsed === "object" && "session" in parsed
+          ? (parsed as { session?: LauncherSession }).session
+          : (parsed as LauncherSession);
+      if (session?.accessToken) return session;
     } catch {
-      return null;
+      // ignore parse errors and fall back to memory
     }
   }
   return memorySessionFallback;
