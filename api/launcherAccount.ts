@@ -208,17 +208,27 @@ async function requestAuth(
   const base = getApiBase();
   if (!base) throw new Error("Launcher account API is not configured.");
   const headers: Record<string, string> = {
-    "User-Agent": "FishbatteryLauncher/0.2.0",
     Accept: "application/json"
   };
   if (init.body) headers["Content-Type"] = "application/json";
   if (init.accessToken) headers.Authorization = `Bearer ${init.accessToken}`;
 
-  const res = await fetch(`${base}${path}`, {
-    method: init.method,
-    headers,
-    body: init.body ? JSON.stringify(init.body) : undefined
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${base}${path}`, {
+      method: init.method,
+      headers,
+      body: init.body ? JSON.stringify(init.body) : undefined
+    });
+  } catch (err: unknown) {
+    const detail =
+      (err && typeof err === "object" && "message" in err && String((err as { message?: unknown }).message)) ||
+      String(err || "Unknown network error");
+    throw new Error(
+      `Could not reach Fishbattery API (${base}${path}). ` +
+        `Check API uptime and CORS allowlist for https://tauri.localhost. Details: ${detail}`
+    );
+  }
 
   let payload: unknown = null;
   try {
