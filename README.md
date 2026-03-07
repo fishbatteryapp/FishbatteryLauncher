@@ -1,6 +1,6 @@
 # Fishbattery Launcher
 
-Fishbattery Launcher is a modern, underwater-themed Minecraft launcher built with Tauri + TypeScript.
+Fishbattery Launcher is a fast, underwater-themed Minecraft launcher focused on clean UX, modded play, and reliable cross-device updates.
 
 ## Tech Stack
 
@@ -92,6 +92,7 @@ Issues and pull requests are welcome.
 ## License
 
 Fishbattery Launcher
-© 2026 Fishbattery
+(c) 2026 Fishbattery
 
 Licensed under the GNU General Public License v3.0.
+
