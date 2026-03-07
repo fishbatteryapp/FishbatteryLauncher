@@ -1,6 +1,42 @@
 node_modules
+dist/
 out/
 release/
+src-tauri/target/
+src-tauri/gen/
+src-tauri/.cargo/
+target/
+*.log
+*.tmp
+*.bak
+.DS_Store
+Thumbs.db
+
+# Local environment config (keep example only)
+.env
+.env.*
+!.env.example
+
+# Secrets and signing material
+secrets/*
+!secrets/.gitkeep
+*.pem
+*.p12
+*.pfx
+*.cer
+*.crt
+*.key
+*.der
+
+# Local migration/archive scratch
+legacy-electron/
+runtime/OpenJDK*/
+src/src/
+src-tauri/src-tauri/
+api/api/
+compat/compat/
+shared/shared/
+
 ARCHITECTURE.md
 MONETIZATION_RULES.md
 LEGAL_NOTES.md
@@ -10,5 +46,4 @@ fishbattery-web/
 launcher-cape-bridges/
 capes/
 .vscode/
-secrets/
 scripts/generate_cape_keys.js

@@ -14,20 +14,25 @@ jobs:
   release:
     name: Release (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    environment: release
     strategy:
       fail-fast: false
       matrix:
         include:
           - os: windows-latest
-            build_command: npm run dist:win -- --publish always
             windows_sign: true
           - os: macos-latest
-            build_command: npm run dist:mac -- --publish always
             windows_sign: false
 
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       CSC_IDENTITY_AUTO_DISCOVERY: "false"
+      FISHBATTERY_UPDATER_PUBKEY: ${{ vars.FISHBATTERY_UPDATER_PUBKEY }}
+      FISHBATTERY_UPDATER_ENDPOINT_STABLE: ${{ vars.FISHBATTERY_UPDATER_ENDPOINT_STABLE }}
+      FISHBATTERY_UPDATER_ENDPOINT_BETA: ${{ vars.FISHBATTERY_UPDATER_ENDPOINT_BETA }}
+      TAURI_UPDATER_PUBKEY: ${{ vars.FISHBATTERY_UPDATER_PUBKEY }}
+      TAURI_UPDATER_ENDPOINT_STABLE: ${{ vars.FISHBATTERY_UPDATER_ENDPOINT_STABLE }}
+      TAURI_UPDATER_ENDPOINT_BETA: ${{ vars.FISHBATTERY_UPDATER_ENDPOINT_BETA }}
 
     steps:
       - name: Checkout
@@ -38,9 +43,18 @@ jobs:
         with:
           node-version: 22
           cache: npm
+          cache-dependency-path: package-lock.json
 
-      - name: Install dependencies
+      - name: Install frontend dependencies (Tauri)
         run: npm ci
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
 
       - name: Azure login (Trusted Signing)
         if: matrix.windows_sign && secrets.AZURE_CLIENT_ID != '' && secrets.AZURE_TENANT_ID != '' && secrets.AZURE_SUBSCRIPTION_ID != ''
@@ -50,12 +64,55 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Build and publish artifacts
-        run: ${{ matrix.build_command }}
+      - name: Verify Windows signing configuration
+        if: matrix.windows_sign
+        shell: bash
         env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          AZURE_TRUSTED_SIGNING_ENDPOINT: ${{ vars.AZURE_TRUSTED_SIGNING_ENDPOINT }}
+          AZURE_TRUSTED_SIGNING_ACCOUNT_NAME: ${{ vars.AZURE_TRUSTED_SIGNING_ACCOUNT_NAME }}
+          AZURE_TRUSTED_SIGNING_CERT_PROFILE_NAME: ${{ vars.AZURE_TRUSTED_SIGNING_CERT_PROFILE_NAME }}
+          AZURE_TRUSTED_SIGNING_PUBLISHER_NAME: ${{ vars.AZURE_TRUSTED_SIGNING_PUBLISHER_NAME }}
+        run: |
+          required=(
+            "AZURE_CLIENT_ID"
+            "AZURE_TENANT_ID"
+            "AZURE_SUBSCRIPTION_ID"
+            "AZURE_TRUSTED_SIGNING_ENDPOINT"
+            "AZURE_TRUSTED_SIGNING_ACCOUNT_NAME"
+            "AZURE_TRUSTED_SIGNING_CERT_PROFILE_NAME"
+            "AZURE_TRUSTED_SIGNING_PUBLISHER_NAME"
+          )
+          missing=0
+          for key in "${required[@]}"; do
+            if [ -z "${!key}" ]; then
+              echo "Missing required signing configuration: ${key}"
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            echo "Windows signing is required for release builds."
+            exit 1
+          fi
+
+      - name: Build and publish Tauri release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           WINDOWS_TRUSTED_SIGNING: ${{ matrix.windows_sign && secrets.AZURE_CLIENT_ID != '' && secrets.AZURE_TENANT_ID != '' && secrets.AZURE_SUBSCRIPTION_ID != '' && vars.AZURE_TRUSTED_SIGNING_ENDPOINT != '' && vars.AZURE_TRUSTED_SIGNING_ACCOUNT_NAME != '' && vars.AZURE_TRUSTED_SIGNING_CERT_PROFILE_NAME != '' && vars.AZURE_TRUSTED_SIGNING_PUBLISHER_NAME != '' }}
           AZURE_TRUSTED_SIGNING_ENDPOINT: ${{ vars.AZURE_TRUSTED_SIGNING_ENDPOINT }}
           AZURE_TRUSTED_SIGNING_ACCOUNT_NAME: ${{ vars.AZURE_TRUSTED_SIGNING_ACCOUNT_NAME }}
           AZURE_TRUSTED_SIGNING_CERT_PROFILE_NAME: ${{ vars.AZURE_TRUSTED_SIGNING_CERT_PROFILE_NAME }}
           AZURE_TRUSTED_SIGNING_PUBLISHER_NAME: ${{ vars.AZURE_TRUSTED_SIGNING_PUBLISHER_NAME }}
           AZURE_TRUSTED_SIGNING_TIMESTAMP_URL: ${{ vars.AZURE_TRUSTED_SIGNING_TIMESTAMP_URL }}
+        with:
+          tauriScript: npx tauri
+          tagName: ${{ github.ref_name }}
+          releaseName: Fishbattery Launcher ${{ github.ref_name }}
+          releaseBody: See the assets to download this version.
+          releaseDraft: false
+          prerelease: ${{ contains(github.ref_name, '-beta') || contains(github.ref_name, '-rc') }}
+          uploadUpdaterJson: true
