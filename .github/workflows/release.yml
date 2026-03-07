@@ -145,6 +145,13 @@ jobs:
       - name: Sign Windows release artifacts (post-build)
         if: matrix.windows_sign
         shell: pwsh
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_TRUSTED_SIGNING_ENDPOINT: ${{ vars.AZURE_TRUSTED_SIGNING_ENDPOINT }}
+          AZURE_TRUSTED_SIGNING_ACCOUNT_NAME: ${{ vars.AZURE_TRUSTED_SIGNING_ACCOUNT_NAME }}
+          AZURE_TRUSTED_SIGNING_CERT_PROFILE_NAME: ${{ vars.AZURE_TRUSTED_SIGNING_CERT_PROFILE_NAME }}
         run: |
           $bundleRoot = Join-Path $env:GITHUB_WORKSPACE "src-tauri/target/release/bundle"
           $targets = @()
@@ -158,10 +165,13 @@ jobs:
           foreach ($file in $targets) {
             Write-Host "Signing $($file.FullName)"
             trusted-signing-cli `
-              -e "$env:AZURE_TRUSTED_SIGNING_ENDPOINT" `
-              -a "$env:AZURE_TRUSTED_SIGNING_ACCOUNT_NAME" `
-              -c "$env:AZURE_TRUSTED_SIGNING_CERT_PROFILE_NAME" `
-              -d "FishbatteryLauncher" `
+              --azure-client-secret "$env:AZURE_CLIENT_SECRET" `
+              --azure-client-id "$env:AZURE_CLIENT_ID" `
+              --azure-tenant-id "$env:AZURE_TENANT_ID" `
+              --endpoint "$env:AZURE_TRUSTED_SIGNING_ENDPOINT" `
+              --account "$env:AZURE_TRUSTED_SIGNING_ACCOUNT_NAME" `
+              --certificate "$env:AZURE_TRUSTED_SIGNING_CERT_PROFILE_NAME" `
+              --description "FishbatteryLauncher" `
               "$($file.FullName)"
           }
 
