@@ -67,6 +67,14 @@ jobs:
         run: |
           "$env:USERPROFILE\.cargo\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
+      - name: Stage Trusted Signing CLI for Tauri
+        if: matrix.windows_sign
+        shell: pwsh
+        run: |
+          $src = "$env:USERPROFILE\.cargo\bin\trusted-signing-cli.exe"
+          Copy-Item $src "$env:GITHUB_WORKSPACE\trusted-signing-cli.exe" -Force
+          Copy-Item $src "$env:GITHUB_WORKSPACE\src-tauri\trusted-signing-cli.exe" -Force
+
       - name: Azure login (Trusted Signing)
         if: matrix.windows_sign
         uses: azure/login@v2
