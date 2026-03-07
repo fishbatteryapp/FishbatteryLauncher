@@ -26,6 +26,7 @@ jobs:
 
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       CSC_IDENTITY_AUTO_DISCOVERY: "false"
       FISHBATTERY_UPDATER_PUBKEY: ${{ vars.FISHBATTERY_UPDATER_PUBKEY }}
       FISHBATTERY_UPDATER_ENDPOINT_STABLE: ${{ vars.FISHBATTERY_UPDATER_ENDPOINT_STABLE }}
@@ -115,4 +116,4 @@ jobs:
           releaseBody: See the assets to download this version.
           releaseDraft: false
           prerelease: ${{ contains(github.ref_name, '-beta') || contains(github.ref_name, '-rc') }}
-          uploadUpdaterJson: true
+          includeUpdaterJson: true
