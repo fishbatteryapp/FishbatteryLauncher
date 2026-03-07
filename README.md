@@ -1,147 +1,97 @@
 # Fishbattery Launcher
 
-Fishbattery Launcher is a modern, underwater-themed Minecraft launcher focused on performance, customization, and cross-device consistency.
-
-It is built for players who want more control than the default launcher, without unnecessary complexity.
-
-## Features
-
-### Core Experience
-- Sign in with your Microsoft Minecraft account (multi-account support)
-- Launch vanilla Minecraft, including snapshots
-- Install and launch Fabric profiles
-- Fast and minimal interface inspired by modern developer tools
-
-
-### Instance-Based System
-- Fully isolated instances:
-  - Mods
-  - Saves
-  - Configs
-  - Resource packs
-- No conflicts between setups
-- Easy switching between different playstyles
-
-
-### Mod Management (Modrinth Integration)
-- Built-in Modrinth catalog
-- Install mods directly inside the launcher
-- Automatic compatibility filtering by Minecraft version
-- Simplified mod setup without manual file management
-
-
-### Customization
-- 15+ built-in themes (including premium themes)
-- Custom background support
-- Adjustable:
-  - Accent color
-  - Corner radius
-  - Border thickness
-  - Background transparency
-- Clean and fully customizable interface
-
-
-### Cloud Sync
-- Syncs your launcher setup across devices:
-  - Instances
-  - Settings
-  - Preferences
-- Log in and your setup is restored automatically
-
-
-### Capes System
-- Built-in cape system with:
-  - Free capes
-  - Premium capes
-  - Custom capes (via cloud)
-- Capes sync across devices
-
-
-### Performance Focus
-- Optimized for lightweight Fabric-based setups
-- Faster startup compared to the official launcher
-- Designed for smooth performance
-
-
-### Logs and Debugging
-- Built-in launch logs
-- Easier troubleshooting for crashes and mod issues
-
-
-## Quick Start
-
-### Requirements
-- Node.js 18+ (Node.js 20+ recommended)
-- A legitimate Minecraft Java Edition account
-
-### Run locally
-```
-npm install
-npm run dev
-```
-
-
-## Build
-
-```
-npm run dist
-```
-
-Output files are generated in the `release/` folder.
-
-
-## Data Location
-
-Launcher data is stored in Electron's `userData` directory:
-
-- Windows: `%APPDATA%/fishbattery`
-- macOS: `~/Library/Application Support/fishbattery`
-- Linux: `~/.config/fishbattery`
-
-
-## Customizing the Mod Catalog
-
-Edit:
-```
-src/main/modrinthCatalog.ts
-```
-
-Use Modrinth project IDs (not slugs).
-
-
-## Philosophy
-
-Fishbattery is built around three core ideas:
-
-- Simplicity — no unnecessary clutter  
-- Control — full ownership of your setup  
-- Consistency — the same experience on every device  
-
+Fishbattery Launcher is a modern, underwater-themed Minecraft launcher built with Tauri + TypeScript.
 
 ## Tech Stack
 
-- Electron
-- TypeScript
-- minecraft-launcher-core
-- msmc (Microsoft authentication)
+- Tauri 2
+- Rust (native commands)
+- TypeScript + Vite (frontend)
+- `msmc` (Microsoft authentication)
 - Modrinth API
 
+## Repository Layout
+
+- `src/` - frontend UI
+- `src-tauri/` - Rust backend (Tauri commands, app config)
+- `api/` - API-backed TypeScript methods
+- `compat/` - API/system invocation split
+- `shared/` - shared TypeScript modules
+
+## Requirements
+
+- Node.js 20+ (Node.js 22 recommended)
+- Rust toolchain (stable)
+- Platform build prerequisites for Tauri:
+  - Windows: Visual Studio C++ Build Tools
+  - macOS: Xcode Command Line Tools
+
+## Development
+
+Install dependencies:
+
+```bash
+npm install
+```
+
+Frontend only (Vite):
+
+```bash
+npm run dev
+```
+
+Run full Tauri app:
+
+```bash
+npm run tauri:dev
+```
+
+## Build
+
+Frontend bundle:
+
+```bash
+npm run build
+```
+
+Desktop app bundles:
+
+```bash
+npm run tauri:build
+```
+
+## Release
+
+Releases are built in GitHub Actions from tags matching `v*` using `.github/workflows/release.yml`.
+
+Windows signing uses Azure Trusted Signing and requires release-environment secrets/variables.
+
+## Updater Config
+
+The runtime updater uses environment variables (set in GitHub `release` environment for CI):
+
+- `FISHBATTERY_UPDATER_PUBKEY`
+- `FISHBATTERY_UPDATER_ENDPOINT_STABLE`
+- `FISHBATTERY_UPDATER_ENDPOINT_BETA` (optional, for beta channel)
+
+Tauri artifact signing uses:
+
+- `TAURI_SIGNING_PRIVATE_KEY`
+- `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`
+
+## Data Location
+
+App data is stored in the platform-specific Tauri app data directory for identifier:
+
+`app.fishbattery.launcher.tauri`
 
 ## Contributing
 
 Issues and pull requests are welcome.
 
-If you find a bug:
-- Include steps to reproduce
-- Attach relevant logs
-
-
 ## License
 
-Fishbattery Launcher  
-© Copyright 2026 Fishbattery
+Fishbattery Launcher
+Copyright (c) 2026 Fishbattery
 
 Licensed under the GNU General Public License v3.0.
-
-Fishbattery and the Fishbattery logo are not affiliated with Mojang or Microsoft.
-“Fishbattery” and related branding are the property of Fishbattery and may not be used without permission.
