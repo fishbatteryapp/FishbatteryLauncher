@@ -369,8 +369,7 @@ fn list_capes_from_dir(dir: &Path, tier: &str) -> Vec<LocalCapeItem> {
   items
 }
 
-fn list_local_capes_internal() -> LocalCapeCatalog {
-  let root = repo_root().join("capes");
+fn list_local_capes_from_root(root: &Path) -> LocalCapeCatalog {
   let free = root.join("free");
   let premium = root.join("premium");
   let founder = root.join("founder");
@@ -388,6 +387,28 @@ fn list_local_capes_internal() -> LocalCapeCatalog {
     ],
     items,
   }
+}
+
+fn list_local_capes_internal(app: &tauri::AppHandle) -> LocalCapeCatalog {
+  let mut roots: Vec<PathBuf> = Vec::new();
+
+  if let Ok(resource_dir) = app.path().resource_dir() {
+    roots.push(resource_dir.join("capes"));
+  }
+  if let Ok(cwd) = std::env::current_dir() {
+    roots.push(cwd.join("capes"));
+  }
+  roots.push(repo_root().join("capes"));
+
+  for root in roots {
+    let catalog = list_local_capes_from_root(&root);
+    if !catalog.items.is_empty() {
+      return catalog;
+    }
+  }
+
+  // Return best-effort paths for diagnostics even if no items are available.
+  list_local_capes_from_root(&repo_root().join("capes"))
 }
 
 fn run_msmc_login_script() -> AppResult<StoredAccount> {
@@ -512,7 +533,7 @@ pub fn accounts_remove(app: tauri::AppHandle, id: String) -> AppResult<()> {
 
 #[command]
 pub fn capes_list_local(app: tauri::AppHandle) -> AppResult<LocalCapeCatalog> {
-  let mut catalog = list_local_capes_internal();
+  let mut catalog = list_local_capes_internal(&app);
   if !can_use_cape_tier(&app, "founder") {
     catalog.items.retain(|item| item.tier != "founder");
   }
@@ -526,7 +547,7 @@ pub fn capes_get_local_selection(app: tauri::AppHandle, account_id: String) -> A
     return Err("capes_get_local_selection: accountId missing".to_string());
   }
   let mut db = read_selection_db(&app)?;
-  let catalog = list_local_capes_internal();
+  let catalog = list_local_capes_internal(&app);
   let selected = db.by_account_id.get(&account).cloned().flatten();
   let valid = selected.filter(|id| {
     if let Some(cape) = find_cape_by_id(&catalog, id) {
@@ -556,7 +577,7 @@ pub fn capes_set_local_selection(
   }
   let normalized = cape_id.map(|x| x.trim().to_string()).filter(|x| !x.is_empty());
   if let Some(ref chosen) = normalized {
-    let catalog = list_local_capes_internal();
+    let catalog = list_local_capes_internal(&app);
     let item = find_cape_by_id(&catalog, chosen);
     if item.is_none() {
       return Err("capes_set_local_selection: cape not found".to_string());
