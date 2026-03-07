@@ -180,7 +180,7 @@ jobs:
             npx tauri signer sign "$($file.FullName)"
           }
 
-          $latest = Get-ChildItem $bundleRoot -Recurse -Filter "latest.json" | Select-Object -First 1
+          $latest = Get-ChildItem $env:GITHUB_WORKSPACE -Recurse -Filter "latest.json" -ErrorAction SilentlyContinue | Select-Object -First 1
           if (-not $latest) {
             throw "latest.json not found in bundle output."
           }
@@ -219,7 +219,7 @@ jobs:
           $targets += Get-ChildItem (Join-Path $bundleRoot "msi/*.msi") -ErrorAction SilentlyContinue
           $targets += Get-ChildItem (Join-Path $bundleRoot "nsis/*.exe.sig") -ErrorAction SilentlyContinue
           $targets += Get-ChildItem (Join-Path $bundleRoot "msi/*.msi.sig") -ErrorAction SilentlyContinue
-          $targets += Get-ChildItem $bundleRoot -Recurse -Filter "latest.json" -ErrorAction SilentlyContinue
+          $targets += Get-ChildItem $env:GITHUB_WORKSPACE -Recurse -Filter "latest.json" -ErrorAction SilentlyContinue
 
           foreach ($file in $targets) {
             Write-Host "Uploading signed asset $($file.Name) to release $tag"
