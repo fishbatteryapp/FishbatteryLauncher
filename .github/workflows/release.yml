@@ -152,6 +152,8 @@ jobs:
           AZURE_TRUSTED_SIGNING_ENDPOINT: ${{ vars.AZURE_TRUSTED_SIGNING_ENDPOINT }}
           AZURE_TRUSTED_SIGNING_ACCOUNT_NAME: ${{ vars.AZURE_TRUSTED_SIGNING_ACCOUNT_NAME }}
           AZURE_TRUSTED_SIGNING_CERT_PROFILE_NAME: ${{ vars.AZURE_TRUSTED_SIGNING_CERT_PROFILE_NAME }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           $bundleRoot = Join-Path $env:GITHUB_WORKSPACE "src-tauri/target/release/bundle"
           $targets = @()
@@ -173,7 +175,38 @@ jobs:
               --certificate "$env:AZURE_TRUSTED_SIGNING_CERT_PROFILE_NAME" `
               --description "FishbatteryLauncher" `
               "$($file.FullName)"
+
+            Write-Host "Regenerating updater signature for $($file.FullName)"
+            npx tauri signer sign "$($file.FullName)"
           }
+
+          $latest = Get-ChildItem $bundleRoot -Recurse -Filter "latest.json" | Select-Object -First 1
+          if (-not $latest) {
+            throw "latest.json not found in bundle output."
+          }
+
+          $latestJson = Get-Content $latest.FullName -Raw | ConvertFrom-Json
+          $exe = Get-ChildItem (Join-Path $bundleRoot "nsis/*.exe") -ErrorAction SilentlyContinue | Select-Object -First 1
+          $msi = Get-ChildItem (Join-Path $bundleRoot "msi/*.msi") -ErrorAction SilentlyContinue | Select-Object -First 1
+          $exeSig = if ($exe -and (Test-Path "$($exe.FullName).sig")) { (Get-Content "$($exe.FullName).sig" -Raw).Trim() } else { $null }
+          $msiSig = if ($msi -and (Test-Path "$($msi.FullName).sig")) { (Get-Content "$($msi.FullName).sig" -Raw).Trim() } else { $null }
+
+          if ($latestJson.platforms.'windows-x86_64-nsis' -and $exeSig) {
+            $latestJson.platforms.'windows-x86_64-nsis'.signature = $exeSig
+          }
+          if ($latestJson.platforms.'windows-x86_64-msi' -and $msiSig) {
+            $latestJson.platforms.'windows-x86_64-msi'.signature = $msiSig
+          }
+          if ($latestJson.platforms.'windows-x86_64') {
+            $targetUrl = [string]$latestJson.platforms.'windows-x86_64'.url
+            if ($targetUrl -like "*.exe" -and $exeSig) {
+              $latestJson.platforms.'windows-x86_64'.signature = $exeSig
+            } elseif ($msiSig) {
+              $latestJson.platforms.'windows-x86_64'.signature = $msiSig
+            }
+          }
+
+          $latestJson | ConvertTo-Json -Depth 30 | Set-Content -NoNewline $latest.FullName
 
       - name: Replace release assets with signed Windows artifacts
         if: matrix.windows_sign
@@ -184,6 +217,9 @@ jobs:
           $targets = @()
           $targets += Get-ChildItem (Join-Path $bundleRoot "nsis/*.exe") -ErrorAction SilentlyContinue
           $targets += Get-ChildItem (Join-Path $bundleRoot "msi/*.msi") -ErrorAction SilentlyContinue
+          $targets += Get-ChildItem (Join-Path $bundleRoot "nsis/*.exe.sig") -ErrorAction SilentlyContinue
+          $targets += Get-ChildItem (Join-Path $bundleRoot "msi/*.msi.sig") -ErrorAction SilentlyContinue
+          $targets += Get-ChildItem $bundleRoot -Recurse -Filter "latest.json" -ErrorAction SilentlyContinue
 
           foreach ($file in $targets) {
             Write-Host "Uploading signed asset $($file.Name) to release $tag"
