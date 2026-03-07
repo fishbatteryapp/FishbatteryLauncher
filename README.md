@@ -92,6 +92,6 @@ Issues and pull requests are welcome.
 ## License
 
 Fishbattery Launcher
-Copyright (c) 2026 Fishbattery
+© 2026 Fishbattery
 
 Licensed under the GNU General Public License v3.0.
