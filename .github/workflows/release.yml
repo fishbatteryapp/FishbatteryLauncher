@@ -61,6 +61,12 @@ jobs:
         if: matrix.windows_sign
         run: cargo install --locked trusted-signing-cli
 
+      - name: Add Cargo bin to PATH
+        if: matrix.windows_sign
+        shell: pwsh
+        run: |
+          "$env:USERPROFILE\.cargo\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
       - name: Azure login (Trusted Signing)
         if: matrix.windows_sign
         uses: azure/login@v2
