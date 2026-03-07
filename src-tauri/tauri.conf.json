@@ -1,0 +1,35 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Fishbattery Launcher",
+  "version": "0.1.0",
+  "identifier": "app.fishbattery.launcher.tauri",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build",
+    "devUrl": "http://localhost:15000",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Fishbattery Launcher",
+        "width": 1280,
+        "height": 800,
+        "resizable": true,
+        "decorations": false,
+        "transparent": true
+      }
+    ]
+  },
+  "bundle": {
+    "active": true,
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "targets": "all"
+  }
+}
