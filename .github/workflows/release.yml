@@ -57,6 +57,10 @@ jobs:
         with:
           workspaces: src-tauri -> target
 
+      - name: Install Trusted Signing CLI
+        if: matrix.windows_sign
+        run: cargo install --locked trusted-signing-cli
+
       - name: Azure login (Trusted Signing)
         if: matrix.windows_sign
         uses: azure/login@v2
