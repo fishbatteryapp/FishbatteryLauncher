@@ -57,7 +57,7 @@ jobs:
           workspaces: src-tauri -> target
 
       - name: Azure login (Trusted Signing)
-        if: matrix.windows_sign && secrets.AZURE_CLIENT_ID != '' && secrets.AZURE_TENANT_ID != '' && secrets.AZURE_SUBSCRIPTION_ID != ''
+        if: matrix.windows_sign
         uses: azure/login@v2
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
@@ -102,7 +102,7 @@ jobs:
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          WINDOWS_TRUSTED_SIGNING: ${{ matrix.windows_sign && secrets.AZURE_CLIENT_ID != '' && secrets.AZURE_TENANT_ID != '' && secrets.AZURE_SUBSCRIPTION_ID != '' && vars.AZURE_TRUSTED_SIGNING_ENDPOINT != '' && vars.AZURE_TRUSTED_SIGNING_ACCOUNT_NAME != '' && vars.AZURE_TRUSTED_SIGNING_CERT_PROFILE_NAME != '' && vars.AZURE_TRUSTED_SIGNING_PUBLISHER_NAME != '' }}
+          WINDOWS_TRUSTED_SIGNING: ${{ matrix.windows_sign }}
           AZURE_TRUSTED_SIGNING_ENDPOINT: ${{ vars.AZURE_TRUSTED_SIGNING_ENDPOINT }}
           AZURE_TRUSTED_SIGNING_ACCOUNT_NAME: ${{ vars.AZURE_TRUSTED_SIGNING_ACCOUNT_NAME }}
           AZURE_TRUSTED_SIGNING_CERT_PROFILE_NAME: ${{ vars.AZURE_TRUSTED_SIGNING_CERT_PROFILE_NAME }}
