@@ -1,6 +1,6 @@
 [package]
-name = "fishbattery-tauri"
-version = "0.1.0"
+name = "fishbattery-launcher"
+version = "0.4.0"
 description = "Fishbattery launcher (Tauri migration target)"
 authors = ["Fishbattery"]
 license = "GPL-3.0"
