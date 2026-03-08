@@ -862,11 +862,12 @@ fn run_msmc_login_script(app: &tauri::AppHandle) -> AppResult<StoredAccount> {
   const ACCOUNT_JSON_PREFIX: &str = "__FB_ACCOUNT_JSON__:";
   let runtime_root = resolve_msmc_runtime_root(app)
     .ok_or_else(|| "accounts_add: login helper runtime is missing from app resources.".to_string())?;
-  let script = runtime_root.join("scripts").join("tauri-msmc-login.mjs");
-  if !script.exists() {
+  let script_rel = PathBuf::from("scripts").join("tauri-msmc-login.mjs");
+  let script_abs = runtime_root.join(&script_rel);
+  if !script_abs.exists() {
     return Err(format!(
       "accounts_add: helper script not found at {}",
-      script.to_string_lossy()
+      script_abs.to_string_lossy()
     ));
   }
 
@@ -881,7 +882,7 @@ fn run_msmc_login_script(app: &tauri::AppHandle) -> AppResult<StoredAccount> {
   };
 
   let output = Command::new(node_cmd.as_os_str())
-    .arg(script.as_os_str())
+    .arg(script_rel.as_os_str())
     .current_dir(runtime_root.as_os_str())
     .output()
     .map_err(|e| {
