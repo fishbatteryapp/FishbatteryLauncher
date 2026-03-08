@@ -91,6 +91,8 @@ export const SYSTEM_METHODS = new Set([
   "contentPickFiles",
   "contentAdd",
   "contentList",
+  "localModsMetadata",
+  "localPacksMetadata",
   "contentRemove",
   "contentToggleEnabled",
   "fabricPickLoader",

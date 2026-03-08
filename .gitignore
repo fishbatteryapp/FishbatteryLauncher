@@ -4,6 +4,8 @@ out/
 release/
 src-tauri/target/
 src-tauri/gen/
+src-tauri/resources/msmc-runtime/
+src-tauri/resources/secrets/
 src-tauri/.cargo/
 target/
 *.log

@@ -70,6 +70,18 @@ function mirrorLauncherAccountsDb(db: LauncherAccountDb): void {
   void invoke("launcher_accounts_sync", { payload: db }).catch(() => {});
 }
 
+function mirrorLauncherSession(session: LauncherSession | null): void {
+  const payload = session
+    ? session
+    : {
+        accessToken: null,
+        refreshToken: null,
+        accountId: null,
+        updatedAt: Date.now()
+      };
+  void invoke("launcher_session_sync", { payload }).catch(() => {});
+}
+
 function readRuntimeOverride(name: string): string {
   const g = globalThis as Record<string, unknown>;
   const direct = g[name];
@@ -150,6 +162,7 @@ function loadSession(): LauncherSession | null {
     if (!raw) return null;
     const parsed = JSON.parse(raw) as LauncherSession;
     if (!parsed?.accessToken) return null;
+    mirrorLauncherSession(parsed);
     return parsed;
   } catch {
     return null;
@@ -159,9 +172,11 @@ function loadSession(): LauncherSession | null {
 function saveSession(session: LauncherSession | null): void {
   if (!session) {
     localStorage.removeItem(SESSION_KEY);
+    mirrorLauncherSession(null);
     return;
   }
   localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+  mirrorLauncherSession(session);
 }
 
 function normalizeAccount(raw: unknown): LauncherAccount | null {
@@ -199,6 +214,16 @@ function stateFromDb(db: LauncherAccountDb, error: string | null = null): Launch
     updatedAt: db.updatedAt || null,
     error
   };
+}
+
+function shouldInvalidateLocalSession(statusCode: number, message: string): boolean {
+  const lowered = String(message || "").toLowerCase();
+  if (statusCode === 401) return true;
+  if (lowered.includes("token expired")) return true;
+  if (lowered.includes("invalid token")) return true;
+  if (lowered.includes("jwt expired")) return true;
+  if (lowered.includes("jwt malformed")) return true;
+  return false;
 }
 
 async function requestAuth(
@@ -306,14 +331,7 @@ export async function launcherAccountGetState(): Promise<LauncherAccountState> {
   } catch (err: unknown) {
     const statusCode = Number((err as any)?.statusCode || 0);
     const msg = String((err as Error)?.message || err || "");
-    const lowered = msg.toLowerCase();
-    const authInvalid =
-      statusCode === 401 ||
-      statusCode === 403 ||
-      lowered.includes("unauthorized") ||
-      lowered.includes("forbidden") ||
-      lowered.includes("token expired") ||
-      lowered.includes("invalid token");
+    const authInvalid = shouldInvalidateLocalSession(statusCode, msg);
 
     if (authInvalid) {
       saveSession(null);

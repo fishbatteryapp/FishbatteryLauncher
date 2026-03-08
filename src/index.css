@@ -52,23 +52,48 @@ body{
 }
 
 .windowShell{
+  position: relative;
   width: 100%;
   height: 100%;
   border-radius: 14px;
   clip-path: inset(0 round 14px);
   overflow: hidden;
   border: 1px solid rgba(112, 177, 220, .22);
+  background: var(--bg);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .35);
+}
+
+.customBgImageLayer{
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: none;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.windowShell::before{
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
   background:
     var(--bg-layer-1),
     var(--bg-layer-2),
     var(--bg-layer-3),
-    var(--custom-bg-overlay),
-    var(--custom-bg-image),
-    var(--bg);
-  background-size: auto, auto, auto, auto, cover, auto;
-  background-position: center, center, center, center, center, center;
-  background-repeat: no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, .35);
+    var(--custom-bg-overlay);
+  background-size: auto, auto, auto, auto;
+  background-position: center, center, center, center;
+  background-repeat: no-repeat, no-repeat, no-repeat, no-repeat;
+}
+
+.windowTopbar,
+.app{
+  position: relative;
+  z-index: 2;
 }
 
 .windowTopbar{
@@ -808,6 +833,7 @@ pre{
 
 .modal{
   width: min(980px, calc(100vw - 28px));
+  height: calc(100vh - 28px);
   max-height: calc(100vh - 28px);
   background: var(--panel);
   border: 1px solid var(--border);
@@ -832,6 +858,12 @@ pre{
   padding: 14px;
   overflow: auto;
   min-height: 0;
+}
+
+#modalPanelGeneral{
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
 }
 
 .field{ margin-bottom: 12px; }
@@ -1065,6 +1097,7 @@ pre{
 
   .modal{
     width: calc(100vw - 16px);
+    height: calc(100vh - 16px);
     max-height: calc(100vh - 16px);
   }
 }
@@ -1930,6 +1963,41 @@ pre{
 .sourceTabs{display:flex; gap:8px; flex-wrap:wrap}
 .sourceTabs .btn{min-width:110px}
 .sourceTabs .btn.btnPrimary{box-shadow:none}
+
+#createProviderMarketplace {
+  align-items: stretch;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+#createProviderMarketplace > div {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1 1 auto;
+  width: 100%;
+}
+
+#createModrinthPanel,
+#createCurseForgePanel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+#modrinthSearchResults,
+#providerSearchResults {
+  flex: 1 1 auto;
+  min-height: 220px;
+  max-height: none !important;
+  overflow: auto;
+}
+
+#providerArchiveActions {
+  margin-top: auto !important;
+}
 .filterToggle{
   border:1px solid var(--border2);
   background:rgba(255,255,255,.03);

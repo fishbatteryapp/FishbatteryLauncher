@@ -20,6 +20,7 @@
 
   <body>
     <div class="windowShell">
+    <img id="customBgImageLayer" class="customBgImageLayer" alt="" aria-hidden="true" />
     <div id="windowTopbar" class="windowTopbar">
       <div class="windowTopbarLeft">
         <span class="windowTopbarBrand">Fishbattery Launcher</span>
@@ -120,7 +121,7 @@
               <p>Manage instances and launch Minecraft.</p>
             </div>
             <div class="topActions">
-              <button id="btnCreate" class="btn btnPrimary">+ Create</button>
+              <button id="btnCreate" class="btn btnPrimary">Create</button>
               <button id="btnImport" class="btn">Import</button>
               <button id="btnJoinPreferred" class="btn">Join Server</button>
             </div>
@@ -417,11 +418,25 @@
               <button id="modalUpdateMods" class="btn">Update Mods</button>
             </div>
 
-            <div style="height:12px"></div>
-            <div id="modalCompatGuidance"></div>
+            <div style="height:16px"></div>
+            <div class="row" style="justify-content:space-between; align-items:center">
+              <div>
+                <div class="setLabel">Installed mods</div>
+                <div class="muted" style="font-size:12px">
+                  Local mods (.jar) currently in this instance.
+                </div>
+              </div>
+              <div class="row" style="gap:8px">
+                <button id="modalUploadLocalMod" class="btn">Upload .jar</button>
+                <button id="modalOpenInstanceFolder" class="btn">Open Folder</button>
+              </div>
+            </div>
 
             <div style="height:12px"></div>
-            <div id="modalModsList"></div>
+            <div id="modalLocalModsList"></div>
+
+            <div style="height:12px"></div>
+            <div id="modalCompatGuidance"></div>
 
             <div style="height:16px"></div>
             <div class="setRow" style="align-items:flex-start">
@@ -443,36 +458,9 @@
 
             <div style="height:10px"></div>
             <div id="instanceModrinthSearchResults" style="max-height:260px; overflow:auto"></div>
-
-            <div style="height:16px"></div>
-            <div class="row" style="justify-content:space-between; align-items:center">
-              <div>
-                <div class="muted" style="font-size:12px">
-                  Local mods (.jar) you manually add to this instance.
-                </div>
-              </div>
-              <div class="row" style="gap:8px">
-                <button id="modalUploadLocalMod" class="btn">Upload .jar</button>
-                <button id="modalOpenInstanceFolder" class="btn">Open Folder</button>
-              </div>
-            </div>
-
-            <div style="height:12px"></div>
-            <div id="modalLocalModsList"></div>
           </div>
 
           <div id="modalPanelPacks" style="display:none">
-            <div class="row" style="justify-content:space-between; align-items:center">
-              <div>
-                <div class="muted" style="font-size:12px">
-                  Recommended packs are resolved from Modrinth for this Minecraft version.
-                </div>
-              </div>
-              <button id="modalUpdatePacks" class="btn">Update Packs</button>
-            </div>
-            <div style="height:12px"></div>
-            <div id="recommendedPacksList"></div>
-
             <div style="height:16px"></div>
             <div class="setRow" style="align-items:flex-start">
               <div style="display:flex; flex-direction:column; gap:6px; flex:1">

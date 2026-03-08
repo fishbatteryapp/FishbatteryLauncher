@@ -627,6 +627,35 @@ declare global {
         instanceId: string,
         kind: "mods" | "resourcepacks" | "shaderpacks"
       ) => Promise<Array<{ name: string; size: number; modifiedMs: number }>>;
+      localModsMetadata: (
+        instanceId: string,
+        names: string[]
+      ) => Promise<{
+        items: Array<{
+          fileName: string;
+          title: string;
+          description: string;
+          iconUrl?: string | null;
+          author?: string | null;
+          source: "modrinth" | "curseforge";
+          projectId?: string | null;
+        }>;
+      }>;
+      localPacksMetadata: (
+        instanceId: string,
+        kind: "resourcepacks" | "shaderpacks",
+        names: string[]
+      ) => Promise<{
+        items: Array<{
+          fileName: string;
+          title: string;
+          description: string;
+          iconUrl?: string | null;
+          author?: string | null;
+          source: "modrinth";
+          projectId?: string | null;
+        }>;
+      }>;
       contentRemove: (
         instanceId: string,
         kind: "mods" | "resourcepacks" | "shaderpacks",

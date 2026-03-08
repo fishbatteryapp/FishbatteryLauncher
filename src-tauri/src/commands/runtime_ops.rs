@@ -515,6 +515,56 @@ fn servers_path(app: &tauri::AppHandle, instance_id: &str) -> AppResult<PathBuf>
   Ok(instance_dir(app, instance_id)?.join("servers.json"))
 }
 
+fn content_metadata_path(app: &tauri::AppHandle, instance_id: &str) -> AppResult<PathBuf> {
+  Ok(instance_dir(app, instance_id)?.join("content-metadata.json"))
+}
+
+fn normalize_content_metadata(mut v: Value) -> Value {
+  if !v.is_object() {
+    v = json!({});
+  }
+  for kind in ["mods", "resourcepacks", "shaderpacks"] {
+    if !v.get(kind).map(|x| x.is_object()).unwrap_or(false) {
+      v[kind] = json!({});
+    }
+  }
+  v
+}
+
+fn read_content_metadata(app: &tauri::AppHandle, instance_id: &str) -> AppResult<Value> {
+  let path = content_metadata_path(app, instance_id)?;
+  Ok(normalize_content_metadata(read_json_file(&path, json!({}))))
+}
+
+fn write_content_metadata(app: &tauri::AppHandle, instance_id: &str, value: &Value) -> AppResult<()> {
+  let path = content_metadata_path(app, instance_id)?;
+  write_json_file(&path, &normalize_content_metadata(value.clone()))
+}
+
+fn content_metadata_get(cache: &Value, kind: &str, file_name: &str) -> Option<Value> {
+  let key = file_name.trim().to_ascii_lowercase();
+  if key.is_empty() {
+    return None;
+  }
+  cache.get(kind)?.get(&key).cloned()
+}
+
+fn content_metadata_put(cache: &mut Value, kind: &str, file_name: &str, meta: Value) {
+  let key = file_name.trim().to_ascii_lowercase();
+  if key.is_empty() {
+    return;
+  }
+  if !cache.get(kind).map(|x| x.is_object()).unwrap_or(false) {
+    cache[kind] = json!({});
+  }
+  let mut next = meta;
+  if !next.is_object() {
+    next = json!({});
+  }
+  next["updatedAt"] = json!(now_ms());
+  cache[kind][key] = next;
+}
+
 #[command]
 pub fn instances_list(app: tauri::AppHandle) -> AppResult<Value> {
   read_db(&app)
@@ -1187,6 +1237,358 @@ pub fn content_list(app: tauri::AppHandle, instance_id: String, kind: String) ->
     }));
   }
   Ok(Value::Array(out))
+}
+
+fn local_mod_query_from_file_name(file_name: &str) -> String {
+  let clean = file_name
+    .trim()
+    .trim_end_matches(".disabled")
+    .trim_end_matches(".jar")
+    .to_string();
+  if clean.is_empty() {
+    return String::new();
+  }
+  let base = if let Some((id, rest)) = clean.split_once("__") {
+    if let Some(found) = MOD_CATALOG.iter().find(|x| x.0 == id) {
+      found.1.to_string()
+    } else {
+      rest.to_string()
+    }
+  } else {
+    clean
+  };
+  let spaced = base
+    .chars()
+    .map(|c| if c.is_ascii_alphanumeric() { c } else { ' ' })
+    .collect::<String>();
+  spaced.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+fn local_pack_query_from_file_name(kind: &str, file_name: &str) -> String {
+  let mut clean = file_name.trim().to_string();
+  if clean.ends_with(".disabled") {
+    clean = clean.trim_end_matches(".disabled").to_string();
+  }
+  if clean.ends_with(".zip") {
+    clean = clean.trim_end_matches(".zip").to_string();
+  }
+  if clean.ends_with(".jar") {
+    clean = clean.trim_end_matches(".jar").to_string();
+  }
+  if clean.is_empty() {
+    return String::new();
+  }
+
+  let kind_label = if kind == "shaderpacks" { "shaderpack" } else { "resourcepack" };
+  let base = if let Some((id, rest)) = clean.split_once("__") {
+    if let Some(found) = PACK_CATALOG.iter().find(|x| x.0 == id && x.2 == kind_label) {
+      found.1.to_string()
+    } else {
+      rest.to_string()
+    }
+  } else if let Some(found) = PACK_CATALOG.iter().find(|x| x.0 == clean && x.2 == kind_label) {
+    found.1.to_string()
+  } else {
+    clean
+  };
+
+  let spaced = base
+    .chars()
+    .map(|c| if c.is_ascii_alphanumeric() { c } else { ' ' })
+    .collect::<String>();
+  spaced.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+#[command]
+pub async fn local_mods_metadata(
+  app: tauri::AppHandle,
+  instance_id: String,
+  names: Vec<String>,
+) -> AppResult<Value> {
+  let safe_id = validate_id(&instance_id)?;
+  let db = read_db(&app)?;
+  let inst = instance_entry(&db, &safe_id).ok_or_else(|| "Instance not found".to_string())?;
+  let mc = inst
+    .get("mcVersion")
+    .and_then(|v| v.as_str())
+    .unwrap_or("1.21.1")
+    .to_string();
+  let loader = inst
+    .get("loader")
+    .and_then(|v| v.as_str())
+    .unwrap_or("fabric")
+    .to_ascii_lowercase();
+  let mut unique = BTreeSet::<String>::new();
+  for raw in names {
+    let trimmed = raw.trim().to_string();
+    if !trimmed.is_empty() {
+      unique.insert(trimmed);
+    }
+    if unique.len() >= 30 {
+      break;
+    }
+  }
+
+  let client = reqwest::Client::new();
+  let cf_key = curseforge_api_key(&app);
+  let mut out = Vec::<Value>::new();
+  let mut cache = read_content_metadata(&app, &safe_id)?;
+  let mut cache_dirty = false;
+
+  for file_name in unique {
+    if let Some(meta) = content_metadata_get(&cache, "mods", &file_name) {
+      out.push(json!({
+        "fileName": file_name,
+        "title": meta.get("title").and_then(|v| v.as_str()).unwrap_or(""),
+        "description": meta.get("description").and_then(|v| v.as_str()).unwrap_or(""),
+        "iconUrl": meta.get("iconUrl").and_then(|v| v.as_str()),
+        "author": meta.get("author").and_then(|v| v.as_str()),
+        "source": meta.get("source").and_then(|v| v.as_str()).unwrap_or("modrinth"),
+        "projectId": meta.get("projectId").and_then(|v| v.as_str())
+      }));
+      continue;
+    }
+
+    let query = local_mod_query_from_file_name(&file_name);
+    if query.trim().is_empty() {
+      continue;
+    }
+
+    let mut facets = vec![vec!["project_type:mod".to_string()], vec![format!("versions:{mc}")]];
+    if loader != "vanilla" {
+      facets.push(vec![format!("categories:{loader}")]);
+    }
+    let facets_json = serde_json::to_string(&facets).map_err(into_error)?;
+    let modrinth_url = format!(
+      "https://api.modrinth.com/v2/search?query={}&limit=5&index=relevance&facets={}",
+      urlencoding::encode(&query),
+      urlencoding::encode(&facets_json)
+    );
+
+    let modrinth_payload: Option<Value> = match client
+      .get(modrinth_url)
+      .header("user-agent", "FishbatteryLauncher/0.2.1")
+      .send()
+      .await
+    {
+      Ok(resp) => match resp.error_for_status() {
+        Ok(ok) => ok.json::<Value>().await.ok(),
+        Err(_) => None,
+      },
+      Err(_) => None,
+    };
+
+    if let Some(payload) = modrinth_payload {
+      if let Some(hit) = payload
+        .get("hits")
+        .and_then(|v| v.as_array())
+        .and_then(|arr| arr.first())
+      {
+        let row = json!({
+          "fileName": file_name,
+          "title": hit.get("title").and_then(|v| v.as_str()).unwrap_or(&query),
+          "description": hit.get("description").and_then(|v| v.as_str()).unwrap_or(""),
+          "iconUrl": hit.get("icon_url").and_then(|v| v.as_str()),
+          "author": hit.get("author").and_then(|v| v.as_str()).unwrap_or("unknown"),
+          "source": "modrinth",
+          "projectId": hit.get("project_id").and_then(|v| v.as_str())
+        });
+        content_metadata_put(
+          &mut cache,
+          "mods",
+          &file_name,
+          json!({
+            "title": row.get("title").cloned().unwrap_or(Value::Null),
+            "description": row.get("description").cloned().unwrap_or(Value::Null),
+            "iconUrl": row.get("iconUrl").cloned().unwrap_or(Value::Null),
+            "author": row.get("author").cloned().unwrap_or(Value::Null),
+            "source": "modrinth",
+            "projectId": row.get("projectId").cloned().unwrap_or(Value::Null)
+          }),
+        );
+        cache_dirty = true;
+        out.push(row);
+        continue;
+      }
+    }
+
+    if let Some(api_key) = cf_key.as_ref() {
+      let cf_payload: Option<Value> = match client
+        .get("https://api.curseforge.com/v1/mods/search")
+        .header("user-agent", "FishbatteryLauncher/0.2.1")
+        .header("x-api-key", api_key)
+        .query(&[
+          ("gameId", "432"),
+          ("classId", "6"),
+          ("pageSize", "5"),
+          ("sortField", "2"),
+          ("sortOrder", "desc"),
+          ("searchFilter", query.as_str()),
+        ])
+        .send()
+        .await
+      {
+        Ok(resp) => match resp.error_for_status() {
+          Ok(ok) => ok.json::<Value>().await.ok(),
+          Err(_) => None,
+        },
+        Err(_) => None,
+      };
+      if let Some(payload) = cf_payload {
+        if let Some(hit) = payload
+          .get("data")
+          .and_then(|v| v.as_array())
+          .and_then(|arr| arr.first())
+        {
+          let row = json!({
+            "fileName": file_name,
+            "title": hit.get("name").and_then(|v| v.as_str()).unwrap_or(&query),
+            "description": hit.get("summary").and_then(|v| v.as_str()).unwrap_or(""),
+            "iconUrl": hit.get("logo").and_then(|v| v.get("url")).and_then(|v| v.as_str()),
+            "author": hit.get("authors").and_then(|v| v.as_array()).and_then(|arr| arr.first()).and_then(|a| a.get("name")).and_then(|v| v.as_str()).unwrap_or("unknown"),
+            "source": "curseforge",
+            "projectId": hit.get("id").and_then(|v| v.as_u64()).map(|v| v.to_string())
+          });
+          content_metadata_put(
+            &mut cache,
+            "mods",
+            &file_name,
+            json!({
+              "title": row.get("title").cloned().unwrap_or(Value::Null),
+              "description": row.get("description").cloned().unwrap_or(Value::Null),
+              "iconUrl": row.get("iconUrl").cloned().unwrap_or(Value::Null),
+              "author": row.get("author").cloned().unwrap_or(Value::Null),
+              "source": "curseforge",
+              "projectId": row.get("projectId").cloned().unwrap_or(Value::Null)
+            }),
+          );
+          cache_dirty = true;
+          out.push(row);
+        }
+      }
+    }
+  }
+
+  if cache_dirty {
+    let _ = write_content_metadata(&app, &safe_id, &cache);
+  }
+
+  Ok(json!({ "items": out }))
+}
+
+#[command]
+pub async fn local_packs_metadata(
+  app: tauri::AppHandle,
+  instance_id: String,
+  kind: String,
+  names: Vec<String>,
+) -> AppResult<Value> {
+  let safe_id = validate_id(&instance_id)?;
+  let kind_norm = kind.trim().to_ascii_lowercase();
+  if kind_norm != "resourcepacks" && kind_norm != "shaderpacks" {
+    return Err("localPacksMetadata: kind must be resourcepacks or shaderpacks".to_string());
+  }
+  let project_type = if kind_norm == "shaderpacks" { "shader" } else { "resourcepack" };
+
+  let db = read_db(&app)?;
+  let inst = instance_entry(&db, &safe_id).ok_or_else(|| "Instance not found".to_string())?;
+  let mc = inst
+    .get("mcVersion")
+    .and_then(|v| v.as_str())
+    .unwrap_or("1.21.1")
+    .to_string();
+
+  let mut unique = BTreeSet::<String>::new();
+  for raw in names {
+    let trimmed = raw.trim().to_string();
+    if !trimmed.is_empty() {
+      unique.insert(trimmed);
+    }
+    if unique.len() >= 30 {
+      break;
+    }
+  }
+
+  let client = reqwest::Client::new();
+  let mut out = Vec::<Value>::new();
+  let mut cache = read_content_metadata(&app, &safe_id)?;
+  let mut cache_dirty = false;
+
+  for file_name in unique {
+    if let Some(meta) = content_metadata_get(&cache, &kind_norm, &file_name) {
+      out.push(json!({
+        "fileName": file_name,
+        "title": meta.get("title").and_then(|v| v.as_str()).unwrap_or(""),
+        "description": meta.get("description").and_then(|v| v.as_str()).unwrap_or(""),
+        "iconUrl": meta.get("iconUrl").and_then(|v| v.as_str()),
+        "author": meta.get("author").and_then(|v| v.as_str()),
+        "source": meta.get("source").and_then(|v| v.as_str()).unwrap_or("modrinth"),
+        "projectId": meta.get("projectId").and_then(|v| v.as_str())
+      }));
+      continue;
+    }
+
+    let query = local_pack_query_from_file_name(&kind_norm, &file_name);
+    if query.trim().is_empty() {
+      continue;
+    }
+    let facets = vec![
+      vec![format!("project_type:{project_type}")],
+      vec![format!("versions:{mc}")],
+    ];
+    let facets_json = serde_json::to_string(&facets).map_err(into_error)?;
+    let modrinth_url = format!(
+      "https://api.modrinth.com/v2/search?query={}&limit=5&index=relevance&facets={}",
+      urlencoding::encode(&query),
+      urlencoding::encode(&facets_json)
+    );
+    let payload: Option<Value> = match client
+      .get(modrinth_url)
+      .header("user-agent", "FishbatteryLauncher/0.2.1")
+      .send()
+      .await
+    {
+      Ok(resp) => match resp.error_for_status() {
+        Ok(ok) => ok.json::<Value>().await.ok(),
+        Err(_) => None,
+      },
+      Err(_) => None,
+    };
+    if let Some(hit) = payload
+      .and_then(|v| v.get("hits").and_then(|h| h.as_array()).and_then(|arr| arr.first()).cloned())
+    {
+      let row = json!({
+        "fileName": file_name,
+        "title": hit.get("title").and_then(|v| v.as_str()).unwrap_or(&query),
+        "description": hit.get("description").and_then(|v| v.as_str()).unwrap_or(""),
+        "iconUrl": hit.get("icon_url").and_then(|v| v.as_str()),
+        "author": hit.get("author").and_then(|v| v.as_str()).unwrap_or("unknown"),
+        "source": "modrinth",
+        "projectId": hit.get("project_id").and_then(|v| v.as_str())
+      });
+      content_metadata_put(
+        &mut cache,
+        &kind_norm,
+        &file_name,
+        json!({
+          "title": row.get("title").cloned().unwrap_or(Value::Null),
+          "description": row.get("description").cloned().unwrap_or(Value::Null),
+          "iconUrl": row.get("iconUrl").cloned().unwrap_or(Value::Null),
+          "author": row.get("author").cloned().unwrap_or(Value::Null),
+          "source": "modrinth",
+          "projectId": row.get("projectId").cloned().unwrap_or(Value::Null)
+        }),
+      );
+      cache_dirty = true;
+      out.push(row);
+    }
+  }
+
+  if cache_dirty {
+    let _ = write_content_metadata(&app, &safe_id, &cache);
+  }
+
+  Ok(json!({ "items": out }))
 }
 
 #[command]
@@ -3427,9 +3829,53 @@ fn curseforge_api_key(app: &tauri::AppHandle) -> Option<String> {
   }
 
   if let Ok(app_data) = app.path().app_data_dir() {
-    let p = app_data.join("data").join("curseforge-api-key.txt");
-    if let Some(k) = read_secret_text(&p) {
-      return Some(k);
+    let candidates = [
+      app_data.join("curseforge-api-key.txt"),
+      app_data.join("data").join("curseforge-api-key.txt"),
+      app_data.join("secrets").join("curseforge-api-key.txt"),
+    ];
+    for p in candidates {
+      if let Some(k) = read_secret_text(&p) {
+        return Some(k);
+      }
+    }
+  }
+
+  if let Ok(app_config) = app.path().app_config_dir() {
+    let candidates = [
+      app_config.join("curseforge-api-key.txt"),
+      app_config.join("secrets").join("curseforge-api-key.txt"),
+    ];
+    for p in candidates {
+      if let Some(k) = read_secret_text(&p) {
+        return Some(k);
+      }
+    }
+  }
+
+  if let Ok(resource_dir) = app.path().resource_dir() {
+    let candidates = [
+      resource_dir.join("curseforge-api-key.txt"),
+      resource_dir.join("secrets").join("curseforge-api-key.txt"),
+    ];
+    for p in candidates {
+      if let Some(k) = read_secret_text(&p) {
+        return Some(k);
+      }
+    }
+  }
+
+  if let Ok(exe) = std::env::current_exe() {
+    if let Some(exe_dir) = exe.parent() {
+      let candidates = [
+        exe_dir.join("curseforge-api-key.txt"),
+        exe_dir.join("secrets").join("curseforge-api-key.txt"),
+      ];
+      for p in candidates {
+        if let Some(k) = read_secret_text(&p) {
+          return Some(k);
+        }
+      }
     }
   }
 
@@ -4011,6 +4457,47 @@ pub async fn modrinth_mods_install(
   let placed_path = mods_dir.join(&placed_name);
   fs::write(&placed_path, &bytes).map_err(into_error)?;
 
+  let mut cache = read_content_metadata(&app, &safe_id).unwrap_or_else(|_| json!({}));
+  let project_meta: Option<Value> = match client
+    .get(format!("https://api.modrinth.com/v2/project/{}", urlencoding::encode(pid)))
+    .header("user-agent", "FishbatteryLauncher/0.2.1")
+    .send()
+    .await
+  {
+    Ok(resp) => match resp.error_for_status() {
+      Ok(ok) => ok.json::<Value>().await.ok(),
+      Err(_) => None,
+    },
+    Err(_) => None,
+  };
+  let fallback_title = local_mod_query_from_file_name(&placed_name);
+  content_metadata_put(
+    &mut cache,
+    "mods",
+    &placed_name,
+    json!({
+      "title": project_meta
+        .as_ref()
+        .and_then(|v| v.get("title"))
+        .and_then(|v| v.as_str())
+        .filter(|v| !v.trim().is_empty())
+        .unwrap_or(if fallback_title.trim().is_empty() { "Installed Mod" } else { fallback_title.as_str() }),
+      "description": project_meta
+        .as_ref()
+        .and_then(|v| v.get("description"))
+        .and_then(|v| v.as_str())
+        .unwrap_or(""),
+      "iconUrl": project_meta
+        .as_ref()
+        .and_then(|v| v.get("icon_url"))
+        .and_then(|v| v.as_str()),
+      "author": "unknown",
+      "source": "modrinth",
+      "projectId": pid
+    }),
+  );
+  let _ = write_content_metadata(&app, &safe_id, &cache);
+
   Ok(json!({
     "ok": true,
     "projectId": pid,
@@ -4199,6 +4686,48 @@ pub async fn modrinth_content_install(
   let placed_name = safe_modrinth_content_file_name(kind_label, pid, &upstream);
   let placed_path = dir.join(&placed_name);
   fs::write(&placed_path, &bytes).map_err(into_error)?;
+
+  let mut cache = read_content_metadata(&app, &safe_id).unwrap_or_else(|_| json!({}));
+  let project_meta: Option<Value> = match client
+    .get(format!("https://api.modrinth.com/v2/project/{}", urlencoding::encode(pid)))
+    .header("user-agent", "FishbatteryLauncher/0.2.1")
+    .send()
+    .await
+  {
+    Ok(resp) => match resp.error_for_status() {
+      Ok(ok) => ok.json::<Value>().await.ok(),
+      Err(_) => None,
+    },
+    Err(_) => None,
+  };
+  let cache_kind = if kind_label == "shaderpack" { "shaderpacks" } else { "resourcepacks" };
+  let fallback_title = local_pack_query_from_file_name(cache_kind, &placed_name);
+  content_metadata_put(
+    &mut cache,
+    cache_kind,
+    &placed_name,
+    json!({
+      "title": project_meta
+        .as_ref()
+        .and_then(|v| v.get("title"))
+        .and_then(|v| v.as_str())
+        .filter(|v| !v.trim().is_empty())
+        .unwrap_or(if fallback_title.trim().is_empty() { "Installed Pack" } else { fallback_title.as_str() }),
+      "description": project_meta
+        .as_ref()
+        .and_then(|v| v.get("description"))
+        .and_then(|v| v.as_str())
+        .unwrap_or(""),
+      "iconUrl": project_meta
+        .as_ref()
+        .and_then(|v| v.get("icon_url"))
+        .and_then(|v| v.as_str()),
+      "author": "unknown",
+      "source": "modrinth",
+      "projectId": pid
+    }),
+  );
+  let _ = write_content_metadata(&app, &safe_id, &cache);
 
   Ok(json!({
     "ok": true,
@@ -4615,6 +5144,8 @@ pub async fn provider_packs_install(
     let mut archive = ZipArchive::new(std::io::Cursor::new(pack_bytes.to_vec())).map_err(into_error)?;
     let out_root = instance_dir(&app, &created_id)?;
     let mut installed_manifest_mods = 0usize;
+    let mut content_meta = read_content_metadata(&app, &created_id).unwrap_or_else(|_| json!({}));
+    let mut content_meta_dirty = false;
 
     let mut manifest: Option<Value> = None;
     if let Ok(mut mf) = archive.by_name("manifest.json") {
@@ -4809,10 +5340,33 @@ pub async fn provider_packs_install(
             },
             Err(_) => continue,
           };
-          fs::write(mods_dir.join(dep_name), &dep_bytes).map_err(into_error)?;
+          fs::write(mods_dir.join(&dep_name), &dep_bytes).map_err(into_error)?;
+          let fallback_title = local_mod_query_from_file_name(&dep_name);
+          content_metadata_put(
+            &mut content_meta,
+            "mods",
+            &dep_name,
+            json!({
+              "title": dep_data
+                .get("displayName")
+                .and_then(|v| v.as_str())
+                .filter(|v| !v.trim().is_empty())
+                .unwrap_or(if fallback_title.trim().is_empty() { "Installed Mod" } else { fallback_title.as_str() }),
+              "description": dep_data.get("fileName").and_then(|v| v.as_str()).unwrap_or("Installed from CurseForge pack"),
+              "iconUrl": Value::Null,
+              "author": "unknown",
+              "source": "curseforge",
+              "projectId": dep_mod_id.to_string()
+            }),
+          );
+          content_meta_dirty = true;
           installed_manifest_mods += 1;
         }
       }
+    }
+
+    if content_meta_dirty {
+      let _ = write_content_metadata(&app, &created_id, &content_meta);
     }
 
     notes.push(format!("Installed CurseForge pack archive: {file_name}"));

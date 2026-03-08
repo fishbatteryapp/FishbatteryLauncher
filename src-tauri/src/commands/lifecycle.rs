@@ -1428,15 +1428,6 @@ fn update_instance_loader_field(app: &tauri::AppHandle, instance_id: &str, field
   Ok(())
 }
 
-fn repo_root() -> PathBuf {
-  let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-  manifest
-    .parent()
-    .and_then(|p| p.parent())
-    .map(Path::to_path_buf)
-    .unwrap_or(manifest)
-}
-
 fn resolve_selected_local_cape_path(app: &tauri::AppHandle, account_id: &str) -> Option<PathBuf> {
   let selection_path = app_data_root(app).ok()?.join("capes").join("selection.json");
   let raw = fs::read_to_string(selection_path).ok()?;
@@ -1447,32 +1438,19 @@ fn resolve_selected_local_cape_path(app: &tauri::AppHandle, account_id: &str) ->
     .and_then(|v| v.as_str())
     .map(|s| s.trim().to_string())
     .filter(|s| !s.is_empty())?;
-  let (tier, stem) = selected.split_once(':')?;
-  let stem = stem.trim();
-  if stem.is_empty() {
+  let catalog_path = app_data_root(app).ok()?.join("capes").join("catalog.json");
+  let catalog_raw = fs::read_to_string(catalog_path).ok()?;
+  let catalog: Value = serde_json::from_str(&catalog_raw).ok()?;
+  let items = catalog.get("items").and_then(|v| v.as_array())?;
+  let item = items
+    .iter()
+    .find(|entry| entry.get("id").and_then(|v| v.as_str()) == Some(selected.as_str()))?;
+  let full_path = item.get("fullPath").and_then(|v| v.as_str())?.trim();
+  if full_path.is_empty() {
     return None;
   }
-  let capes_dir = repo_root().join("capes").join(tier.trim().to_ascii_lowercase());
-  let entries = fs::read_dir(capes_dir).ok()?;
-  for entry in entries.flatten() {
-    let path = entry.path();
-    if !path.is_file() {
-      continue;
-    }
-    let ext = path
-      .extension()
-      .and_then(|x| x.to_str())
-      .unwrap_or("")
-      .to_ascii_lowercase();
-    if !matches!(ext.as_str(), "png" | "jpg" | "jpeg" | "webp" | "bmp" | "gif") {
-      continue;
-    }
-    let file_stem = path.file_stem().and_then(|x| x.to_str()).unwrap_or("");
-    if file_stem.eq_ignore_ascii_case(stem) {
-      return Some(path);
-    }
-  }
-  None
+  let path = PathBuf::from(full_path);
+  if path.is_file() { Some(path) } else { None }
 }
 
 async fn install_quilt_profile(app: tauri::AppHandle, mc_version: &str, loader_version: &str) -> AppResult<String> {

@@ -100,6 +100,10 @@ const phase4Commands: Record<string, (...args: unknown[]) => Promise<unknown>> =
     invoke("content_add", { instanceId, kind, filePaths }),
   contentList: (instanceId: string, kind: "mods" | "resourcepacks" | "shaderpacks") =>
     invoke("content_list", { instanceId, kind }),
+  localModsMetadata: (instanceId: string, names: string[]) =>
+    invoke("local_mods_metadata", { instanceId, names }),
+  localPacksMetadata: (instanceId: string, kind: "resourcepacks" | "shaderpacks", names: string[]) =>
+    invoke("local_packs_metadata", { instanceId, kind, names }),
   contentRemove: (instanceId: string, kind: "mods" | "resourcepacks" | "shaderpacks", name: string) =>
     invoke("content_remove", { instanceId, kind, name }),
   contentToggleEnabled: (

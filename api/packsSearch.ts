@@ -246,12 +246,8 @@ export async function providerPacksSearch(provider: ExternalProvider, query: str
   const capped = Math.max(1, Math.min(60, limit));
 
   if (provider === "curseforge") {
-    try {
-      const hits = await searchCurseForge(query, capped);
-      return { hits };
-    } catch {
-      return { hits: [] as ProviderPack[] };
-    }
+    const hits = await searchCurseForge(query, capped);
+    return { hits };
   }
 
   if (provider === "atlauncher") {

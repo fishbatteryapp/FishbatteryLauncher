@@ -98,7 +98,7 @@ function applyActionButtonIcons() {
   setButtonIcon(btnToggleDiagnosisDetails, "M11 17h2v2h-2zm0-12h2v10h-2z");
   setButtonIcon(btnToggleDebugLogs, "M3 4h18v2H3zm0 7h12v2H3zm0 7h18v2H3z");
   setButtonIcon(btnCopyDiagnosisReport, "M16 1H4v14h2V3h10zM8 7h12v16H8z");
-  setButtonIcon(btnClearLogs, "M9 3h6l1 2h5v2H3V5h5zm1 6h2v9h-2zm4 0h2v9h-2z");
+  setButtonIcon(btnClearLogs, "M9 3h6l1 2h5v2H3V5h5zm-1 4h10l-1 13H9L8 7zm3 3h2v8h-2zm4 0h2v8h-2z");
 }
 applyActionButtonIcons();
 
@@ -118,6 +118,7 @@ const settingsPanelWindow = $("settingsPanelWindow");
 const settingsPanelJava = $("settingsPanelJava");
 const settingsPanelHooks = $("settingsPanelHooks");
 const settingsPanelProfile = $("settingsPanelProfile");
+const customBgImageLayer = $("customBgImageLayer") as HTMLImageElement;
 
 // Modal
 const modalBackdrop = $("modalBackdrop");
@@ -138,11 +139,8 @@ const modalPanelMods = $("modalPanelMods");
 const modalPanelPacks = $("modalPanelPacks");
 
 const modalUpdateMods = $("modalUpdateMods");
-const modalUpdatePacks = $("modalUpdatePacks");
 const modalModsHint = $("modalModsHint");
 const modalCompatGuidance = $("modalCompatGuidance");
-const modalModsList = $("modalModsList");
-const recommendedPacksList = $("recommendedPacksList");
 
 const modalUploadLocalMod = $("modalUploadLocalMod");
 const modalOpenInstanceFolder = $("modalOpenInstanceFolder");
@@ -2012,9 +2010,11 @@ function applySettingsToDom(s: AppSettings) {
   document.documentElement.style.setProperty("--accent-rgb", hexToRgbTriplet(accent));
 
   if (s.customBackgroundDataUrl) {
-    document.documentElement.style.setProperty("--custom-bg-image", `url("${s.customBackgroundDataUrl}")`);
+    customBgImageLayer.src = s.customBackgroundDataUrl;
+    customBgImageLayer.style.display = "block";
   } else {
-    document.documentElement.style.removeProperty("--custom-bg-image");
+    customBgImageLayer.removeAttribute("src");
+    customBgImageLayer.style.display = "none";
   }
 }
 
@@ -2034,6 +2034,67 @@ function appendLog(line: string) {
 // Set status.
 function setStatus(text: string) {
   statusText.textContent = text || "";
+}
+
+async function showLauncherAlert(message: string, title = "Fishbattery Launcher") {
+  return new Promise<void>((resolve) => {
+    const backdrop = document.createElement("div");
+    backdrop.style.position = "fixed";
+    backdrop.style.inset = "0";
+    backdrop.style.background = "rgba(5, 12, 22, 0.72)";
+    backdrop.style.display = "grid";
+    backdrop.style.placeItems = "center";
+    backdrop.style.zIndex = "100000";
+
+    const panel = document.createElement("div");
+    panel.style.width = "min(460px, calc(100vw - 24px))";
+    panel.style.padding = "14px";
+    panel.style.borderRadius = "14px";
+    panel.style.border = "1px solid var(--line)";
+    panel.style.background = "var(--panel)";
+    panel.style.boxShadow = "0 16px 50px rgba(0,0,0,.45)";
+
+    const heading = document.createElement("h3");
+    heading.textContent = title;
+    heading.style.margin = "0 0 10px";
+
+    const body = document.createElement("p");
+    body.textContent = message;
+    body.style.margin = "0 0 12px";
+    body.style.whiteSpace = "pre-wrap";
+    body.style.lineHeight = "1.4";
+
+    const actions = document.createElement("div");
+    actions.className = "row";
+    actions.style.justifyContent = "flex-end";
+    const okBtn = document.createElement("button");
+    okBtn.className = "btn btnPrimary";
+    okBtn.textContent = "OK";
+    actions.appendChild(okBtn);
+
+    panel.append(heading, body, actions);
+    backdrop.appendChild(panel);
+    document.body.appendChild(backdrop);
+
+    const close = () => {
+      backdrop.remove();
+      document.removeEventListener("keydown", onKeyDown);
+      resolve();
+    };
+    const onKeyDown = (ev: KeyboardEvent) => {
+      if (ev.key === "Escape" || ev.key === "Enter") {
+        ev.preventDefault();
+        close();
+      }
+    };
+
+    okBtn.onclick = close;
+    backdrop.addEventListener("click", (ev) => {
+      if (ev.target === backdrop) close();
+    });
+    document.addEventListener("keydown", onKeyDown);
+    okBtn.focus();
+  });
 }
 
 async function runTrackedInstall<T>(
@@ -3298,7 +3359,7 @@ modalTabMods.onclick = async () => {
 modalTabPacks.onclick = async () => {
   setModalTab("packs");
   await renderLocalContent(editInstanceId);
-  await renderRecommendedPacks(editInstanceId);
+  await runInstanceModrinthContentSearch(editInstanceId);
 };
 
 // Format bytes.
@@ -3406,13 +3467,48 @@ function getPrettyName(kind: "mods" | "resourcepacks" | "shaderpacks", fileName:
     .replace(/_/g, " ");
 }
 
+function inferLocalModDescription(fileName: string) {
+  const clean = fileName.replace(/\.disabled$/, "");
+  const parts = clean.split("__");
+  if (parts.length > 1) {
+    const id = parts[0];
+    const found = CATALOG.find((m) => m.id === id);
+    if (found) {
+      return `Managed mod (${id})`;
+    }
+  }
+  return "Local .jar mod file";
+}
+
 // ---------------- Local file list (enable/disable + remove) ----------------
 function renderFileList(
   el: HTMLElement,
   kind: "mods" | "resourcepacks" | "shaderpacks",
   items: Array<{ name: string; size: number }>,
   onRemove: (name: string) => void,
-  onToggleEnabled?: (name: string, enable: boolean) => void
+  onToggleEnabled?: (name: string, enable: boolean) => void,
+  options?: {
+    modMetadataByName?: Record<
+      string,
+      {
+        title?: string;
+        description?: string;
+        iconUrl?: string | null;
+        author?: string | null;
+        source?: "modrinth" | "curseforge";
+      }
+    >;
+    packMetadataByName?: Record<
+      string,
+      {
+        title?: string;
+        description?: string;
+        iconUrl?: string | null;
+        author?: string | null;
+        source?: "modrinth";
+      }
+    >;
+  }
 ) {
   el.innerHTML = "";
 
@@ -3422,31 +3518,107 @@ function renderFileList(
   }
 
   for (const it of items) {
+    const isDisabled = it.name.endsWith(".disabled");
+
+    if (kind === "mods") {
+      const row = document.createElement("div");
+      row.className = "modrinthResult";
+      const meta = options?.modMetadataByName?.[it.name.toLowerCase()];
+
+      const icon = document.createElement("img");
+      const cleanName = getPrettyName("mods", it.name);
+      icon.src = meta?.iconUrl || fallbackPackIconDataUrl(cleanName, "green");
+      icon.alt = "";
+      row.appendChild(icon);
+
+      const left = document.createElement("div");
+      left.style.display = "flex";
+      left.style.flexDirection = "column";
+      left.style.flex = "1";
+
+      const nameEl = document.createElement("div");
+      nameEl.className = "setLabel";
+      nameEl.textContent = meta?.title || cleanName;
+
+      const desc = document.createElement("div");
+      desc.className = "setHelp";
+      desc.textContent = meta?.description || inferLocalModDescription(it.name);
+
+      const sub = document.createElement("div");
+      sub.className = "setHelp";
+      const sourceLabel = meta?.source === "curseforge" ? "CurseForge" : meta?.source === "modrinth" ? "Modrinth" : null;
+      const authorLabel = meta?.author ? `by ${meta.author}` : null;
+      const metaBits = [authorLabel, sourceLabel].filter(Boolean).join(" | ");
+      sub.textContent = `${formatBytes(it.size)}${isDisabled ? " | Disabled" : " | Enabled"}${metaBits ? ` | ${metaBits}` : ""}`;
+
+      left.appendChild(nameEl);
+      left.appendChild(desc);
+      left.appendChild(sub);
+      row.appendChild(left);
+
+      const right = document.createElement("div");
+      right.className = "row";
+      right.style.justifyContent = "flex-end";
+      right.style.gap = "8px";
+
+      if (onToggleEnabled) {
+        const toggle = document.createElement("button");
+        toggle.className = "btn";
+        toggle.textContent = isDisabled ? "Enable" : "Disable";
+        toggle.onclick = () => onToggleEnabled(it.name, isDisabled);
+        right.appendChild(toggle);
+      }
+
+      const remove = document.createElement("button");
+      remove.className = "btn";
+      remove.textContent = "Remove";
+      remove.onclick = () => onRemove(it.name);
+      right.appendChild(remove);
+
+      row.appendChild(right);
+      el.appendChild(row);
+      continue;
+    }
+
     const row = document.createElement("div");
-    row.className = "setRow";
-    row.style.marginBottom = "10px";
+    row.className = "modrinthResult";
+    const packMetaKey = `${kind}:${it.name.toLowerCase()}`;
+    const packMeta = options?.packMetadataByName?.[packMetaKey];
+
+    const icon = document.createElement("img");
+    const cleanPackName = getPrettyName(kind, it.name);
+    icon.src = packMeta?.iconUrl || fallbackPackIconDataUrl(cleanPackName, "blue");
+    icon.alt = "";
+    row.appendChild(icon);
 
     const left = document.createElement("div");
     left.style.display = "flex";
     left.style.flexDirection = "column";
+    left.style.flex = "1";
 
     const nameEl = document.createElement("div");
     nameEl.className = "setLabel";
-    nameEl.textContent = getPrettyName(kind, it.name);
+    nameEl.textContent = packMeta?.title || cleanPackName;
+
+    const desc = document.createElement("div");
+    desc.className = "setHelp";
+    desc.textContent = packMeta?.description || (kind === "shaderpacks" ? "Local shader pack (.zip)" : "Local resource pack (.zip)");
 
     const sub = document.createElement("div");
     sub.className = "setHelp";
-    sub.textContent = formatBytes(it.size) + (it.name.endsWith(".disabled") ? " | Disabled" : "");
+    const metaBits = [packMeta?.author ? `by ${packMeta.author}` : null, packMeta?.source ? "Modrinth" : null]
+      .filter(Boolean)
+      .join(" | ");
+    sub.textContent = `${formatBytes(it.size)}${isDisabled ? " | Disabled" : " | Enabled"}${metaBits ? ` | ${metaBits}` : ""}`;
 
     left.appendChild(nameEl);
+    left.appendChild(desc);
     left.appendChild(sub);
 
     const right = document.createElement("div");
     right.className = "row";
     right.style.justifyContent = "flex-end";
     right.style.gap = "8px";
-
-    const isDisabled = it.name.endsWith(".disabled");
 
     if (onToggleEnabled) {
       const toggle = document.createElement("button");
@@ -3582,7 +3754,8 @@ async function pickImageAsDataUrl(): Promise<string | null> {
   return new Promise((resolve) => {
     const inp = document.createElement("input");
     inp.type = "file";
-    inp.accept = "image/png,image/jpeg,image/webp,image/gif,image/bmp";
+    inp.accept =
+      ".png,.jpg,.jpeg,.jfif,.webp,.gif,.bmp,image/png,image/jpeg,image/jpg,image/webp,image/gif,image/bmp";
     inp.style.position = "fixed";
     inp.style.left = "-99999px";
     inp.style.top = "0";
@@ -3603,21 +3776,91 @@ async function pickImageAsDataUrl(): Promise<string | null> {
         finish(null);
         return;
       }
+      const name = String(file.name || "").toLowerCase();
+      const looksLikeImage =
+        (typeof file.type === "string" && file.type.startsWith("image/")) ||
+        /\.(png|jpg|jpeg|jfif|webp|gif|bmp)$/i.test(name);
+      if (!looksLikeImage) {
+        alert("Unsupported image type. Please choose PNG, JPG, JPEG, GIF, WEBP, or BMP.");
+        finish(null);
+        return;
+      }
       if (file.size > 4 * 1024 * 1024) {
         alert("Image is too large. Please choose one smaller than 4 MB.");
         finish(null);
         return;
       }
-      const reader = new FileReader();
-      reader.onload = () => finish(typeof reader.result === "string" ? reader.result : null);
-      reader.onerror = () => finish(null);
-      reader.readAsDataURL(file);
+      void (async () => {
+        const dataUrl = await normalizeBackgroundImageDataUrl(file);
+        finish(dataUrl);
+      })();
     };
 
     inp.addEventListener("cancel", () => finish(null));
     document.body.appendChild(inp);
     inp.click();
   });
+}
+
+async function normalizeBackgroundImageDataUrl(file: File): Promise<string | null> {
+  const readAsDataUrl = (f: File) =>
+    new Promise<string | null>((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : null);
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(f);
+    });
+
+  const objectUrl = URL.createObjectURL(file);
+  try {
+    const img = await new Promise<HTMLImageElement | null>((resolve) => {
+      const el = new Image();
+      el.onload = () => resolve(el);
+      el.onerror = () => resolve(null);
+      el.src = objectUrl;
+    });
+    if (!img) return await readAsDataUrl(file);
+
+    const maxSide = 1600;
+    const w = img.naturalWidth || img.width || 0;
+    const h = img.naturalHeight || img.height || 0;
+    if (w <= 0 || h <= 0) return await readAsDataUrl(file);
+
+    const scale = Math.min(1, maxSide / Math.max(w, h));
+    const targetW = Math.max(1, Math.round(w * scale));
+    const targetH = Math.max(1, Math.round(h * scale));
+
+    const canvas = document.createElement("canvas");
+    canvas.width = targetW;
+    canvas.height = targetH;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return await readAsDataUrl(file);
+    ctx.drawImage(img, 0, 0, targetW, targetH);
+
+    const tryFormats = [
+      () => canvas.toDataURL("image/jpeg", 0.82),
+      () => canvas.toDataURL("image/jpeg", 0.74),
+      () => canvas.toDataURL("image/jpeg", 0.66),
+      () => canvas.toDataURL("image/jpeg", 0.58)
+    ];
+
+    let chosen: string | null = null;
+    for (const make of tryFormats) {
+      const out = make();
+      if (!out || !/^data:image\//.test(out)) continue;
+      chosen = out;
+      if (out.length <= 900_000) break;
+    }
+
+    if (!chosen) return await readAsDataUrl(file);
+    if (chosen.length > 1_200_000) {
+      alert("Image is too detailed for custom background. Try a smaller file.");
+      return null;
+    }
+    return chosen;
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
 }
 
 // Updater status text.
@@ -3706,7 +3949,7 @@ async function runCloudSync(manual: boolean, forcedPolicy?: "prefer-local" | "pr
     const stamp = cloudSyncState.lastSyncedAt
       ? new Date(cloudSyncState.lastSyncedAt).toLocaleString()
       : "never";
-    alert(`Cloud sync: ${result.message}\nLast sync: ${stamp}`);
+    await showLauncherAlert(`Cloud sync: ${result.message}\nLast sync: ${stamp}`);
   }
 }
 
@@ -5199,9 +5442,74 @@ async function renderLocalContent(instanceId: string | null) {
   const mods = toList(modsRes);
   const rps = toList(rpsRes);
   const sps = toList(spsRes);
+  let modMetadataByName: Record<
+    string,
+    {
+      title?: string;
+      description?: string;
+      iconUrl?: string | null;
+      author?: string | null;
+      source?: "modrinth" | "curseforge";
+    }
+  > = {};
+  let packMetadataByName: Record<
+    string,
+    {
+      title?: string;
+      description?: string;
+      iconUrl?: string | null;
+      author?: string | null;
+      source?: "modrinth";
+    }
+  > = {};
   if (modsRes.status === "rejected") appendLog(`[content] Failed loading mods folder: ${String(modsRes.reason)}`);
   if (rpsRes.status === "rejected") appendLog(`[content] Failed loading resourcepacks folder: ${String(rpsRes.reason)}`);
   if (spsRes.status === "rejected") appendLog(`[content] Failed loading shaderpacks folder: ${String(spsRes.reason)}`);
+  if (mods.length) {
+    try {
+      const metaRes = await backend.localModsMetadata(instanceId, mods.map((m: any) => String(m?.name || "")));
+      const rows = Array.isArray(metaRes?.items) ? metaRes.items : [];
+      modMetadataByName = rows.reduce(
+        (acc: Record<string, any>, row: any) => {
+          const key = String(row?.fileName || "").toLowerCase();
+          if (!key) return acc;
+          acc[key] = {
+            title: row?.title || undefined,
+            description: row?.description || undefined,
+            iconUrl: row?.iconUrl || null,
+            author: row?.author || null,
+            source: row?.source === "curseforge" ? "curseforge" : row?.source === "modrinth" ? "modrinth" : undefined
+          };
+          return acc;
+        },
+        {}
+      );
+    } catch (err: any) {
+      appendLog(`[mods-metadata] Failed fetching metadata: ${String(err?.message ?? err)}`);
+    }
+  }
+  const loadPackMetadata = async (kind: "resourcepacks" | "shaderpacks", rows: Array<{ name: string }>) => {
+    if (!rows.length) return;
+    try {
+      const res = await backend.localPacksMetadata(instanceId, kind, rows.map((r: any) => String(r?.name || "")));
+      const items = Array.isArray(res?.items) ? res.items : [];
+      for (const item of items) {
+        const key = `${kind}:${String(item?.fileName || "").toLowerCase()}`;
+        if (!key.endsWith(":")) {
+          packMetadataByName[key] = {
+            title: item?.title || undefined,
+            description: item?.description || undefined,
+            iconUrl: item?.iconUrl || null,
+            author: item?.author || null,
+            source: item?.source === "modrinth" ? "modrinth" : undefined
+          };
+        }
+      }
+    } catch (err: any) {
+      appendLog(`[packs-metadata] Failed fetching ${kind} metadata: ${String(err?.message ?? err)}`);
+    }
+  };
+  await Promise.all([loadPackMetadata("resourcepacks", rps as any), loadPackMetadata("shaderpacks", sps as any)]);
 
   const removeFn = async (kind: "resourcepacks" | "shaderpacks", name: string) => {
     await backend.contentRemove(instanceId, kind, name);
@@ -5220,7 +5528,8 @@ async function renderLocalContent(instanceId: string | null) {
       await backend.contentToggleEnabled(instanceId, "mods", name, shouldEnable);
       await renderLocalContent(instanceId);
       await renderInstanceMods(instanceId);
-    }
+    },
+    { modMetadataByName }
   );
 
   renderFileList(
@@ -5231,7 +5540,8 @@ async function renderLocalContent(instanceId: string | null) {
     async (name, shouldEnable) => {
       await backend.contentToggleEnabled(instanceId, "resourcepacks", name, shouldEnable);
       await renderLocalContent(instanceId);
-    }
+    },
+    { packMetadataByName }
   );
 
   renderFileList(
@@ -5242,7 +5552,8 @@ async function renderLocalContent(instanceId: string | null) {
     async (name, shouldEnable) => {
       await backend.contentToggleEnabled(instanceId, "shaderpacks", name, shouldEnable);
       await renderLocalContent(instanceId);
-    }
+    },
+    { packMetadataByName }
   );
 }
 
@@ -5263,69 +5574,6 @@ async function pickAndAdd(kind: "mods" | "resourcepacks" | "shaderpacks") {
     const v = await backend.modsValidate(editInstanceId);
     appendLog(`[validation] After add: ${v.summary} (${v.issues.length} issues)`);
   }
-}
-
-// ---------------- Recommended packs (catalog toggles) ----------------
-async function renderRecommendedPacks(instanceId: string | null) {
-  recommendedPacksList.innerHTML = "";
-
-  if (!instanceId) {
-    recommendedPacksList.innerHTML = '<div class="muted" style="font-size:12px">Select an instance first.</div>';
-    instanceContentResultsLabel.textContent = "Select an instance first";
-    instanceContentSearchResults.innerHTML = '<div class="muted" style="font-size:12px">Select an instance first.</div>';
-    return;
-  }
-
-  const res = await backend.packsList(instanceId);
-  const packs = res?.items ?? [];
-
-  if (!packs.length) {
-    recommendedPacksList.innerHTML = '<div class="muted" style="font-size:12px">No recommended packs configured.</div>';
-    return;
-  }
-
-  for (const p of packs) {
-    const row = document.createElement("div");
-    row.className = "setRow";
-    row.style.marginBottom = "10px";
-
-    const left = document.createElement("div");
-    left.style.display = "flex";
-    left.style.flexDirection = "column";
-
-    const name = document.createElement("div");
-    name.className = "setLabel";
-    name.textContent = `${p.name}${p.required ? " (required)" : ""}`;
-
-    const statusBits = [`${p.kind}`, `status: ${p.status}`];
-    if (p.versionName) statusBits.push(`version: ${p.versionName}`);
-    if (p.error) statusBits.push(`error: ${p.error}`);
-    if (!p.enabled) statusBits.push("disabled");
-
-    const sub = document.createElement("div");
-    sub.className = "setHelp";
-    sub.textContent = statusBits.join(" | ");
-
-    left.appendChild(name);
-    left.appendChild(sub);
-
-    const toggle = document.createElement("button");
-    toggle.className = "btn";
-    toggle.textContent = p.required ? "Required" : p.enabled ? "Disable" : "Enable";
-    toggle.disabled = !!p.required;
-    toggle.onclick = () =>
-      guarded(async () => {
-        await backend.packsSetEnabled(instanceId, p.id, !p.enabled);
-        await renderRecommendedPacks(instanceId);
-        await renderLocalContent(instanceId);
-      });
-
-    row.appendChild(left);
-    row.appendChild(toggle);
-    recommendedPacksList.appendChild(row);
-  }
-
-  await runInstanceModrinthContentSearch(instanceId);
 }
 
 // Run Modrinth search for instance packs tab.
@@ -5750,7 +5998,6 @@ async function renderCompatibilityGuidance(instanceId: string | null) {
 
 // ---------------- Mods list (catalog toggles) ----------------
 async function renderInstanceMods(instanceId: string | null) {
-  modalModsList.innerHTML = "";
   modalCompatGuidance.innerHTML = "";
 
   if (!instanceId) {
@@ -5765,52 +6012,6 @@ async function renderInstanceMods(instanceId: string | null) {
   const loader = String(inst?.loader || "vanilla") as LoaderKind;
   modalModsHint.textContent = `Mods for this instance (${mcVersion}):`;
   await renderCompatibilityGuidance(instanceId);
-  const res = await backend.modsList(instanceId);
-
-  const mods = res?.mods ?? [];
-  for (const m of mods) {
-    const row = document.createElement("div");
-    row.className = "setRow";
-    row.style.marginBottom = "10px";
-
-    const left = document.createElement("div");
-    left.style.display = "flex";
-    left.style.flexDirection = "column";
-
-    const name = document.createElement("div");
-    name.className = "setLabel";
-    name.textContent = m.name ?? m.id ?? "Mod";
-
-    const sub = document.createElement("div");
-    sub.className = "setHelp";
-    const bits = [];
-    bits.push(`status: ${m.status}`);
-    if (!m.enabled) bits.push("disabled");
-    const reason = getModCompatibilityReason(m, mcVersion, loader);
-    if (reason) bits.push(reason);
-    const alts = MOD_ALTERNATIVES[m.id];
-    if (reason && alts?.length) bits.push(`Try: ${alts.join(" | ")}`);
-    sub.textContent = bits.join(" | ");
-
-    left.appendChild(name);
-    left.appendChild(sub);
-
-    const toggle = document.createElement("button");
-    toggle.className = "btn";
-    toggle.textContent = m.enabled ? "Disable" : "Enable";
-    toggle.onclick = () =>
-      guarded(async () => {
-        await backend.modsSetEnabled(instanceId, m.id, !m.enabled);
-        await renderLocalContent(instanceId);
-        await renderInstanceMods(instanceId);
-      });
-
-    row.appendChild(left);
-    row.appendChild(toggle);
-
-    modalModsList.append(row);
-  }
-
   await runInstanceModrinthModsSearch(instanceId);
 }
 
@@ -6858,7 +7059,7 @@ async function openInstanceWorkspace(
     await renderInstanceMods(i.id);
     await renderLocalContent(i.id);
   } else if (initialTab === "packs") {
-    await renderRecommendedPacks(i.id);
+    await runInstanceModrinthContentSearch(i.id);
     await renderLocalContent(i.id);
   }
 }
@@ -7392,7 +7593,20 @@ async function runProviderSearch() {
   providerResultsLabel.textContent = isPopular ? "Popular packs" : `Search results for "${q}"`;
   providerSearchResults.innerHTML = '<div class="muted" style="font-size:12px">Searching...</div>';
 
-  const data = await backend.providerPacksSearch(provider, q, 24);
+  let data: { hits?: Array<any> } = { hits: [] };
+  try {
+    data = await backend.providerPacksSearch(provider, q, 24);
+  } catch (err: any) {
+    providerSearchResults.innerHTML = "";
+    const msg = document.createElement("div");
+    msg.className = "muted";
+    msg.style.fontSize = "12px";
+    msg.textContent = String(err?.message ?? err ?? "Provider search failed.");
+    providerSearchResults.appendChild(msg);
+    appendLog(`[provider-search] ${String(err?.message ?? err ?? "Provider search failed.")}`);
+    return;
+  }
+
   const hits = data?.hits ?? [];
   if (!hits.length) {
     providerSearchResults.innerHTML = '<div class="muted" style="font-size:12px">No packs found.</div>';
@@ -8499,23 +8713,6 @@ modalUpdateMods.onclick = () =>
         }
       }
     }
-    setStatus("");
-  });
-
-modalUpdatePacks.onclick = () =>
-  guarded(async () => {
-    if (!editInstanceId) return;
-    const inst = (state.instances?.instances ?? []).find((x: any) => x.id === editInstanceId) ?? null;
-    if (!inst) return;
-    setStatus("Resolving packs...");
-    try {
-      await backend.rollbackCreateSnapshot(inst.id, "packs-refresh", "Before manual packs refresh");
-    } catch (err: any) {
-      appendLog(`[rollback] Snapshot skipped: ${String(err?.message ?? err)}`);
-    }
-    await backend.packsRefresh(inst.id, inst.mcVersion);
-    await renderRecommendedPacks(inst.id);
-    await renderLocalContent(inst.id);
     setStatus("");
   });
 

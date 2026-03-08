@@ -43,6 +43,10 @@ pub struct LocalCapeItem {
   pub full_path: String,
   #[serde(rename = "previewDataUrl")]
   pub preview_data_url: String,
+  #[serde(rename = "downloadUrl")]
+  pub download_url: Option<String>,
+  #[serde(rename = "fileDataUrl")]
+  pub file_data_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -77,6 +81,18 @@ struct LauncherAccountDb {
   #[serde(rename = "activeAccountId")]
   active_account_id: Option<String>,
   accounts: Vec<LauncherAccountEntry>,
+  #[serde(rename = "updatedAt")]
+  updated_at: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct LauncherSessionDb {
+  #[serde(rename = "accessToken")]
+  access_token: Option<String>,
+  #[serde(rename = "refreshToken")]
+  refresh_token: Option<String>,
+  #[serde(rename = "accountId")]
+  account_id: Option<String>,
   #[serde(rename = "updatedAt")]
   updated_at: Option<u64>,
 }
@@ -212,6 +228,14 @@ fn launcher_accounts_db_path(app: &tauri::AppHandle) -> AppResult<PathBuf> {
   Ok(app_data_root(app)?.join("data").join("launcher-accounts.json"))
 }
 
+fn launcher_session_db_path(app: &tauri::AppHandle) -> AppResult<PathBuf> {
+  Ok(app_data_root(app)?.join("data").join("launcher-session.json"))
+}
+
+fn capes_catalog_cache_path(app: &tauri::AppHandle) -> AppResult<PathBuf> {
+  Ok(app_data_root(app)?.join("capes").join("catalog.json"))
+}
+
 fn read_selection_db(app: &tauri::AppHandle) -> AppResult<LocalCapeSelectionDb> {
   let path = selection_db_path(app)?;
   Ok(safe_read_json(
@@ -242,6 +266,40 @@ fn read_launcher_accounts_db(app: &tauri::AppHandle) -> AppResult<LauncherAccoun
 fn write_launcher_accounts_db(app: &tauri::AppHandle, db: &LauncherAccountDb) -> AppResult<()> {
   let path = launcher_accounts_db_path(app)?;
   safe_write_json(&path, db)
+}
+
+fn read_launcher_session_db(app: &tauri::AppHandle) -> AppResult<LauncherSessionDb> {
+  let path = launcher_session_db_path(app)?;
+  Ok(safe_read_json(
+    &path,
+    LauncherSessionDb {
+      access_token: None,
+      refresh_token: None,
+      account_id: None,
+      updated_at: None,
+    },
+  ))
+}
+
+fn write_launcher_session_db(app: &tauri::AppHandle, db: &LauncherSessionDb) -> AppResult<()> {
+  let path = launcher_session_db_path(app)?;
+  safe_write_json(&path, db)
+}
+
+fn read_capes_catalog_cache(app: &tauri::AppHandle) -> AppResult<LocalCapeCatalog> {
+  let path = capes_catalog_cache_path(app)?;
+  Ok(safe_read_json(
+    &path,
+    LocalCapeCatalog {
+      roots: vec!["cloud".to_string()],
+      items: vec![],
+    },
+  ))
+}
+
+fn write_capes_catalog_cache(app: &tauri::AppHandle, catalog: &LocalCapeCatalog) -> AppResult<()> {
+  let path = capes_catalog_cache_path(app)?;
+  safe_write_json(&path, catalog)
 }
 
 fn normalize_tier(raw: Option<&str>) -> &'static str {
@@ -278,142 +336,504 @@ fn find_cape_by_id<'a>(catalog: &'a LocalCapeCatalog, cape_id: &str) -> Option<&
   catalog.items.iter().find(|item| item.id == cape_id)
 }
 
-fn to_title(name: &str) -> String {
-  name
-    .replace(['-', '_'], " ")
-    .split_whitespace()
-    .map(|part| {
-      let mut chars = part.chars();
-      let first = chars.next().unwrap_or_default().to_ascii_uppercase();
-      format!("{first}{}", chars.as_str().to_ascii_lowercase())
-    })
-    .collect::<Vec<_>>()
-    .join(" ")
+fn repo_root() -> PathBuf {
+  let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+  let mut candidates: Vec<PathBuf> = Vec::new();
+  if let Some(parent) = manifest.parent() {
+    candidates.push(parent.to_path_buf());
+    if let Some(grand) = parent.parent() {
+      candidates.push(grand.to_path_buf());
+    }
+  }
+  candidates.push(manifest.clone());
+  for candidate in candidates {
+    if candidate.join("scripts").is_dir() && candidate.join("package.json").is_file() {
+      return candidate;
+    }
+  }
+  manifest
 }
 
-fn ext_mime(path: &Path) -> &'static str {
-  match path
-    .extension()
-    .and_then(|x| x.to_str())
-    .unwrap_or_default()
-    .to_ascii_lowercase()
-    .as_str()
-  {
-    "jpg" | "jpeg" => "image/jpeg",
-    "webp" => "image/webp",
-    "bmp" => "image/bmp",
-    "gif" => "image/gif",
-    _ => "image/png",
+fn resolve_msmc_runtime_root(app: &tauri::AppHandle) -> Option<PathBuf> {
+  let mut candidates: Vec<PathBuf> = Vec::new();
+  if let Ok(resource_dir) = app.path().resource_dir() {
+    candidates.push(resource_dir.join("msmc-runtime"));
+  }
+  if let Ok(cwd) = std::env::current_dir() {
+    candidates.push(cwd.join("src-tauri").join("resources").join("msmc-runtime"));
+  }
+  candidates.push(repo_root().join("src-tauri").join("resources").join("msmc-runtime"));
+  candidates.push(repo_root());
+
+  candidates.into_iter().find(|path| {
+    path
+      .join("scripts")
+      .join("tauri-msmc-login.mjs")
+      .is_file()
+  })
+}
+
+fn launcher_api_base() -> String {
+  for key in ["FISHBATTERY_ACCOUNT_API", "FISHBATTERY_ACCOUNT_API_URL"] {
+    let raw = std::env::var(key).unwrap_or_default();
+    let trimmed = raw.trim().trim_end_matches('/').to_string();
+    if !trimmed.is_empty() {
+      return trimmed;
+    }
+  }
+  "https://api.fishbattery.app".to_string()
+}
+
+fn launcher_api_path(env_key: &str, fallback: &str) -> String {
+  let raw = std::env::var(env_key).unwrap_or_default();
+  let trimmed = raw.trim();
+  if trimmed.is_empty() {
+    return fallback.to_string();
+  }
+  if trimmed.starts_with('/') {
+    trimmed.to_string()
+  } else {
+    format!("/{trimmed}")
   }
 }
 
-fn file_is_image(path: &Path) -> bool {
-  matches!(
-    path
-      .extension()
-      .and_then(|x| x.to_str())
-      .unwrap_or_default()
-      .to_ascii_lowercase()
-      .as_str(),
-    "png" | "jpg" | "jpeg" | "webp" | "bmp" | "gif"
+fn cape_catalog_path() -> String {
+  launcher_api_path("FISHBATTERY_ACCOUNT_CAPES_PATH", "/v1/capes/launcher")
+}
+
+fn cape_catalog_public_path() -> String {
+  launcher_api_path(
+    "FISHBATTERY_ACCOUNT_CAPES_PUBLIC_PATH",
+    "/v1/capes/launcher/public",
   )
 }
 
-fn repo_root() -> PathBuf {
-  let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-  manifest
-    .parent()
-    .and_then(|p| p.parent())
-    .map(Path::to_path_buf)
-    .unwrap_or(manifest)
+fn cape_selected_path() -> String {
+  launcher_api_path(
+    "FISHBATTERY_ACCOUNT_CAPES_SELECTED_PATH",
+    "/v1/capes/launcher/selected",
+  )
 }
 
-fn list_capes_from_dir(dir: &Path, tier: &str) -> Vec<LocalCapeItem> {
-  let mut items = Vec::new();
-  let read_dir = match fs::read_dir(dir) {
-    Ok(v) => v,
-    Err(_) => return items,
-  };
+fn absolute_url_from_base(base: &str, raw: &str) -> String {
+  let value = raw.trim();
+  if value.is_empty() {
+    return String::new();
+  }
+  if value.starts_with("data:") || value.starts_with("http://") || value.starts_with("https://") {
+    return value.to_string();
+  }
+  match url::Url::parse(base).and_then(|b| b.join(value)) {
+    Ok(u) => u.to_string(),
+    Err(_) => value.to_string(),
+  }
+}
 
-  for entry in read_dir.flatten() {
-    let path = entry.path();
-    if !path.is_file() || !file_is_image(&path) {
+fn pick_first_string(values: &[Option<String>]) -> String {
+  values
+    .iter()
+    .flatten()
+    .map(|s| s.trim().to_string())
+    .find(|s| !s.is_empty())
+    .unwrap_or_default()
+}
+
+fn sanitize_cape_id(value: &str) -> String {
+  value
+    .trim()
+    .to_ascii_lowercase()
+    .chars()
+    .map(|c| {
+      if c.is_ascii_alphanumeric() || c == '.' || c == '_' || c == '-' {
+        c
+      } else {
+        '_'
+      }
+    })
+    .collect()
+}
+
+fn infer_ext(file_name: &str, fallback_url: Option<&str>) -> &'static str {
+  let name = file_name.to_ascii_lowercase();
+  if name.ends_with(".jpg") || name.ends_with(".jpeg") {
+    return ".jpg";
+  }
+  if name.ends_with(".webp") {
+    return ".webp";
+  }
+  if name.ends_with(".bmp") {
+    return ".bmp";
+  }
+  if name.ends_with(".gif") {
+    return ".gif";
+  }
+  if let Some(url) = fallback_url {
+    let lower = url.to_ascii_lowercase();
+    if lower.contains(".jpg") || lower.contains(".jpeg") {
+      return ".jpg";
+    }
+    if lower.contains(".webp") {
+      return ".webp";
+    }
+    if lower.contains(".bmp") {
+      return ".bmp";
+    }
+    if lower.contains(".gif") {
+      return ".gif";
+    }
+  }
+  ".png"
+}
+
+fn normalize_cape_tier(raw: Option<&str>) -> String {
+  match raw.unwrap_or_default().trim().to_ascii_lowercase().as_str() {
+    "founder" => "founder".to_string(),
+    "premium" => "premium".to_string(),
+    _ => "free".to_string(),
+  }
+}
+
+fn capes_cache_root(app: &tauri::AppHandle) -> AppResult<PathBuf> {
+  Ok(app_data_root(app)?.join("capes").join("cache"))
+}
+
+fn local_capes_empty() -> LocalCapeCatalog {
+  LocalCapeCatalog {
+    roots: vec!["cloud".to_string()],
+    items: vec![],
+  }
+}
+
+async fn read_json_response(res: reqwest::Response) -> AppResult<serde_json::Value> {
+  let status = res.status();
+  let text = res.text().await.map_err(into_error)?;
+  if !status.is_success() {
+    return Err(format!(
+      "Fishbattery cape API returned {}: {}",
+      status.as_u16(),
+      if text.trim().is_empty() {
+        "Unknown error".to_string()
+      } else {
+        text.trim().to_string()
+      }
+    ));
+  }
+  serde_json::from_str::<serde_json::Value>(&text).map_err(into_error)
+}
+
+async fn fetch_cape_catalog_payload(app: &tauri::AppHandle) -> AppResult<serde_json::Value> {
+  let base = launcher_api_base();
+  let client = reqwest::Client::new();
+  let session = read_launcher_session_db(app).ok();
+  let access_token = session
+    .and_then(|s| s.access_token)
+    .unwrap_or_default()
+    .trim()
+    .to_string();
+
+  if !access_token.is_empty() {
+    let url = absolute_url_from_base(&base, &cape_catalog_path());
+    let res = client
+      .get(url)
+      .header(reqwest::header::AUTHORIZATION, format!("Bearer {access_token}"))
+      .header("User-Agent", "FishbatteryLauncher/0.4.4")
+      .header(reqwest::header::ACCEPT, "application/json")
+      .send()
+      .await
+      .map_err(into_error);
+    if let Ok(response) = res {
+      if let Ok(payload) = read_json_response(response).await {
+        return Ok(payload);
+      }
+    }
+  }
+
+  let public_url = absolute_url_from_base(&base, &cape_catalog_public_path());
+  let res = client
+    .get(public_url)
+    .header("User-Agent", "FishbatteryLauncher/0.4.4")
+    .header(reqwest::header::ACCEPT, "application/json")
+    .send()
+    .await
+    .map_err(into_error)?;
+  read_json_response(res).await
+}
+
+async fn to_data_url_if_remote(client: &reqwest::Client, source: &str, file_name: &str) -> String {
+  let src = source.trim();
+  if src.is_empty() || src.starts_with("data:") {
+    return src.to_string();
+  }
+  if !(src.starts_with("http://") || src.starts_with("https://")) {
+    return src.to_string();
+  }
+  let res = match client.get(src).header("User-Agent", "FishbatteryLauncher/0.4.4").send().await {
+    Ok(v) => v,
+    Err(_) => return src.to_string(),
+  };
+  if !res.status().is_success() {
+    return src.to_string();
+  }
+  let bytes = match res.bytes().await {
+    Ok(v) if !v.is_empty() => v,
+    _ => return src.to_string(),
+  };
+  let mime = match infer_ext(file_name, Some(src)) {
+    ".jpg" => "image/jpeg",
+    ".webp" => "image/webp",
+    ".bmp" => "image/bmp",
+    ".gif" => "image/gif",
+    _ => "image/png",
+  };
+  format!("data:{mime};base64,{}", STANDARD.encode(bytes))
+}
+
+async fn payload_to_local_cape_catalog(app: &tauri::AppHandle, payload: &serde_json::Value) -> LocalCapeCatalog {
+  let mut items: Vec<LocalCapeItem> = Vec::new();
+  let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+  let base = launcher_api_base();
+  let cache_root = capes_cache_root(app).unwrap_or_else(|_| PathBuf::from("."));
+  let raw_items = payload
+    .get("items")
+    .and_then(|v| v.as_array())
+    .or_else(|| payload.get("capes").and_then(|v| v.as_array()))
+    .cloned()
+    .unwrap_or_default();
+  let client = reqwest::Client::new();
+
+  for raw in raw_items {
+    let id = pick_first_string(&[
+      raw.get("id").and_then(|v| v.as_str()).map(str::to_string),
+      raw.get("capeId").and_then(|v| v.as_str()).map(str::to_string),
+      raw.get("slug").and_then(|v| v.as_str()).map(str::to_string),
+    ]);
+    if id.is_empty() || seen.contains(&id) {
       continue;
     }
-
-    let bytes = match fs::read(&path) {
-      Ok(v) if !v.is_empty() => v,
-      _ => continue,
+    let name = pick_first_string(&[
+      raw.get("name").and_then(|v| v.as_str()).map(str::to_string),
+      raw.get("title").and_then(|v| v.as_str()).map(str::to_string),
+      raw.get("displayName").and_then(|v| v.as_str()).map(str::to_string),
+      Some(id.clone()),
+    ]);
+    let tier = normalize_cape_tier(raw.get("tier").and_then(|v| v.as_str()));
+    let file_name = pick_first_string(&[
+      raw.get("fileName").and_then(|v| v.as_str()).map(str::to_string),
+      raw.get("filename").and_then(|v| v.as_str()).map(str::to_string),
+      Some(format!("{}.png", sanitize_cape_id(&id))),
+    ]);
+    let download_url_raw = pick_first_string(&[
+      raw.get("downloadUrl").and_then(|v| v.as_str()).map(str::to_string),
+      raw.get("fileUrl").and_then(|v| v.as_str()).map(str::to_string),
+      raw.get("url").and_then(|v| v.as_str()).map(str::to_string),
+    ]);
+    let download_url = if download_url_raw.trim().is_empty() {
+      None
+    } else {
+      Some(absolute_url_from_base(&base, &download_url_raw))
     };
-    let file_name = match path.file_name().and_then(|x| x.to_str()) {
-      Some(v) => v.to_string(),
-      None => continue,
+    let file_data_url = raw
+      .get("fileDataUrl")
+      .and_then(|v| v.as_str())
+      .map(|v| v.trim().to_string())
+      .filter(|v| !v.is_empty());
+    let preview_inline = pick_first_string(&[
+      raw.get("previewDataUrl").and_then(|v| v.as_str()).map(str::to_string),
+      raw.get("thumbnailDataUrl").and_then(|v| v.as_str()).map(str::to_string),
+    ]);
+    let preview_source_raw = if !preview_inline.is_empty() {
+      preview_inline.clone()
+    } else {
+      pick_first_string(&[
+        raw.get("previewUrl").and_then(|v| v.as_str()).map(str::to_string),
+        raw.get("thumbnailUrl").and_then(|v| v.as_str()).map(str::to_string),
+        raw.get("imageUrl").and_then(|v| v.as_str()).map(str::to_string),
+        download_url.clone(),
+      ])
     };
-    let stem = path
-      .file_stem()
-      .and_then(|x| x.to_str())
-      .unwrap_or("cape")
-      .to_string();
-    let id = format!("{tier}:{stem}");
-    let name = to_title(&stem);
-    let data_url = format!("data:{};base64,{}", ext_mime(&path), STANDARD.encode(bytes));
+    let preview_source = absolute_url_from_base(&base, &preview_source_raw);
+    let preview_data_url = to_data_url_if_remote(&client, &preview_source, &file_name).await;
+    let ext = infer_ext(&file_name, download_url.as_deref());
+    let full_path = cache_root.join(format!("{}-asset-v2{}", sanitize_cape_id(&id), ext));
     items.push(LocalCapeItem {
-      id,
+      id: id.clone(),
       name,
-      tier: tier.to_string(),
+      tier,
       file_name,
-      full_path: path.to_string_lossy().to_string(),
-      preview_data_url: data_url,
+      full_path: full_path.to_string_lossy().to_string(),
+      preview_data_url,
+      download_url,
+      file_data_url,
     });
+    seen.insert(id);
   }
-  items
-}
-
-fn list_local_capes_from_root(root: &Path) -> LocalCapeCatalog {
-  let free = root.join("free");
-  let premium = root.join("premium");
-  let founder = root.join("founder");
-
-  let mut items = Vec::new();
-  items.extend(list_capes_from_dir(&free, "free"));
-  items.extend(list_capes_from_dir(&premium, "premium"));
-  items.extend(list_capes_from_dir(&founder, "founder"));
 
   LocalCapeCatalog {
-    roots: vec![
-      free.to_string_lossy().to_string(),
-      premium.to_string_lossy().to_string(),
-      founder.to_string_lossy().to_string(),
-    ],
+    roots: vec!["cloud".to_string()],
     items,
   }
 }
 
-fn list_local_capes_internal(app: &tauri::AppHandle) -> LocalCapeCatalog {
-  let mut roots: Vec<PathBuf> = Vec::new();
-
-  if let Ok(resource_dir) = app.path().resource_dir() {
-    roots.push(resource_dir.join("capes"));
+fn decode_data_url_to_bytes(raw: &str) -> Option<Vec<u8>> {
+  let value = raw.trim();
+  if !value.starts_with("data:") {
+    return None;
   }
-  if let Ok(cwd) = std::env::current_dir() {
-    roots.push(cwd.join("capes"));
-  }
-  roots.push(repo_root().join("capes"));
-
-  for root in roots {
-    let catalog = list_local_capes_from_root(&root);
-    if !catalog.items.is_empty() {
-      return catalog;
-    }
-  }
-
-  // Return best-effort paths for diagnostics even if no items are available.
-  list_local_capes_from_root(&repo_root().join("capes"))
+  let marker = ";base64,";
+  let idx = value.find(marker)?;
+  let b64 = &value[idx + marker.len()..];
+  STANDARD.decode(b64).ok()
 }
 
-fn run_msmc_login_script() -> AppResult<StoredAccount> {
+async fn ensure_cached_cape_file(item: &LocalCapeItem) -> Option<PathBuf> {
+  let full_path = PathBuf::from(item.full_path.trim());
+  if full_path.is_file() {
+    if let Ok(meta) = fs::metadata(&full_path) {
+      if meta.len() > 0 {
+        return Some(full_path);
+      }
+    }
+  }
+  if let Some(parent) = full_path.parent() {
+    let _ = fs::create_dir_all(parent);
+  }
+
+  let mut bytes: Option<Vec<u8>> = None;
+  if let Some(url) = item.download_url.as_deref() {
+    if url.starts_with("http://") || url.starts_with("https://") {
+      let client = reqwest::Client::new();
+      if let Ok(res) = client
+        .get(url)
+        .header("User-Agent", "FishbatteryLauncher/0.4.4")
+        .send()
+        .await
+      {
+        if res.status().is_success() {
+          if let Ok(buf) = res.bytes().await {
+            if !buf.is_empty() {
+              bytes = Some(buf.to_vec());
+            }
+          }
+        }
+      }
+    }
+  }
+  if bytes.is_none() {
+    bytes = item
+      .file_data_url
+      .as_deref()
+      .and_then(decode_data_url_to_bytes);
+  }
+  let data = bytes?;
+  if fs::write(&full_path, data).is_ok() {
+    return Some(full_path);
+  }
+  None
+}
+
+async fn fetch_remote_selected_cape_id(app: &tauri::AppHandle) -> AppResult<Option<String>> {
+  let session = read_launcher_session_db(app)?;
+  let access_token = session
+    .access_token
+    .unwrap_or_default()
+    .trim()
+    .to_string();
+  if access_token.is_empty() {
+    return Err("Not signed in.".to_string());
+  }
+  let base = launcher_api_base();
+  let url = absolute_url_from_base(&base, &cape_selected_path());
+  let client = reqwest::Client::new();
+  let res = client
+    .get(url)
+    .header(reqwest::header::AUTHORIZATION, format!("Bearer {access_token}"))
+    .header(reqwest::header::ACCEPT, "application/json")
+    .header("User-Agent", "FishbatteryLauncher/0.4.4")
+    .send()
+    .await
+    .map_err(into_error)?;
+  let status = res.status();
+  let text = res.text().await.map_err(into_error)?;
+  if status.as_u16() == 404 {
+    return Err("selected endpoint unsupported".to_string());
+  }
+  if !status.is_success() {
+    return Err(format!(
+      "Fishbattery cape API returned {}: {}",
+      status.as_u16(),
+      if text.trim().is_empty() {
+        "Unknown error".to_string()
+      } else {
+        text.trim().to_string()
+      }
+    ));
+  }
+  let payload = serde_json::from_str::<serde_json::Value>(&text).map_err(into_error)?;
+  let selected = payload
+    .get("selectedCapeId")
+    .and_then(|v| v.as_str())
+    .or_else(|| payload.get("capeId").and_then(|v| v.as_str()))
+    .map(|v| v.trim().to_string())
+    .filter(|v| !v.is_empty());
+  Ok(selected)
+}
+
+async fn persist_remote_selected_cape_id(app: &tauri::AppHandle, cape_id: Option<&str>) -> AppResult<Option<String>> {
+  let session = read_launcher_session_db(app)?;
+  let access_token = session
+    .access_token
+    .unwrap_or_default()
+    .trim()
+    .to_string();
+  if access_token.is_empty() {
+    return Err("Not signed in.".to_string());
+  }
+  let base = launcher_api_base();
+  let url = absolute_url_from_base(&base, &cape_selected_path());
+  let client = reqwest::Client::new();
+  let body = serde_json::json!({ "capeId": cape_id.map(str::to_string) });
+  let res = client
+    .put(url)
+    .header(reqwest::header::AUTHORIZATION, format!("Bearer {access_token}"))
+    .header(reqwest::header::ACCEPT, "application/json")
+    .header("User-Agent", "FishbatteryLauncher/0.4.4")
+    .json(&body)
+    .send()
+    .await
+    .map_err(into_error)?;
+  let status = res.status();
+  let text = res.text().await.map_err(into_error)?;
+  if status.as_u16() == 404 {
+    return Err("selected endpoint unsupported".to_string());
+  }
+  if !status.is_success() {
+    return Err(format!(
+      "Fishbattery cape API returned {}: {}",
+      status.as_u16(),
+      if text.trim().is_empty() {
+        "Unknown error".to_string()
+      } else {
+        text.trim().to_string()
+      }
+    ));
+  }
+  let payload = serde_json::from_str::<serde_json::Value>(&text).map_err(into_error)?;
+  Ok(
+    payload
+      .get("selectedCapeId")
+      .and_then(|v| v.as_str())
+      .or_else(|| payload.get("capeId").and_then(|v| v.as_str()))
+      .map(|v| v.trim().to_string())
+      .filter(|v| !v.is_empty())
+      .or_else(|| cape_id.map(str::to_string)),
+  )
+}
+
+fn run_msmc_login_script(app: &tauri::AppHandle) -> AppResult<StoredAccount> {
   const ACCOUNT_JSON_PREFIX: &str = "__FB_ACCOUNT_JSON__:";
-  let script = repo_root().join("scripts").join("tauri-msmc-login.mjs");
+  let runtime_root = resolve_msmc_runtime_root(app)
+    .ok_or_else(|| "accounts_add: login helper runtime is missing from app resources.".to_string())?;
+  let script = runtime_root.join("scripts").join("tauri-msmc-login.mjs");
   if !script.exists() {
     return Err(format!(
       "accounts_add: helper script not found at {}",
@@ -423,7 +843,7 @@ fn run_msmc_login_script() -> AppResult<StoredAccount> {
 
   let output = Command::new("node")
     .arg(script.as_os_str())
-    .current_dir(repo_root())
+    .current_dir(runtime_root.as_os_str())
     .output()
     .map_err(|e| {
       let msg = e.to_string().to_ascii_lowercase();
@@ -503,7 +923,7 @@ pub async fn accounts_get_avatar(
 
 #[command]
 pub fn accounts_add(app: tauri::AppHandle) -> AppResult<StoredAccount> {
-  let account = run_msmc_login_script()?;
+  let account = run_msmc_login_script(&app)?;
   let mut db = read_accounts_db(&app)?;
   db.accounts.retain(|a| a.id != account.id);
   db.accounts.insert(0, account.clone());
@@ -532,23 +952,37 @@ pub fn accounts_remove(app: tauri::AppHandle, id: String) -> AppResult<()> {
 }
 
 #[command]
-pub fn capes_list_local(app: tauri::AppHandle) -> AppResult<LocalCapeCatalog> {
-  let mut catalog = list_local_capes_internal(&app);
+pub async fn capes_list_local(app: tauri::AppHandle) -> AppResult<LocalCapeCatalog> {
+  let fetched = match fetch_cape_catalog_payload(&app).await {
+    Ok(payload) => payload_to_local_cape_catalog(&app, &payload).await,
+    Err(_) => read_capes_catalog_cache(&app).unwrap_or_else(|_| local_capes_empty()),
+  };
+  let mut catalog = fetched;
   if !can_use_cape_tier(&app, "founder") {
     catalog.items.retain(|item| item.tier != "founder");
   }
+  let _ = write_capes_catalog_cache(&app, &catalog);
   Ok(catalog)
 }
 
 #[command]
-pub fn capes_get_local_selection(app: tauri::AppHandle, account_id: String) -> AppResult<LocalCapeSelection> {
+pub async fn capes_get_local_selection(
+  app: tauri::AppHandle,
+  account_id: String,
+) -> AppResult<LocalCapeSelection> {
   let account = account_id.trim().to_string();
   if account.is_empty() {
     return Err("capes_get_local_selection: accountId missing".to_string());
   }
+
   let mut db = read_selection_db(&app)?;
-  let catalog = list_local_capes_internal(&app);
-  let selected = db.by_account_id.get(&account).cloned().flatten();
+  let remote_selected = fetch_remote_selected_cape_id(&app).await.ok().flatten();
+  if remote_selected.is_some() {
+    db.by_account_id.insert(account.clone(), remote_selected.clone());
+    write_selection_db(&app, &db)?;
+  }
+  let catalog = read_capes_catalog_cache(&app).unwrap_or_else(|_| local_capes_empty());
+  let selected = remote_selected.or_else(|| db.by_account_id.get(&account).cloned().flatten());
   let valid = selected.filter(|id| {
     if let Some(cape) = find_cape_by_id(&catalog, id) {
       return can_use_cape_tier(&app, &cape.tier);
@@ -566,7 +1000,7 @@ pub fn capes_get_local_selection(app: tauri::AppHandle, account_id: String) -> A
 }
 
 #[command]
-pub fn capes_set_local_selection(
+pub async fn capes_set_local_selection(
   app: tauri::AppHandle,
   account_id: String,
   cape_id: Option<String>,
@@ -576,8 +1010,11 @@ pub fn capes_set_local_selection(
     return Err("capes_set_local_selection: accountId missing".to_string());
   }
   let normalized = cape_id.map(|x| x.trim().to_string()).filter(|x| !x.is_empty());
+  let mut catalog = read_capes_catalog_cache(&app).unwrap_or_else(|_| local_capes_empty());
+  if catalog.items.is_empty() {
+    catalog = capes_list_local(app.clone()).await?;
+  }
   if let Some(ref chosen) = normalized {
-    let catalog = list_local_capes_internal(&app);
     let item = find_cape_by_id(&catalog, chosen);
     if item.is_none() {
       return Err("capes_set_local_selection: cape not found".to_string());
@@ -589,13 +1026,28 @@ pub fn capes_set_local_selection(
       }
       return Err("Launcher Premium is required to use premium capes.".to_string());
     }
+    let _ = ensure_cached_cape_file(item).await;
+  }
+  let remote_selected = persist_remote_selected_cape_id(&app, normalized.as_deref())
+    .await
+    .ok()
+    .flatten();
+  let effective = if remote_selected.is_some() {
+    remote_selected
+  } else {
+    normalized.clone()
+  };
+  if let Some(ref chosen) = effective {
+    if let Some(item) = find_cape_by_id(&catalog, chosen) {
+      let _ = ensure_cached_cape_file(item).await;
+    }
   }
   let mut db = read_selection_db(&app)?;
-  db.by_account_id.insert(account.clone(), normalized.clone());
+  db.by_account_id.insert(account.clone(), effective.clone());
   write_selection_db(&app, &db)?;
   Ok(LocalCapeSelection {
     account_id: account,
-    cape_id: normalized,
+    cape_id: effective,
   })
 }
 
@@ -603,6 +1055,13 @@ pub fn capes_set_local_selection(
 pub fn launcher_accounts_sync(app: tauri::AppHandle, payload: serde_json::Value) -> AppResult<bool> {
   let db: LauncherAccountDb = serde_json::from_value(payload).map_err(into_error)?;
   write_launcher_accounts_db(&app, &db)?;
+  Ok(true)
+}
+
+#[command]
+pub fn launcher_session_sync(app: tauri::AppHandle, payload: serde_json::Value) -> AppResult<bool> {
+  let db: LauncherSessionDb = serde_json::from_value(payload).map_err(into_error)?;
+  write_launcher_session_db(&app, &db)?;
   Ok(true)
 }
 
