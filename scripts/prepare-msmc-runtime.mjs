@@ -55,6 +55,14 @@ async function copyNodeRuntime() {
 }
 
 async function maybeCopyCurseforgeKey() {
+  const fromEnv = String(process.env.FISHBATTERY_CURSEFORGE_API_KEY || process.env.VITE_CURSEFORGE_API_KEY || "").trim();
+  if (fromEnv && !/^placeholder api key$/i.test(fromEnv)) {
+    await fs.mkdir(DEST_SECRETS, { recursive: true });
+    await fs.writeFile(path.join(DEST_SECRETS, CURSEFORGE_KEY_FILE), `${fromEnv}\n`, "utf8");
+    console.log("Included CurseForge key from environment variable.");
+    return;
+  }
+
   const candidates = [
     path.join(ROOT, "secrets", CURSEFORGE_KEY_FILE),
     path.join(ROOT, "src-tauri", "secrets", CURSEFORGE_KEY_FILE)

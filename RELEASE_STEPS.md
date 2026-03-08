@@ -26,6 +26,7 @@ Environment name: `release`
 - `AZURE_SUBSCRIPTION_ID`
 - `TAURI_SIGNING_PRIVATE_KEY`
 - `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`
+- `FISHBATTERY_CURSEFORGE_API_KEY` (required for CurseForge browse/install in distributed builds)
 
 #### Environment variables
 
@@ -123,4 +124,3 @@ Wait 5-15 minutes after role changes, then rerun workflow.
 ### Tauri updater panic about `plugins.updater`
 
 `plugins.updater` in `src-tauri/tauri.conf.json` must be an object, not `null`.
-
