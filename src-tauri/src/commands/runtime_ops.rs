@@ -1,12 +1,13 @@
 use std::fs;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use std::collections::{BTreeSet, HashSet};
 
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
 use rfd::FileDialog;
+use serde::de::DeserializeOwned;
 use serde::Deserialize;
 use serde_json::{json, Value};
 use tauri::command;
@@ -17,6 +18,7 @@ use zip::{CompressionMethod, ZipArchive, ZipWriter};
 use crate::error::{into_error, AppResult};
 
 const ICON_EXTS: [&str; 8] = [".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".svg", ".avif"];
+const MODRINTH_USER_AGENT: &str = concat!("FishbatteryLauncher/", env!("CARGO_PKG_VERSION"));
 const MOD_CATALOG: [(&str, &str, bool, &str); 61] = [
   ("fabric-api", "Fabric API", false, "P7dR8mSH"),
   ("sodium", "Sodium", false, "AANobbMI"),
@@ -515,6 +517,65 @@ fn servers_path(app: &tauri::AppHandle, instance_id: &str) -> AppResult<PathBuf>
   Ok(instance_dir(app, instance_id)?.join("servers.json"))
 }
 
+fn modrinth_versions_endpoint(project_id: &str, mc_version: Option<&str>, loader: Option<&str>) -> AppResult<String> {
+  let mut url = reqwest::Url::parse(&format!(
+    "https://api.modrinth.com/v2/project/{}/version",
+    urlencoding::encode(project_id)
+  ))
+  .map_err(into_error)?;
+  {
+    let mut q = url.query_pairs_mut();
+    if let Some(mc) = mc_version.map(str::trim).filter(|v| !v.is_empty()) {
+      let versions = serde_json::to_string(&vec![mc]).map_err(into_error)?;
+      q.append_pair("game_versions", &versions);
+    }
+    if let Some(loader_id) = loader.map(str::trim).map(str::to_ascii_lowercase).filter(|v| !v.is_empty() && v != "vanilla") {
+      // Quilt often runs Fabric-compatible versions too, so keep client-side matching for that case.
+      if loader_id != "quilt" {
+        let loaders = serde_json::to_string(&vec![loader_id]).map_err(into_error)?;
+        q.append_pair("loaders", &loaders);
+      }
+    }
+  }
+  Ok(url.to_string())
+}
+
+async fn modrinth_get_json<T: DeserializeOwned>(client: &reqwest::Client, url: &str) -> AppResult<T> {
+  let mut backoff_ms = 500u64;
+  for attempt in 0..4 {
+    let response = client
+      .get(url)
+      .header("user-agent", MODRINTH_USER_AGENT)
+      .send()
+      .await
+      .map_err(into_error)?;
+
+    if response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
+      if attempt >= 3 {
+        return Err("Modrinth API rate limit reached. Please retry in a moment.".to_string());
+      }
+      let retry_after_ms = response
+        .headers()
+        .get(reqwest::header::RETRY_AFTER)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.parse::<u64>().ok())
+        .map(|seconds| seconds.saturating_mul(1000))
+        .unwrap_or(backoff_ms);
+      tokio::time::sleep(Duration::from_millis(retry_after_ms.min(15_000))).await;
+      backoff_ms = (backoff_ms * 2).min(8_000);
+      continue;
+    }
+
+    return response
+      .error_for_status()
+      .map_err(into_error)?
+      .json::<T>()
+      .await
+      .map_err(into_error);
+  }
+  Err("Modrinth API request failed".to_string())
+}
+
 fn content_metadata_path(app: &tauri::AppHandle, instance_id: &str) -> AppResult<PathBuf> {
   Ok(instance_dir(app, instance_id)?.join("content-metadata.json"))
 }
@@ -1001,7 +1062,7 @@ pub async fn instances_set_icon_from_url(
 
   let response = reqwest::Client::new()
     .get(parsed)
-    .header("User-Agent", "FishbatteryLauncher/0.2.1")
+    .header("User-Agent", MODRINTH_USER_AGENT)
     .send()
     .await
     .map_err(into_error)?;
@@ -1367,7 +1428,7 @@ pub async fn local_mods_metadata(
 
     let modrinth_payload: Option<Value> = match client
       .get(modrinth_url)
-      .header("user-agent", "FishbatteryLauncher/0.2.1")
+      .header("user-agent", MODRINTH_USER_AGENT)
       .send()
       .await
     {
@@ -1415,7 +1476,7 @@ pub async fn local_mods_metadata(
     if let Some(api_key) = cf_key.as_ref() {
       let cf_payload: Option<Value> = match client
         .get("https://api.curseforge.com/v1/mods/search")
-        .header("user-agent", "FishbatteryLauncher/0.2.1")
+        .header("user-agent", MODRINTH_USER_AGENT)
         .header("x-api-key", api_key)
         .query(&[
           ("gameId", "432"),
@@ -1544,7 +1605,7 @@ pub async fn local_packs_metadata(
     );
     let payload: Option<Value> = match client
       .get(modrinth_url)
-      .header("user-agent", "FishbatteryLauncher/0.2.1")
+      .header("user-agent", MODRINTH_USER_AGENT)
       .send()
       .await
     {
@@ -2326,7 +2387,7 @@ pub async fn loader_pick_version(loader: String, mc_version: String) -> AppResul
     );
     let rows = client
       .get(url)
-      .header("user-agent", "FishbatteryLauncher/0.2.1")
+      .header("user-agent", MODRINTH_USER_AGENT)
       .send()
       .await
       .map_err(into_error)?
@@ -2352,7 +2413,7 @@ pub async fn loader_pick_version(loader: String, mc_version: String) -> AppResul
     );
     let rows = client
       .get(url)
-      .header("user-agent", "FishbatteryLauncher/0.2.1")
+      .header("user-agent", MODRINTH_USER_AGENT)
       .send()
       .await
       .map_err(into_error)?
@@ -2380,7 +2441,7 @@ pub async fn loader_pick_version(loader: String, mc_version: String) -> AppResul
   if loader_norm == "forge" {
     let xml = client
       .get("https://maven.minecraftforge.net/net/minecraftforge/forge/maven-metadata.xml")
-      .header("user-agent", "FishbatteryLauncher/0.2.1")
+      .header("user-agent", MODRINTH_USER_AGENT)
       .send()
       .await
       .map_err(into_error)?
@@ -2404,7 +2465,7 @@ pub async fn loader_pick_version(loader: String, mc_version: String) -> AppResul
   if loader_norm == "neoforge" {
     let xml = client
       .get("https://maven.neoforged.net/releases/net/neoforged/neoforge/maven-metadata.xml")
-      .header("user-agent", "FishbatteryLauncher/0.2.1")
+      .header("user-agent", MODRINTH_USER_AGENT)
       .send()
       .await
       .map_err(into_error)?
@@ -2502,7 +2563,7 @@ pub async fn loader_install(
         urlencoding::encode(&mc),
         urlencoding::encode(&version)
       ))
-      .header("user-agent", "FishbatteryLauncher/0.2.1")
+      .header("user-agent", MODRINTH_USER_AGENT)
       .send()
       .await
       .map_err(into_error)?
@@ -2557,7 +2618,7 @@ pub async fn loader_install(
         }
         let bytes = reqwest::Client::new()
           .get(u)
-          .header("user-agent", "FishbatteryLauncher/0.2.1")
+          .header("user-agent", MODRINTH_USER_AGENT)
           .send()
           .await
           .map_err(into_error)?
@@ -2611,7 +2672,7 @@ pub async fn loader_install(
     if should_download {
       let bytes = reqwest::Client::new()
         .get(url)
-        .header("user-agent", "FishbatteryLauncher/0.2.1")
+        .header("user-agent", MODRINTH_USER_AGENT)
         .send()
         .await
         .map_err(into_error)?
@@ -2841,20 +2902,8 @@ async fn resolve_latest_modrinth(
   mc_version: &str,
   loader: Option<&str>,
 ) -> AppResult<Option<Value>> {
-  let versions: Vec<Value> = client
-    .get(format!(
-      "https://api.modrinth.com/v2/project/{}/version",
-      urlencoding::encode(project_id)
-    ))
-    .header("user-agent", "FishbatteryLauncher/0.2.1")
-    .send()
-    .await
-    .map_err(into_error)?
-    .error_for_status()
-    .map_err(into_error)?
-    .json()
-    .await
-    .map_err(into_error)?;
+  let versions_url = modrinth_versions_endpoint(project_id, Some(mc_version), loader)?;
+  let versions: Vec<Value> = modrinth_get_json(client, &versions_url).await?;
 
   for v in versions {
     let game_versions = v.get("game_versions").and_then(|x| x.as_array()).cloned().unwrap_or_default();
@@ -2917,17 +2966,11 @@ async fn resolve_latest_modrinth(
       }
       // Some Modrinth dependencies only provide version_id; resolve it to project_id.
       if let Some(vid) = dep.get("version_id").and_then(|x| x.as_str()).map(str::trim).filter(|x| !x.is_empty()) {
-        let version_meta: Value = client
-          .get(format!("https://api.modrinth.com/v2/version/{}", urlencoding::encode(vid)))
-          .header("user-agent", "FishbatteryLauncher/0.2.1")
-          .send()
-          .await
-          .map_err(into_error)?
-          .error_for_status()
-          .map_err(into_error)?
-          .json()
-          .await
-          .map_err(into_error)?;
+        let version_meta: Value = modrinth_get_json(
+          client,
+          &format!("https://api.modrinth.com/v2/version/{}", urlencoding::encode(vid)),
+        )
+        .await?;
         if let Some(pid) = version_meta
           .get("project_id")
           .and_then(|x| x.as_str())
@@ -2974,7 +3017,7 @@ async fn install_required_project_dependency(
   if !cache_path.exists() || fs::metadata(&cache_path).map_err(into_error)?.len() == 0 {
     let bytes = client
       .get(url)
-      .header("user-agent", "FishbatteryLauncher/0.2.1")
+      .header("user-agent", MODRINTH_USER_AGENT)
       .send()
       .await
       .map_err(into_error)?
@@ -3104,7 +3147,7 @@ async fn mods_refresh_internal(
     if !cache_path.exists() || fs::metadata(&cache_path).map_err(into_error)?.len() == 0 {
       let bytes = client
         .get(url)
-        .header("user-agent", "FishbatteryLauncher/0.2.1")
+        .header("user-agent", MODRINTH_USER_AGENT)
         .send()
         .await
         .map_err(into_error)?
@@ -3714,7 +3757,7 @@ pub async fn packs_refresh(app: tauri::AppHandle, instance_id: String, mc_versio
     if !cache_path.exists() || fs::metadata(&cache_path).map_err(into_error)?.len() == 0 {
       let bytes = client
         .get(url)
-        .header("user-agent", "FishbatteryLauncher/0.2.1")
+        .header("user-agent", MODRINTH_USER_AGENT)
         .send()
         .await
         .map_err(into_error)?
@@ -3909,7 +3952,7 @@ pub async fn provider_packs_search_curseforge(
   let capped = limit.unwrap_or(24).max(1).min(40);
   let mut req = reqwest::Client::new()
     .get("https://api.curseforge.com/v1/mods/search")
-    .header("user-agent", "FishbatteryLauncher/0.2.1")
+    .header("user-agent", MODRINTH_USER_AGENT)
     .header("x-api-key", api_key)
     .query(&[
       ("gameId", "432"),
@@ -4298,17 +4341,8 @@ pub async fn modrinth_mods_search(
     index,
     urlencoding::encode(&facets)
   );
-  let data: Value = reqwest::Client::new()
-    .get(url)
-    .header("user-agent", "FishbatteryLauncher/0.2.1")
-    .send()
-    .await
-    .map_err(into_error)?
-    .error_for_status()
-    .map_err(into_error)?
-    .json()
-    .await
-    .map_err(into_error)?;
+  let client = reqwest::Client::new();
+  let data: Value = modrinth_get_json(&client, &url).await?;
 
   let mods_dir = instance_dir(&app, &safe_id)?.join("mods");
   let installed = installed_modrinth_project_ids(&mods_dir);
@@ -4363,32 +4397,14 @@ pub async fn modrinth_mods_install(
 
   let client = reqwest::Client::new();
   let version: Value = if let Some(v_id) = version_id {
-    client
-      .get(format!("https://api.modrinth.com/v2/version/{}", urlencoding::encode(v_id.trim())))
-      .header("user-agent", "FishbatteryLauncher/0.2.1")
-      .send()
-      .await
-      .map_err(into_error)?
-      .error_for_status()
-      .map_err(into_error)?
-      .json()
-      .await
-      .map_err(into_error)?
+    modrinth_get_json(
+      &client,
+      &format!("https://api.modrinth.com/v2/version/{}", urlencoding::encode(v_id.trim())),
+    )
+    .await?
   } else {
-    let versions: Vec<Value> = client
-      .get(format!(
-        "https://api.modrinth.com/v2/project/{}/version",
-        urlencoding::encode(pid)
-      ))
-      .header("user-agent", "FishbatteryLauncher/0.2.1")
-      .send()
-      .await
-      .map_err(into_error)?
-      .error_for_status()
-      .map_err(into_error)?
-      .json()
-      .await
-      .map_err(into_error)?;
+    let versions_url = modrinth_versions_endpoint(pid, Some(mc.as_str()), Some(loader.as_str()))?;
+    let versions: Vec<Value> = modrinth_get_json(&client, &versions_url).await?;
     let mut picked: Option<Value> = None;
     for v in versions {
       let game_versions = v.get("game_versions").and_then(|x| x.as_array()).cloned().unwrap_or_default();
@@ -4433,7 +4449,7 @@ pub async fn modrinth_mods_install(
 
   let bytes = client
     .get(file_url.clone())
-    .header("user-agent", "FishbatteryLauncher/0.2.1")
+    .header("user-agent", MODRINTH_USER_AGENT)
     .send()
     .await
     .map_err(into_error)?
@@ -4460,7 +4476,7 @@ pub async fn modrinth_mods_install(
   let mut cache = read_content_metadata(&app, &safe_id).unwrap_or_else(|_| json!({}));
   let project_meta: Option<Value> = match client
     .get(format!("https://api.modrinth.com/v2/project/{}", urlencoding::encode(pid)))
-    .header("user-agent", "FishbatteryLauncher/0.2.1")
+    .header("user-agent", MODRINTH_USER_AGENT)
     .send()
     .await
   {
@@ -4539,17 +4555,8 @@ pub async fn modrinth_content_search(
     index,
     urlencoding::encode(&facets)
   );
-  let data: Value = reqwest::Client::new()
-    .get(url)
-    .header("user-agent", "FishbatteryLauncher/0.2.1")
-    .send()
-    .await
-    .map_err(into_error)?
-    .error_for_status()
-    .map_err(into_error)?
-    .json()
-    .await
-    .map_err(into_error)?;
+  let client = reqwest::Client::new();
+  let data: Value = modrinth_get_json(&client, &url).await?;
 
   let dir = modrinth_content_dir(&app, &safe_id, kind_label)?;
   let installed = installed_modrinth_content_project_ids(&dir, kind_label);
@@ -4600,32 +4607,14 @@ pub async fn modrinth_content_install(
 
   let client = reqwest::Client::new();
   let version: Value = if let Some(v_id) = version_id {
-    client
-      .get(format!("https://api.modrinth.com/v2/version/{}", urlencoding::encode(v_id.trim())))
-      .header("user-agent", "FishbatteryLauncher/0.2.1")
-      .send()
-      .await
-      .map_err(into_error)?
-      .error_for_status()
-      .map_err(into_error)?
-      .json()
-      .await
-      .map_err(into_error)?
+    modrinth_get_json(
+      &client,
+      &format!("https://api.modrinth.com/v2/version/{}", urlencoding::encode(v_id.trim())),
+    )
+    .await?
   } else {
-    let versions: Vec<Value> = client
-      .get(format!(
-        "https://api.modrinth.com/v2/project/{}/version",
-        urlencoding::encode(pid)
-      ))
-      .header("user-agent", "FishbatteryLauncher/0.2.1")
-      .send()
-      .await
-      .map_err(into_error)?
-      .error_for_status()
-      .map_err(into_error)?
-      .json()
-      .await
-      .map_err(into_error)?;
+    let versions_url = modrinth_versions_endpoint(pid, Some(mc.as_str()), None)?;
+    let versions: Vec<Value> = modrinth_get_json(&client, &versions_url).await?;
     let mut picked: Option<Value> = None;
     for v in versions {
       let game_versions = v.get("game_versions").and_then(|x| x.as_array()).cloned().unwrap_or_default();
@@ -4664,7 +4653,7 @@ pub async fn modrinth_content_install(
 
   let bytes = client
     .get(file_url.clone())
-    .header("user-agent", "FishbatteryLauncher/0.2.1")
+    .header("user-agent", MODRINTH_USER_AGENT)
     .send()
     .await
     .map_err(into_error)?
@@ -4690,7 +4679,7 @@ pub async fn modrinth_content_install(
   let mut cache = read_content_metadata(&app, &safe_id).unwrap_or_else(|_| json!({}));
   let project_meta: Option<Value> = match client
     .get(format!("https://api.modrinth.com/v2/project/{}", urlencoding::encode(pid)))
-    .header("user-agent", "FishbatteryLauncher/0.2.1")
+    .header("user-agent", MODRINTH_USER_AGENT)
     .send()
     .await
   {
@@ -4748,7 +4737,7 @@ pub async fn vanilla_install(app: tauri::AppHandle, mc_version: String) -> AppRe
 
   let manifest: MojangVersionManifest = reqwest::Client::new()
     .get("https://piston-meta.mojang.com/mc/game/version_manifest_v2.json")
-    .header("user-agent", "FishbatteryLauncher/0.2.1")
+    .header("user-agent", MODRINTH_USER_AGENT)
     .send()
     .await
     .map_err(into_error)?
@@ -4766,7 +4755,7 @@ pub async fn vanilla_install(app: tauri::AppHandle, mc_version: String) -> AppRe
 
   let version_json: Value = reqwest::Client::new()
     .get(entry.url)
-    .header("user-agent", "FishbatteryLauncher/0.2.1")
+    .header("user-agent", MODRINTH_USER_AGENT)
     .send()
     .await
     .map_err(into_error)?
@@ -4795,7 +4784,7 @@ pub async fn vanilla_install(app: tauri::AppHandle, mc_version: String) -> AppRe
     if !jar_path.exists() || fs::metadata(&jar_path).map_err(into_error)?.len() == 0 {
       let bytes = reqwest::Client::new()
         .get(client_url)
-        .header("user-agent", "FishbatteryLauncher/0.2.1")
+        .header("user-agent", MODRINTH_USER_AGENT)
         .send()
         .await
         .map_err(into_error)?
@@ -4843,7 +4832,7 @@ pub async fn fabric_install(
       urlencoding::encode(&mc),
       urlencoding::encode(&lv)
     ))
-    .header("user-agent", "FishbatteryLauncher/0.2.1")
+    .header("user-agent", MODRINTH_USER_AGENT)
     .send()
     .await
     .map_err(into_error)?
@@ -4899,7 +4888,7 @@ pub async fn fabric_install(
       }
       let bytes = reqwest::Client::new()
         .get(u)
-        .header("user-agent", "FishbatteryLauncher/0.2.1")
+        .header("user-agent", MODRINTH_USER_AGENT)
         .send()
         .await
         .map_err(into_error)?
@@ -4976,7 +4965,7 @@ pub async fn provider_packs_install(
     let client = reqwest::Client::new();
     let mod_detail: Value = client
       .get(format!("https://api.curseforge.com/v1/mods/{mod_id}"))
-      .header("user-agent", "FishbatteryLauncher/0.2.1")
+      .header("user-agent", MODRINTH_USER_AGENT)
       .header("x-api-key", &api_key)
       .send()
       .await
@@ -5003,7 +4992,7 @@ pub async fn provider_packs_install(
       .get(format!(
         "https://api.curseforge.com/v1/mods/{mod_id}/files?pageSize=50&index=0"
       ))
-      .header("user-agent", "FishbatteryLauncher/0.2.1")
+      .header("user-agent", MODRINTH_USER_AGENT)
       .header("x-api-key", &api_key)
       .send()
       .await
@@ -5067,7 +5056,7 @@ pub async fn provider_packs_install(
         .get(format!(
           "https://api.curseforge.com/v1/mods/{mod_id}/files/{file_id}/download-url"
         ))
-        .header("user-agent", "FishbatteryLauncher/0.2.1")
+        .header("user-agent", MODRINTH_USER_AGENT)
         .header("x-api-key", &api_key)
         .send()
         .await
@@ -5132,7 +5121,7 @@ pub async fn provider_packs_install(
 
     let pack_bytes = client
       .get(download_url)
-      .header("user-agent", "FishbatteryLauncher/0.2.1")
+      .header("user-agent", MODRINTH_USER_AGENT)
       .send()
       .await
       .map_err(into_error)?
@@ -5288,7 +5277,7 @@ pub async fn provider_packs_install(
             .get(format!(
               "https://api.curseforge.com/v1/mods/{dep_mod_id}/files/{dep_file_id}"
             ))
-            .header("user-agent", "FishbatteryLauncher/0.2.1")
+            .header("user-agent", MODRINTH_USER_AGENT)
             .header("x-api-key", &api_key)
             .send()
             .await
@@ -5312,7 +5301,7 @@ pub async fn provider_packs_install(
               .get(format!(
                 "https://api.curseforge.com/v1/mods/{dep_mod_id}/files/{dep_file_id}/download-url"
               ))
-              .header("user-agent", "FishbatteryLauncher/0.2.1")
+              .header("user-agent", MODRINTH_USER_AGENT)
               .header("x-api-key", &api_key)
               .send()
               .await
@@ -5330,7 +5319,7 @@ pub async fn provider_packs_install(
           };
           let dep_bytes = match client
             .get(dep_url)
-            .header("user-agent", "FishbatteryLauncher/0.2.1")
+            .header("user-agent", MODRINTH_USER_AGENT)
             .send()
             .await
           {
@@ -5380,7 +5369,7 @@ pub async fn provider_packs_install(
     if let Ok(pack_id_num) = numeric.parse::<u64>() {
       let detail: Value = reqwest::Client::new()
         .get(format!("https://api.modpacks.ch/public/modpack/{pack_id_num}"))
-        .header("user-agent", "FishbatteryLauncher/0.2.1")
+        .header("user-agent", MODRINTH_USER_AGENT)
         .send()
         .await
         .map_err(into_error)?
@@ -5494,7 +5483,7 @@ pub async fn provider_packs_install(
       if let Some(v_id) = version_id {
         let version_detail: Value = reqwest::Client::new()
           .get(format!("https://api.modpacks.ch/public/modpack/{pack_id_num}/{v_id}"))
-          .header("user-agent", "FishbatteryLauncher/0.2.1")
+          .header("user-agent", MODRINTH_USER_AGENT)
           .send()
           .await
           .map_err(into_error)?
@@ -5544,7 +5533,7 @@ pub async fn provider_packs_install(
             }
             let bytes = client
               .get(url)
-              .header("user-agent", "FishbatteryLauncher/0.2.1")
+              .header("user-agent", MODRINTH_USER_AGENT)
               .send()
               .await
               .map_err(into_error)?
@@ -5574,7 +5563,7 @@ pub async fn provider_packs_install(
         "https://api.atlauncher.com/v1/pack/{}/latest",
         urlencoding::encode(safe)
       ))
-      .header("user-agent", "FishbatteryLauncher/0.2.1")
+      .header("user-agent", MODRINTH_USER_AGENT)
       .send()
       .await
       .map_err(into_error)?
@@ -5650,35 +5639,17 @@ pub async fn modrinth_packs_install(app: tauri::AppHandle, payload: Value) -> Ap
 
   let client = reqwest::Client::new();
   let version: ModrinthVersion = if let Some(v_id) = version_id.clone() {
-    client
-      .get(format!(
+    modrinth_get_json(
+      &client,
+      &format!(
         "https://api.modrinth.com/v2/version/{}",
         urlencoding::encode(&v_id)
-      ))
-      .header("user-agent", "FishbatteryLauncher/0.2.1")
-      .send()
-      .await
-      .map_err(into_error)?
-      .error_for_status()
-      .map_err(into_error)?
-      .json()
-      .await
-      .map_err(into_error)?
+      ),
+    )
+    .await?
   } else {
-    let mut versions: Vec<ModrinthVersion> = client
-      .get(format!(
-        "https://api.modrinth.com/v2/project/{}/version",
-        urlencoding::encode(&project_id)
-      ))
-      .header("user-agent", "FishbatteryLauncher/0.2.1")
-      .send()
-      .await
-      .map_err(into_error)?
-      .error_for_status()
-      .map_err(into_error)?
-      .json()
-      .await
-      .map_err(into_error)?;
+    let versions_url = modrinth_versions_endpoint(&project_id, None, None)?;
+    let mut versions: Vec<ModrinthVersion> = modrinth_get_json(&client, &versions_url).await?;
     versions.retain(|v| !v.files.is_empty());
     versions
       .into_iter()
@@ -5760,7 +5731,7 @@ pub async fn modrinth_packs_install(app: tauri::AppHandle, payload: Value) -> Ap
 
   let pack_bytes = client
     .get(&pack_file.url)
-    .header("user-agent", "FishbatteryLauncher/0.2.1")
+    .header("user-agent", MODRINTH_USER_AGENT)
     .send()
     .await
     .map_err(into_error)?
@@ -5794,7 +5765,7 @@ pub async fn modrinth_packs_install(app: tauri::AppHandle, payload: Value) -> Ap
     };
     let bytes = client
       .get(download)
-      .header("user-agent", "FishbatteryLauncher/0.2.1")
+      .header("user-agent", MODRINTH_USER_AGENT)
       .send()
       .await
       .map_err(into_error)?
