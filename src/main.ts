@@ -319,54 +319,9 @@ type SponsoredBanner = {
   link: string;
 };
 let sponsoredIndex = 0;
-let sponsoredBanners: SponsoredBanner[] = [
-  {
-    id: "fallback-hosting",
-    title: "Sponsored: Modpack Hosting",
-    body: "Deploy modded servers quickly with one-click backups and version pinning.",
-    cta: "See hosting tips",
-    media: "Hosting",
-    partner: "Fishbattery Partner",
-    imageUrl: null,
-    mediaBg: null,
-    link: "https://fishbatteryapp.github.io/fishbattery-web/download.html"
-  },
-  {
-    id: "fallback-studio",
-    title: "Sponsored: Resource Pack Studio",
-    body: "Build and preview texture packs with a streamlined desktop workflow.",
-    cta: "View workflow",
-    media: "Studio",
-    partner: "Fishbattery Partner",
-    imageUrl: null,
-    mediaBg: null,
-    link: "https://fishbatteryapp.github.io/fishbattery-web/"
-  },
-  {
-    id: "fallback-worlds",
-    title: "Sponsored: Community Worlds",
-    body: "Discover curated adventure maps tested for current launcher presets.",
-    cta: "Browse highlights",
-    media: "Worlds",
-    partner: "Fishbattery Partner",
-    imageUrl: null,
-    mediaBg: null,
-    link: "https://fishbatteryapp.github.io/fishbattery-web/download.html"
-  },
-  {
-    id: "Your ad here",
-    title: "Sponsored: Your brand name here",
-    body: "Want to reach an engaged Minecraft audience? Advertise in Fishbattery Launcher.",
-    cta: "Get in touch",
-    media: "Advertise",
-    partner: "Fishbattery Partner",
-    imageUrl: null,
-    mediaBg: null,
-    link: "https://fishbatteryapp.github.io/fishbattery-web/download.html"
-  }
-];
-let sponsoredCurrentLink = sponsoredBanners[0].link;
-let sponsoredCurrentEntry: SponsoredBanner | null = sponsoredBanners[0] ?? null;
+let sponsoredBanners: SponsoredBanner[] = [];
+let sponsoredCurrentLink = "";
+let sponsoredCurrentEntry: SponsoredBanner | null = null;
 let sponsoredRotateTimer: number | null = null;
 let sponsoredLastImpressionId: string | null = null;
 
@@ -387,10 +342,8 @@ type SponsoredFeedAd = {
   link?: string;
 };
 
-const SPONSORED_FEED_URLS = [
-  "https://fishbattery.app/assets/ads.json",
-  "https://fishbatteryapp.github.io/fishbattery-web/assets/ads.json"
-];
+const ADS_API_BASE_PRIMARY = "https://fishbattery-auth-api-production.up.railway.app";
+const ADS_API_BASES = ["http://localhost:3000", ADS_API_BASE_PRIMARY];
 const DISCORD_INVITE_URL = "https://discord.gg/yT5zRsRXsf";
 
 type MojangDefaultSkin = {
@@ -2298,12 +2251,14 @@ async function shouldHideSponsoredBanner() {
 
 // Load sponsored banners from feed.
 async function loadSponsoredBannersFromFeed() {
-  const fallback = sponsoredBanners;
-  for (const url of SPONSORED_FEED_URLS) {
+  const resolved = String(localStorage.getItem("fishbattery.apiBaseResolved") || "").trim();
+  const apiBases = [resolved, ...ADS_API_BASES].filter((v, i, a) => !!v && a.indexOf(v) === i);
+  const seen = new Set<string>();
+  for (const base of apiBases) {
     try {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 3000);
-      const res = await fetch(url, {
+      const res = await fetch(`${base}/v1/ads/feed?placement=launcher-sidebar&limit=10`, {
         signal: controller.signal,
         cache: "no-store"
       });
@@ -2311,7 +2266,6 @@ async function loadSponsoredBannersFromFeed() {
       if (!res.ok) continue;
       const json = await res.json();
       const ads: SponsoredFeedAd[] = Array.isArray(json?.ads) ? json.ads : [];
-      const seen = new Set<string>();
       const launcherAds = ads.filter((ad) => {
         if (ad?.active === false) return false;
         if (!Array.isArray(ad?.placements)) return false;
@@ -2341,6 +2295,7 @@ async function loadSponsoredBannersFromFeed() {
           return true;
         });
       if (mapped.length) {
+        localStorage.setItem("fishbattery.apiBaseResolved", base);
         sponsoredBanners = mapped;
         sponsoredIndex = 0;
         if (!mapped.some((x) => x.link === sponsoredCurrentLink)) {
@@ -2349,10 +2304,12 @@ async function loadSponsoredBannersFromFeed() {
         return;
       }
     } catch {
-      // continue to fallback
+      // try next api base
     }
   }
-  sponsoredBanners = fallback;
+  sponsoredBanners = [];
+  sponsoredCurrentEntry = null;
+  sponsoredCurrentLink = "";
 }
 
 // Render sponsored banner state.
