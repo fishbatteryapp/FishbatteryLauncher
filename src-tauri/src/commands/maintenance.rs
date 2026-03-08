@@ -15,6 +15,10 @@ use crate::error::{into_error, AppResult};
 use crate::state::AppState;
 
 const PERF_MOD_IDS: &[&str] = &["sodium", "lithium", "ferrite-core", "modernfix", "c2me"];
+const DEFAULT_UPDATER_PUBKEY: &str =
+  "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEVFRTVBNjNGRjkzRTlEMTAKUldRUW5UNzVQNmJsN3NXeFExZzRLL0crZFJlcXdkendWMHhBRGhsQ0FHbXYzc05UM3p0YktBTFYK";
+const DEFAULT_UPDATER_ENDPOINT_STABLE: &str =
+  "https://github.com/fishbatteryapp/FishbatteryLauncher/releases/latest/download/latest.json";
 
 fn now_ms() -> u64 {
   SystemTime::now()
@@ -148,7 +152,7 @@ fn updater_pubkey_from_env() -> Option<String> {
       }
     }
   }
-  None
+  Some(DEFAULT_UPDATER_PUBKEY.to_string())
 }
 
 fn updater_endpoints_from_env(channel: &str) -> Vec<Url> {
@@ -165,6 +169,16 @@ fn updater_endpoints_from_env(channel: &str) -> Vec<Url> {
       if let Ok(url) = Url::parse(&raw) {
         out.push(url);
       }
+    }
+  }
+  if out.is_empty() {
+    let fallback = if channel.eq_ignore_ascii_case("stable") {
+      DEFAULT_UPDATER_ENDPOINT_STABLE
+    } else {
+      DEFAULT_UPDATER_ENDPOINT_STABLE
+    };
+    if let Ok(url) = Url::parse(fallback) {
+      out.push(url);
     }
   }
   out

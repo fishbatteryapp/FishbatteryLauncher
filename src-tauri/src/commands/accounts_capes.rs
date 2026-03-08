@@ -355,22 +355,51 @@ fn repo_root() -> PathBuf {
 }
 
 fn resolve_msmc_runtime_root(app: &tauri::AppHandle) -> Option<PathBuf> {
+  fn has_login_script(root: &Path) -> bool {
+    root.join("scripts").join("tauri-msmc-login.mjs").is_file()
+  }
+
+  fn find_runtime_root_in_tree(base: &Path, depth: usize) -> Option<PathBuf> {
+    if depth == 0 {
+      return None;
+    }
+    let entries = fs::read_dir(base).ok()?;
+    for entry in entries.flatten() {
+      let path = entry.path();
+      if path.is_dir() {
+        if has_login_script(&path) {
+          return Some(path);
+        }
+        if let Some(found) = find_runtime_root_in_tree(&path, depth - 1) {
+          return Some(found);
+        }
+      }
+    }
+    None
+  }
+
   let mut candidates: Vec<PathBuf> = Vec::new();
   if let Ok(resource_dir) = app.path().resource_dir() {
     candidates.push(resource_dir.join("msmc-runtime"));
+    candidates.push(resource_dir.clone());
+    if let Some(found) = find_runtime_root_in_tree(&resource_dir, 3) {
+      candidates.push(found);
+    }
+  }
+  if let Ok(exe_dir) = app.path().executable_dir() {
+    candidates.push(exe_dir.join("resources").join("msmc-runtime"));
+    candidates.push(exe_dir.join("resources"));
+    candidates.push(exe_dir.join("msmc-runtime"));
   }
   if let Ok(cwd) = std::env::current_dir() {
     candidates.push(cwd.join("src-tauri").join("resources").join("msmc-runtime"));
+    candidates.push(cwd.join("resources").join("msmc-runtime"));
+    candidates.push(cwd.join("msmc-runtime"));
   }
   candidates.push(repo_root().join("src-tauri").join("resources").join("msmc-runtime"));
   candidates.push(repo_root());
 
-  candidates.into_iter().find(|path| {
-    path
-      .join("scripts")
-      .join("tauri-msmc-login.mjs")
-      .is_file()
-  })
+  candidates.into_iter().find(|path| has_login_script(path))
 }
 
 fn launcher_api_base() -> String {

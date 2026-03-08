@@ -1,7 +1,7 @@
 {
   "name": "fishbattery-launcher",
   "private": true,
-  "version": "0.4.5",
+  "version": "0.4.6",
   "description": "A fast, underwater-themed Minecraft launcher focused on clean UX, modded play, and reliable cross-device updates.",
   "type": "module",
   "scripts": {
@@ -10,7 +10,7 @@
     "prepare:tauri-resources": "node ./scripts/prepare-msmc-runtime.mjs",
     "preview": "vite preview",
     "tauri:dev": "npm run prepare:tauri-resources && tauri dev",
-    "tauri:build": "tauri build"
+    "tauri:build": "npm run prepare:tauri-resources && tauri build"
   },
   "dependencies": {
     "@tauri-apps/api": "2.10.1",
