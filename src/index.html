@@ -72,15 +72,8 @@
           <p id="sidebarSponsoredNote" class="sidebarSponsoredNote">
             Ads help us maintain the launcher.
           </p>
-          <p id="sidebarSponsoredGdpr" class="sidebarSponsoredGdpr" style="display:none">
-            We only load ad content after your consent (GDPR).
-          </p>
           <div class="sidebarSponsoredActions">
             <button id="sidebarSponsoredCta" class="btn btnPrimary" type="button">Learn more</button>
-            <button id="sidebarSponsoredConsent" class="btn btnPrimary" type="button" style="display:none">
-              Allow ads
-            </button>
-            <button id="sidebarSponsoredPrivacy" class="btn" type="button" style="display:none">Privacy</button>
             <button id="sidebarSponsoredUpgrade" class="btn" type="button">Remove ads</button>
           </div>
         </div>
@@ -192,6 +185,21 @@
         </div>
       </section>
     </div>
+
+    <aside id="consentBanner" class="consent-banner hidden" role="dialog" aria-modal="true" aria-label="Cookie consent">
+      <div class="consent-banner-copy">
+        <h2 class="consent-banner-title">We use cookies</h2>
+        <p>
+          We use essential cookies to keep the launcher working. With your permission, we use advertising cookies for
+          ad measurement. Fishbattery sponsored cards can still be shown without advertising cookies.
+        </p>
+      </div>
+      <div class="consent-banner-actions">
+        <button id="consentAccept" class="btn btnPrimary" type="button">Accept</button>
+        <button id="consentReject" class="btn" type="button">Reject</button>
+        <button id="consentSettings" class="btn consent-settings-btn" type="button">Cookie settings</button>
+      </div>
+    </aside>
 
     <!-- Modal -->
     <div id="modalBackdrop" class="modalBackdrop">

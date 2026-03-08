@@ -246,6 +246,99 @@ fn java8_download_spec() -> Option<(&'static str, JavaArchiveKind)> {
   None
 }
 
+#[cfg(all(target_os = "windows", target_arch = "x86_64"))]
+fn java17_download_spec() -> Option<(&'static str, JavaArchiveKind)> {
+  Some((
+    "https://api.adoptium.net/v3/binary/latest/17/ga/windows/x64/jre/hotspot/normal/eclipse",
+    JavaArchiveKind::Zip,
+  ))
+}
+
+#[cfg(all(target_os = "macos", target_arch = "x86_64"))]
+fn java17_download_spec() -> Option<(&'static str, JavaArchiveKind)> {
+  Some((
+    "https://api.adoptium.net/v3/binary/latest/17/ga/mac/x64/jre/hotspot/normal/eclipse",
+    JavaArchiveKind::TarGz,
+  ))
+}
+
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+fn java17_download_spec() -> Option<(&'static str, JavaArchiveKind)> {
+  Some((
+    "https://api.adoptium.net/v3/binary/latest/17/ga/mac/aarch64/jre/hotspot/normal/eclipse",
+    JavaArchiveKind::TarGz,
+  ))
+}
+
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+fn java17_download_spec() -> Option<(&'static str, JavaArchiveKind)> {
+  Some((
+    "https://api.adoptium.net/v3/binary/latest/17/ga/linux/x64/jre/hotspot/normal/eclipse",
+    JavaArchiveKind::TarGz,
+  ))
+}
+
+#[cfg(not(any(
+  all(target_os = "windows", target_arch = "x86_64"),
+  all(target_os = "macos", target_arch = "x86_64"),
+  all(target_os = "macos", target_arch = "aarch64"),
+  all(target_os = "linux", target_arch = "x86_64")
+)))]
+fn java17_download_spec() -> Option<(&'static str, JavaArchiveKind)> {
+  None
+}
+
+#[cfg(all(target_os = "windows", target_arch = "x86_64"))]
+fn java21_download_spec() -> Option<(&'static str, JavaArchiveKind)> {
+  Some((
+    "https://api.adoptium.net/v3/binary/latest/21/ga/windows/x64/jre/hotspot/normal/eclipse",
+    JavaArchiveKind::Zip,
+  ))
+}
+
+#[cfg(all(target_os = "macos", target_arch = "x86_64"))]
+fn java21_download_spec() -> Option<(&'static str, JavaArchiveKind)> {
+  Some((
+    "https://api.adoptium.net/v3/binary/latest/21/ga/mac/x64/jre/hotspot/normal/eclipse",
+    JavaArchiveKind::TarGz,
+  ))
+}
+
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+fn java21_download_spec() -> Option<(&'static str, JavaArchiveKind)> {
+  Some((
+    "https://api.adoptium.net/v3/binary/latest/21/ga/mac/aarch64/jre/hotspot/normal/eclipse",
+    JavaArchiveKind::TarGz,
+  ))
+}
+
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+fn java21_download_spec() -> Option<(&'static str, JavaArchiveKind)> {
+  Some((
+    "https://api.adoptium.net/v3/binary/latest/21/ga/linux/x64/jre/hotspot/normal/eclipse",
+    JavaArchiveKind::TarGz,
+  ))
+}
+
+#[cfg(not(any(
+  all(target_os = "windows", target_arch = "x86_64"),
+  all(target_os = "macos", target_arch = "x86_64"),
+  all(target_os = "macos", target_arch = "aarch64"),
+  all(target_os = "linux", target_arch = "x86_64")
+)))]
+fn java21_download_spec() -> Option<(&'static str, JavaArchiveKind)> {
+  None
+}
+
+fn java_download_spec(major: u32) -> Option<(&'static str, JavaArchiveKind)> {
+  match major {
+    8 => java8_download_spec(),
+    17 => java17_download_spec(),
+    21 => java21_download_spec(),
+    _ => None,
+  }
+}
+
 fn extract_zip_bytes(bytes: &[u8], out_dir: &Path) -> AppResult<()> {
   fs::create_dir_all(out_dir).map_err(into_error)?;
   let cursor = std::io::Cursor::new(bytes);
@@ -293,20 +386,34 @@ fn has_java_major_in_bundled_roots(app: &tauri::AppHandle, wanted_major: u32) ->
 }
 
 async fn ensure_java8_runtime_available(app: &tauri::AppHandle, window: &Window) -> AppResult<()> {
-  if has_java_major_in_bundled_roots(app, 8) {
+  ensure_java_major_runtime_available(app, window, 8).await
+}
+
+async fn ensure_java_major_runtime_available(
+  app: &tauri::AppHandle,
+  window: &Window,
+  wanted_major: u32,
+) -> AppResult<()> {
+  if has_java_major_in_bundled_roots(app, wanted_major) {
     return Ok(());
   }
-  let Some((url, archive_kind)) = java8_download_spec() else {
-    return Err("launch: Java 8 auto-download is not configured for this platform".to_string());
+  let Some((url, archive_kind)) = java_download_spec(wanted_major) else {
+    return Err(format!(
+      "launch: Java {} auto-download is not configured for this platform",
+      wanted_major
+    ));
   };
 
   let runtime_root = app_data_root(app)?.join("runtime");
-  let managed_root = runtime_root.join("java8-managed");
+  let managed_root = runtime_root.join(format!("java{}-managed", wanted_major));
   fs::create_dir_all(&managed_root).map_err(into_error)?;
 
   let _ = emit_launch_log(
     window,
-    "[launcher] Java 8 runtime missing for legacy instance; downloading managed Java 8 runtime".to_string(),
+    format!(
+      "[launcher] Java {} runtime missing; downloading managed Java {} runtime",
+      wanted_major, wanted_major
+    ),
   );
 
   let client = reqwest::Client::builder()
@@ -335,13 +442,17 @@ async fn ensure_java8_runtime_available(app: &tauri::AppHandle, window: &Window)
     JavaArchiveKind::TarGz => extract_targz_bytes(&bytes, &managed_root)?,
   }
 
-  if !has_java_major_in_bundled_roots(app, 8) {
-    return Err("launch: Java 8 download completed but runtime was not discoverable".to_string());
+  if !has_java_major_in_bundled_roots(app, wanted_major) {
+    return Err(format!(
+      "launch: Java {} download completed but runtime was not discoverable",
+      wanted_major
+    ));
   }
   let _ = emit_launch_log(
     window,
     format!(
-      "[launcher] Managed Java 8 runtime installed at {}",
+      "[launcher] Managed Java {} runtime installed at {}",
+      wanted_major,
       managed_root.to_string_lossy()
     ),
   );
@@ -1783,6 +1894,30 @@ pub async fn launch(
         return Ok(json!({ "ok": false, "error": format!("launch: bridge sync failed: {err}") }));
       }
       let _ = emit_launch_log(&window, format!("[capes] Bridge sync failed (non-fatal): {err}"));
+    }
+  }
+
+  if let Some(primary_major) = preferred_java_majors(mc_version_opt.as_deref()).first().copied() {
+    let bundled_has_primary = has_java_major_in_bundled_roots(&app, primary_major);
+    let path_is_primary = probe_java_major("java") == Some(primary_major);
+    if !bundled_has_primary && !path_is_primary {
+      match ensure_java_major_runtime_available(&app, &window, primary_major).await {
+        Ok(_) => {
+          let _ = emit_launch_log(
+            &window,
+            format!("[launcher] Prepared managed Java {} runtime", primary_major),
+          );
+        }
+        Err(err) => {
+          let _ = emit_launch_log(
+            &window,
+            format!(
+              "[launcher] Java {} managed runtime preparation failed (non-fatal): {}",
+              primary_major, err
+            ),
+          );
+        }
+      }
     }
   }
 

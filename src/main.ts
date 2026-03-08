@@ -49,11 +49,12 @@ const sidebarSponsoredTitle = $("sidebarSponsoredTitle");
 const sidebarSponsoredBody = $("sidebarSponsoredBody");
 const sidebarSponsoredMediaText = $("sidebarSponsoredMediaText");
 const sidebarSponsoredNote = $("sidebarSponsoredNote");
-const sidebarSponsoredGdpr = $("sidebarSponsoredGdpr");
 const sidebarSponsoredCta = $("sidebarSponsoredCta") as HTMLButtonElement;
-const sidebarSponsoredConsent = $("sidebarSponsoredConsent") as HTMLButtonElement;
-const sidebarSponsoredPrivacy = $("sidebarSponsoredPrivacy") as HTMLButtonElement;
 const sidebarSponsoredUpgrade = $("sidebarSponsoredUpgrade") as HTMLButtonElement;
+const consentBanner = $("consentBanner");
+const consentAccept = $("consentAccept") as HTMLButtonElement;
+const consentReject = $("consentReject") as HTMLButtonElement;
+const consentSettings = $("consentSettings") as HTMLButtonElement;
 
 const viewLibrary = $("viewLibrary");
 const viewCapes = $("viewCapes");
@@ -2230,11 +2231,13 @@ async function guarded(fn: () => Promise<void>) {
   if (busy) return;
   busy = true;
   void renderSponsoredBannerState();
+  renderConsentBannerState();
   try {
     await fn();
   } finally {
     busy = false;
     void renderSponsoredBannerState();
+    renderConsentBannerState();
   }
 }
 
@@ -2248,7 +2251,7 @@ function getAdsConsent(): "unknown" | "granted" | "denied" {
   return getSettings().adsConsent || "unknown";
 }
 
-function hasAdsConsent(): boolean {
+function hasAdMeasurementConsent(): boolean {
   return getAdsConsent() === "granted";
 }
 
@@ -2257,7 +2260,6 @@ async function shouldHideSponsoredBanner() {
   if (hasAdsFreeSubscription()) return true;
   if (busy) return true;
   if (latestDiagnosis?.severity === "critical") return true;
-  if (!hasAdsConsent()) return false;
   const active = state.instances?.activeInstanceId ?? null;
   if (!active) return false;
   try {
@@ -2269,12 +2271,6 @@ async function shouldHideSponsoredBanner() {
 
 // Load sponsored banners from feed.
 async function loadSponsoredBannersFromFeed() {
-  if (!hasAdsConsent()) {
-    sponsoredBanners = [];
-    sponsoredCurrentEntry = null;
-    sponsoredCurrentLink = "";
-    return;
-  }
   const resolved = String(localStorage.getItem("fishbattery.apiBaseResolved") || "").trim();
   const apiBases = [resolved, ...ADS_API_BASES].filter((v, i, a) => !!v && a.indexOf(v) === i);
   const seen = new Set<string>();
@@ -2348,46 +2344,16 @@ async function renderSponsoredBannerState() {
     !sidebarSponsoredFrame ||
     !sidebarSponsoredMediaImg ||
     !sidebarSponsoredCta ||
-    !sidebarSponsoredConsent ||
-    !sidebarSponsoredPrivacy ||
-    !sidebarSponsoredGdpr ||
     !sidebarSponsoredNote
   ) {
     return;
   }
   if (hasAdsFreeSubscription()) {
     sidebarSponsored.style.display = "none";
+    if (consentBanner) consentBanner.classList.add("hidden");
     return;
   }
   sidebarSponsored.style.display = "";
-
-  const consent = getAdsConsent();
-  if (consent !== "granted") {
-    sidebarSponsoredBy.textContent = "Consent";
-    sidebarSponsoredTitle.textContent = "Sponsored content";
-    sidebarSponsoredBody.textContent =
-      consent === "denied"
-        ? "Ads are currently disabled. You can re-enable ad consent in Settings > General."
-        : "We need your consent before loading sponsored content.";
-    sidebarSponsoredMediaText.textContent = "GDPR";
-    sidebarSponsoredMedia.classList.remove("hasEmbed");
-    sidebarSponsoredMedia.classList.remove("hasImage");
-    sidebarSponsoredMedia.style.background = "";
-    if (sidebarSponsoredFrame.src) sidebarSponsoredFrame.src = "about:blank";
-    sidebarSponsoredMediaImg.removeAttribute("src");
-    sidebarSponsoredCta.style.display = "none";
-    sidebarSponsoredConsent.style.display = consent === "denied" ? "none" : "";
-    sidebarSponsoredPrivacy.style.display = "";
-    sidebarSponsoredUpgrade.style.display = "";
-    sidebarSponsoredGdpr.style.display = "";
-    sidebarSponsoredNote.style.display = "";
-    sponsoredCurrentLink = "";
-    return;
-  }
-
-  sidebarSponsoredGdpr.style.display = "none";
-  sidebarSponsoredConsent.style.display = "none";
-  sidebarSponsoredPrivacy.style.display = "none";
   sidebarSponsoredNote.style.display = "";
   sidebarSponsoredUpgrade.style.display = "";
 
@@ -2412,7 +2378,7 @@ async function renderSponsoredBannerState() {
   const entry = sponsoredBanners[sponsoredIndex % sponsoredBanners.length];
   sponsoredIndex += 1;
   sponsoredCurrentEntry = entry;
-  const hasEmbed = !!entry.embedUrl;
+  const hasEmbed = hasAdMeasurementConsent() && !!entry.embedUrl;
   sidebarSponsoredTitle.textContent = entry.title || "Sponsored";
   sidebarSponsoredBody.textContent = entry.body || "Sponsored content";
   sidebarSponsoredMediaText.textContent = entry.media || "Sponsor";
@@ -2438,7 +2404,7 @@ async function renderSponsoredBannerState() {
   sidebarSponsoredCta.style.display = ctaTarget ? "" : "none";
   sidebarSponsoredCta.textContent = ctaText;
   sponsoredCurrentLink = ctaTarget;
-  if (entry.id && sponsoredLastImpressionId !== entry.id) {
+  if (hasAdMeasurementConsent() && entry.id && sponsoredLastImpressionId !== entry.id) {
     sponsoredLastImpressionId = entry.id;
     appendLog(`[sponsored] Impression: ${entry.id}`);
     if (entry.impressionUrl) {
@@ -2449,6 +2415,12 @@ async function renderSponsoredBannerState() {
       }).catch(() => {});
     }
   }
+}
+
+function renderConsentBannerState() {
+  if (!consentBanner) return;
+  const show = !hasAdsFreeSubscription() && getAdsConsent() === "unknown";
+  consentBanner.classList.toggle("hidden", !show);
 }
 
 function ensureSponsoredRotation() {
@@ -4335,29 +4307,6 @@ function renderSettingsPanels() {
   {
     const { row } = makeRow("Auto update mods", "When enabled, you can choose to refresh mods after version changes.");
     const sw = makeSwitch(s.autoUpdateMods, (v) => setSettings({ autoUpdateMods: v }));
-    row.appendChild(sw);
-    settingsPanelGeneral.appendChild(row);
-  }
-
-  {
-    const consentState = s.adsConsent || "unknown";
-    const { row } = makeRow(
-      "Sponsored ads consent (GDPR)",
-      consentState === "granted"
-        ? "Consent granted. Sponsored cards can be loaded and measured."
-        : "Required before sponsored content is loaded. You can change this anytime."
-    );
-    const sw = makeSwitch(consentState === "granted", (v) => {
-      setSettings({ adsConsent: v ? "granted" : "denied" });
-      if (!v) {
-        sponsoredBanners = [];
-        sponsoredCurrentEntry = null;
-        sponsoredCurrentLink = "";
-      } else {
-        void loadSponsoredBannersFromFeed();
-      }
-      void renderSponsoredBannerState();
-    });
     row.appendChild(sw);
     settingsPanelGeneral.appendChild(row);
   }
@@ -7803,6 +7752,7 @@ async function refreshAll() {
   await renderInstances();
   await loadSponsoredBannersFromFeed();
   await renderSponsoredBannerState();
+  renderConsentBannerState();
   ensureSponsoredRotation();
   ensureCloudSyncTimer();
   setStatus("");
@@ -7862,7 +7812,7 @@ sidebarSponsoredCta.onclick = () => {
       return;
     }
     appendLog(`[sponsored] Opened: ${target}`);
-    if (sponsoredCurrentEntry?.clickUrl) {
+    if (hasAdMeasurementConsent() && sponsoredCurrentEntry?.clickUrl) {
       void fetch(sponsoredCurrentEntry.clickUrl, {
         method: "GET",
         mode: "no-cors",
@@ -7884,15 +7834,21 @@ sidebarSponsoredUpgrade.onclick = () => {
   });
 };
 
-sidebarSponsoredConsent.onclick = () => {
+consentAccept.onclick = () => {
   setSettings({ adsConsent: "granted" });
+  renderConsentBannerState();
   void guarded(async () => {
     await loadSponsoredBannersFromFeed();
     await renderSponsoredBannerState();
   });
 };
 
-sidebarSponsoredPrivacy.onclick = () => {
+consentReject.onclick = () => {
+  setSettings({ adsConsent: "denied" });
+  renderConsentBannerState();
+};
+
+consentSettings.onclick = () => {
   void guarded(async () => {
     const ok = await backend.externalOpen(AD_PRIVACY_URL);
     if (!ok) {
