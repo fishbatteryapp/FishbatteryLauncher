@@ -44,6 +44,16 @@ async function copyFile(relativePath) {
   await fs.copyFile(src, dest);
 }
 
+async function copyNodeRuntime() {
+  const nodeExec = process.execPath;
+  const ext = process.platform === "win32" ? ".exe" : "";
+  const dest = path.join(DEST_ROOT, "bin", `node${ext}`);
+  await ensureExists(nodeExec);
+  await fs.mkdir(path.dirname(dest), { recursive: true });
+  await fs.copyFile(nodeExec, dest);
+  console.log(`Included Node runtime from ${nodeExec}`);
+}
+
 async function maybeCopyCurseforgeKey() {
   const candidates = [
     path.join(ROOT, "secrets", CURSEFORGE_KEY_FILE),
@@ -71,6 +81,7 @@ async function main() {
   await fs.rm(DEST_SECRETS, { recursive: true, force: true });
   await fs.mkdir(DEST_SECRETS, { recursive: true });
   await copyFile("scripts/tauri-msmc-login.mjs");
+  await copyNodeRuntime();
   for (const dir of DIRS) {
     await copyDir(dir);
   }

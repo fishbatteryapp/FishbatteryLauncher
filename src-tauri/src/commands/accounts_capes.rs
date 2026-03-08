@@ -870,7 +870,17 @@ fn run_msmc_login_script(app: &tauri::AppHandle) -> AppResult<StoredAccount> {
     ));
   }
 
-  let output = Command::new("node")
+  let bundled_node_windows = runtime_root.join("bin").join("node.exe");
+  let bundled_node_unix = runtime_root.join("bin").join("node");
+  let node_cmd = if bundled_node_windows.is_file() {
+    bundled_node_windows
+  } else if bundled_node_unix.is_file() {
+    bundled_node_unix
+  } else {
+    PathBuf::from("node")
+  };
+
+  let output = Command::new(node_cmd.as_os_str())
     .arg(script.as_os_str())
     .current_dir(runtime_root.as_os_str())
     .output()
