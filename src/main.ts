@@ -48,9 +48,12 @@ const sidebarSponsoredMediaImg = $("sidebarSponsoredMediaImg") as HTMLImageEleme
 const sidebarSponsoredTitle = $("sidebarSponsoredTitle");
 const sidebarSponsoredBody = $("sidebarSponsoredBody");
 const sidebarSponsoredMediaText = $("sidebarSponsoredMediaText");
+const sidebarSponsoredNote = $("sidebarSponsoredNote");
+const sidebarSponsoredGdpr = $("sidebarSponsoredGdpr");
 const sidebarSponsoredCta = $("sidebarSponsoredCta") as HTMLButtonElement;
+const sidebarSponsoredConsent = $("sidebarSponsoredConsent") as HTMLButtonElement;
+const sidebarSponsoredPrivacy = $("sidebarSponsoredPrivacy") as HTMLButtonElement;
 const sidebarSponsoredUpgrade = $("sidebarSponsoredUpgrade") as HTMLButtonElement;
-const sidebarDiscordBtn = $("sidebarDiscordBtn") as HTMLButtonElement;
 
 const viewLibrary = $("viewLibrary");
 const viewCapes = $("viewCapes");
@@ -345,6 +348,7 @@ type SponsoredFeedAd = {
 const ADS_API_BASE_PRIMARY = "https://fishbattery-auth-api-production.up.railway.app";
 const ADS_API_BASES = ["http://localhost:3000", ADS_API_BASE_PRIMARY];
 const DISCORD_INVITE_URL = "https://discord.gg/yT5zRsRXsf";
+const AD_PRIVACY_URL = "https://fishbattery.app/privacy";
 
 type MojangDefaultSkin = {
   key: string;
@@ -800,6 +804,7 @@ type AppSettings = {
   cloudSyncEnabled: boolean;
   cloudSyncAuto: boolean;
   cloudSyncConflictPolicy: "ask" | "newer-wins" | "prefer-local" | "prefer-cloud";
+  adsConsent: "unknown" | "granted" | "denied";
 };
 
 const SETTINGS_KEY = "fishbattery.settings";
@@ -826,7 +831,8 @@ const defaultSettings: AppSettings = {
   settingsUpdatedAt: Date.now(),
   cloudSyncEnabled: true,
   cloudSyncAuto: true,
-  cloudSyncConflictPolicy: "ask"
+  cloudSyncConflictPolicy: "ask",
+  adsConsent: "unknown"
 };
 
 const THEME_ID_SET = new Set<ThemeId>(THEME_OPTIONS.map((o) => o.value));
@@ -1834,6 +1840,8 @@ function getSettings(): AppSettings {
       raw.cloudSyncConflictPolicy === "prefer-cloud"
         ? raw.cloudSyncConflictPolicy
         : "ask";
+    const adsConsent =
+      raw.adsConsent === "granted" || raw.adsConsent === "denied" ? raw.adsConsent : "unknown";
     return {
       ...raw,
       theme,
@@ -1846,7 +1854,8 @@ function getSettings(): AppSettings {
       settingsUpdatedAt,
       cloudSyncEnabled,
       cloudSyncAuto,
-      cloudSyncConflictPolicy
+      cloudSyncConflictPolicy,
+      adsConsent
     };
   } catch {
     return { ...defaultSettings };
@@ -2235,11 +2244,20 @@ function hasAdsFreeSubscription(): boolean {
   return !!state.launcherSubscription?.features?.adsFree;
 }
 
+function getAdsConsent(): "unknown" | "granted" | "denied" {
+  return getSettings().adsConsent || "unknown";
+}
+
+function hasAdsConsent(): boolean {
+  return getAdsConsent() === "granted";
+}
+
 // Should hide sponsored banner.
 async function shouldHideSponsoredBanner() {
   if (hasAdsFreeSubscription()) return true;
   if (busy) return true;
   if (latestDiagnosis?.severity === "critical") return true;
+  if (!hasAdsConsent()) return false;
   const active = state.instances?.activeInstanceId ?? null;
   if (!active) return false;
   try {
@@ -2251,6 +2269,12 @@ async function shouldHideSponsoredBanner() {
 
 // Load sponsored banners from feed.
 async function loadSponsoredBannersFromFeed() {
+  if (!hasAdsConsent()) {
+    sponsoredBanners = [];
+    sponsoredCurrentEntry = null;
+    sponsoredCurrentLink = "";
+    return;
+  }
   const resolved = String(localStorage.getItem("fishbattery.apiBaseResolved") || "").trim();
   const apiBases = [resolved, ...ADS_API_BASES].filter((v, i, a) => !!v && a.indexOf(v) === i);
   const seen = new Set<string>();
@@ -2323,14 +2347,64 @@ async function renderSponsoredBannerState() {
     !sidebarSponsoredMedia ||
     !sidebarSponsoredFrame ||
     !sidebarSponsoredMediaImg ||
-    !sidebarSponsoredCta
+    !sidebarSponsoredCta ||
+    !sidebarSponsoredConsent ||
+    !sidebarSponsoredPrivacy ||
+    !sidebarSponsoredGdpr ||
+    !sidebarSponsoredNote
   ) {
     return;
   }
-  if (!sponsoredBanners.length) {
+  if (hasAdsFreeSubscription()) {
     sidebarSponsored.style.display = "none";
     return;
   }
+  sidebarSponsored.style.display = "";
+
+  const consent = getAdsConsent();
+  if (consent !== "granted") {
+    sidebarSponsoredBy.textContent = "Consent";
+    sidebarSponsoredTitle.textContent = "Sponsored content";
+    sidebarSponsoredBody.textContent =
+      consent === "denied"
+        ? "Ads are currently disabled. You can re-enable ad consent in Settings > General."
+        : "We need your consent before loading sponsored content.";
+    sidebarSponsoredMediaText.textContent = "GDPR";
+    sidebarSponsoredMedia.classList.remove("hasEmbed");
+    sidebarSponsoredMedia.classList.remove("hasImage");
+    sidebarSponsoredMedia.style.background = "";
+    if (sidebarSponsoredFrame.src) sidebarSponsoredFrame.src = "about:blank";
+    sidebarSponsoredMediaImg.removeAttribute("src");
+    sidebarSponsoredCta.style.display = "none";
+    sidebarSponsoredConsent.style.display = consent === "denied" ? "none" : "";
+    sidebarSponsoredPrivacy.style.display = "";
+    sidebarSponsoredUpgrade.style.display = "";
+    sidebarSponsoredGdpr.style.display = "";
+    sidebarSponsoredNote.style.display = "";
+    sponsoredCurrentLink = "";
+    return;
+  }
+
+  sidebarSponsoredGdpr.style.display = "none";
+  sidebarSponsoredConsent.style.display = "none";
+  sidebarSponsoredPrivacy.style.display = "none";
+  sidebarSponsoredNote.style.display = "";
+  sidebarSponsoredUpgrade.style.display = "";
+
+  if (!sponsoredBanners.length) {
+    sidebarSponsoredBy.textContent = "Sponsor";
+    sidebarSponsoredTitle.textContent = "No sponsored content right now";
+    sidebarSponsoredBody.textContent = "Ads help us maintain the launcher. Check back soon.";
+    sidebarSponsoredMediaText.textContent = "Sponsor";
+    sidebarSponsoredMedia.classList.remove("hasEmbed");
+    sidebarSponsoredMedia.classList.remove("hasImage");
+    sidebarSponsoredMedia.style.background = "";
+    if (sidebarSponsoredFrame.src) sidebarSponsoredFrame.src = "about:blank";
+    sidebarSponsoredMediaImg.removeAttribute("src");
+    sidebarSponsoredCta.style.display = "none";
+    return;
+  }
+
   const hide = await shouldHideSponsoredBanner();
   sidebarSponsored.style.display = hide ? "none" : "";
   if (hide) return;
@@ -4261,6 +4335,29 @@ function renderSettingsPanels() {
   {
     const { row } = makeRow("Auto update mods", "When enabled, you can choose to refresh mods after version changes.");
     const sw = makeSwitch(s.autoUpdateMods, (v) => setSettings({ autoUpdateMods: v }));
+    row.appendChild(sw);
+    settingsPanelGeneral.appendChild(row);
+  }
+
+  {
+    const consentState = s.adsConsent || "unknown";
+    const { row } = makeRow(
+      "Sponsored ads consent (GDPR)",
+      consentState === "granted"
+        ? "Consent granted. Sponsored cards can be loaded and measured."
+        : "Required before sponsored content is loaded. You can change this anytime."
+    );
+    const sw = makeSwitch(consentState === "granted", (v) => {
+      setSettings({ adsConsent: v ? "granted" : "denied" });
+      if (!v) {
+        sponsoredBanners = [];
+        sponsoredCurrentEntry = null;
+        sponsoredCurrentLink = "";
+      } else {
+        void loadSponsoredBannersFromFeed();
+      }
+      void renderSponsoredBannerState();
+    });
     row.appendChild(sw);
     settingsPanelGeneral.appendChild(row);
   }
@@ -7787,14 +7884,22 @@ sidebarSponsoredUpgrade.onclick = () => {
   });
 };
 
-sidebarDiscordBtn.onclick = () => {
+sidebarSponsoredConsent.onclick = () => {
+  setSettings({ adsConsent: "granted" });
   void guarded(async () => {
-    const ok = await backend.externalOpen(DISCORD_INVITE_URL);
+    await loadSponsoredBannersFromFeed();
+    await renderSponsoredBannerState();
+  });
+};
+
+sidebarSponsoredPrivacy.onclick = () => {
+  void guarded(async () => {
+    const ok = await backend.externalOpen(AD_PRIVACY_URL);
     if (!ok) {
-      setStatus("Could not open Discord invite right now.");
+      setStatus("Could not open privacy policy right now.");
       return;
     }
-    appendLog(`[community] Opened Discord invite: ${DISCORD_INVITE_URL}`);
+    appendLog(`[sponsored] Opened privacy policy: ${AD_PRIVACY_URL}`);
   });
 };
 

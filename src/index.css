@@ -303,6 +303,10 @@ body{
   background: rgba(255,255,255,.02);
 }
 
+.sidebarFooterSlot{
+  margin-top: auto;
+}
+
 .sidebarSponsored{
   border: 1px solid var(--border);
   border-radius: var(--r16);
@@ -421,6 +425,16 @@ body{
   margin: 0;
   font-size: 12px;
   color: var(--muted);
+}
+
+.sidebarSponsoredNote{
+  font-size: 11px;
+  color: #b7cee6;
+}
+
+.sidebarSponsoredGdpr{
+  font-size: 11px;
+  color: #c4dcf4;
 }
 
 .sidebarSponsoredActions{
@@ -1072,7 +1086,7 @@ pre{
     display: none !important;
   }
 
-  .sidebarFooter{
+  .sidebarFooterSlot{
     margin-top: 0;
   }
 
