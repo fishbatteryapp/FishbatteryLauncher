@@ -329,6 +329,7 @@ let sponsoredCurrentEntry: SponsoredBanner | null = null;
 let sponsoredRotateTimer: number | null = null;
 let sponsoredLastImpressionId: string | null = null;
 const SPONSORED_ROTATE_MS = 180_000;
+const SPONSORED_INDEX_KEY = "fishbattery.launcherSponsoredIndex";
 
 type SponsoredFeedAd = {
   id?: string;
@@ -2273,6 +2274,7 @@ async function shouldHideSponsoredBanner() {
 
 // Load sponsored banners from feed.
 async function loadSponsoredBannersFromFeed() {
+  const previousId = String(sponsoredCurrentEntry?.id || "").trim();
   const resolved = String(localStorage.getItem("fishbattery.apiBaseResolved") || "").trim();
   const apiBases = [resolved, ...ADS_API_BASES].filter((v, i, a) => !!v && a.indexOf(v) === i);
   const seen = new Set<string>();
@@ -2280,10 +2282,13 @@ async function loadSponsoredBannersFromFeed() {
     try {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 3000);
-      const res = await fetch(`${base}/v1/ads/feed?placement=${LAUNCHER_AD_PLACEMENT}&limit=10`, {
+      const res = await fetch(
+        `${base}/v1/ads/feed?placement=${LAUNCHER_AD_PLACEMENT}&limit=5&sessionId=${encodeURIComponent(getAdEventSessionId())}`,
+        {
         signal: controller.signal,
         cache: "no-store"
-      });
+      }
+      );
       clearTimeout(timer);
       if (!res.ok) continue;
       const json = await res.json();
@@ -2319,10 +2324,11 @@ async function loadSponsoredBannersFromFeed() {
       if (mapped.length) {
         localStorage.setItem("fishbattery.apiBaseResolved", base);
         sponsoredBanners = mapped;
-        sponsoredIndex = 0;
-        if (!mapped.some((x) => x.link === sponsoredCurrentLink)) {
-          sponsoredCurrentLink = mapped[0].link;
-        }
+        const preservedIndex = previousId ? mapped.findIndex((x) => String(x.id || "").trim() === previousId) : -1;
+        sponsoredIndex = preservedIndex >= 0 ? preservedIndex : 0;
+        sponsoredCurrentEntry = mapped[sponsoredIndex] || mapped[0] || null;
+        sponsoredCurrentLink = sponsoredCurrentEntry?.link || mapped[0].link || "";
+        localStorage.setItem(SPONSORED_INDEX_KEY, String(sponsoredIndex));
         return;
       }
     } catch {
@@ -2416,12 +2422,20 @@ async function renderSponsoredBannerState(advance = false) {
   sidebarSponsored.style.display = hide ? "none" : "";
   if (hide) return;
 
-  if (!sponsoredCurrentEntry || !sponsoredBanners.includes(sponsoredCurrentEntry)) {
+  const currentId = String(sponsoredCurrentEntry?.id || "").trim();
+  const currentIndexById = currentId
+    ? sponsoredBanners.findIndex((item) => String(item.id || "").trim() === currentId)
+    : -1;
+  if (currentIndexById >= 0) {
+    sponsoredIndex = currentIndexById;
+    sponsoredCurrentEntry = sponsoredBanners[currentIndexById];
+  } else if (!sponsoredCurrentEntry) {
     sponsoredIndex = Math.max(0, Math.min(sponsoredIndex, sponsoredBanners.length - 1));
     sponsoredCurrentEntry = sponsoredBanners[sponsoredIndex];
   } else if (advance && sponsoredBanners.length > 1) {
     sponsoredIndex = (sponsoredIndex + 1) % sponsoredBanners.length;
     sponsoredCurrentEntry = sponsoredBanners[sponsoredIndex];
+    localStorage.setItem(SPONSORED_INDEX_KEY, String(sponsoredIndex));
   }
   const entry = sponsoredCurrentEntry;
   if (!entry) return;
@@ -2467,7 +2481,10 @@ function renderConsentBannerState() {
 function ensureSponsoredRotation() {
   if (sponsoredRotateTimer != null) return;
   sponsoredRotateTimer = window.setInterval(() => {
-    void renderSponsoredBannerState(true);
+    void (async () => {
+      await loadSponsoredBannersFromFeed();
+      await renderSponsoredBannerState();
+    })();
   }, SPONSORED_ROTATE_MS);
 }
 
