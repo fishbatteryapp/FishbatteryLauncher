@@ -32,6 +32,10 @@
 
 *{ box-sizing: border-box; }
 
+.hidden{
+  display: none !important;
+}
+
 html, body{
   width: 100%;
   height: 100%;
@@ -378,6 +382,10 @@ body{
 
 .sidebarSponsoredMedia.hasImage .sidebarSponsoredMediaImg{
   display: block;
+}
+
+.sidebarSponsoredMedia.hasImage span{
+  display: none;
 }
 
 .sidebarSponsoredMedia.hasEmbed{

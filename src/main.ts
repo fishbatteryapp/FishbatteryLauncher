@@ -328,6 +328,7 @@ let sponsoredCurrentLink = "";
 let sponsoredCurrentEntry: SponsoredBanner | null = null;
 let sponsoredRotateTimer: number | null = null;
 let sponsoredLastImpressionId: string | null = null;
+const SPONSORED_ROTATE_MS = 180_000;
 
 type SponsoredFeedAd = {
   id?: string;
@@ -348,6 +349,7 @@ type SponsoredFeedAd = {
 
 const ADS_API_BASE_PRIMARY = "https://fishbattery-auth-api-production.up.railway.app";
 const ADS_API_BASES = ["http://localhost:3000", ADS_API_BASE_PRIMARY];
+const LAUNCHER_AD_PLACEMENT = "launcher-sidebar";
 const DISCORD_INVITE_URL = "https://discord.gg/yT5zRsRXsf";
 const AD_PRIVACY_URL = "https://fishbattery.app/privacy";
 
@@ -2278,7 +2280,7 @@ async function loadSponsoredBannersFromFeed() {
     try {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 3000);
-      const res = await fetch(`${base}/v1/ads/feed?placement=launcher-sidebar&limit=10`, {
+      const res = await fetch(`${base}/v1/ads/feed?placement=${LAUNCHER_AD_PLACEMENT}&limit=10`, {
         signal: controller.signal,
         cache: "no-store"
       });
@@ -2289,7 +2291,7 @@ async function loadSponsoredBannersFromFeed() {
       const launcherAds = ads.filter((ad) => {
         if (ad?.active === false) return false;
         if (!Array.isArray(ad?.placements)) return false;
-        return ad.placements.includes("launcher-sidebar") || ad.placements.includes("launcher_sidebar");
+        return ad.placements.includes(LAUNCHER_AD_PLACEMENT) || ad.placements.includes("launcher_sidebar");
       });
       const mapped = launcherAds
         .map((ad, idx) => ({
@@ -2332,8 +2334,47 @@ async function loadSponsoredBannersFromFeed() {
   sponsoredCurrentLink = "";
 }
 
+function getAdEventSessionId(): string {
+  const key = "fishbattery.ads.sessionId";
+  let value = String(localStorage.getItem(key) || "").trim().toLowerCase();
+  if (!/^[a-z0-9_-]{8,128}$/.test(value)) {
+    value = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 12)}`;
+    localStorage.setItem(key, value);
+  }
+  return value;
+}
+
+async function postLauncherAdEvent(eventType: "impression" | "click", campaignId: string) {
+  const id = String(campaignId || "").trim().toLowerCase();
+  if (!id) return;
+  const resolved = String(localStorage.getItem("fishbattery.apiBaseResolved") || "").trim();
+  const apiBases = [resolved, ...ADS_API_BASES].filter((v, i, a) => !!v && a.indexOf(v) === i);
+  const payload = {
+    eventType,
+    campaignId: id,
+    placement: LAUNCHER_AD_PLACEMENT,
+    pagePath: "/launcher",
+    sessionId: getAdEventSessionId(),
+    referrerHost: ""
+  };
+  for (const base of apiBases) {
+    try {
+      const response = await fetch(`${base}/v1/ads/events`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      if (!response.ok) continue;
+      localStorage.setItem("fishbattery.apiBaseResolved", base);
+      return;
+    } catch {
+      // try next base
+    }
+  }
+}
+
 // Render sponsored banner state.
-async function renderSponsoredBannerState() {
+async function renderSponsoredBannerState(advance = false) {
   if (!sidebarSponsored) return;
   if (
     !sidebarSponsoredTitle ||
@@ -2375,9 +2416,15 @@ async function renderSponsoredBannerState() {
   sidebarSponsored.style.display = hide ? "none" : "";
   if (hide) return;
 
-  const entry = sponsoredBanners[sponsoredIndex % sponsoredBanners.length];
-  sponsoredIndex += 1;
-  sponsoredCurrentEntry = entry;
+  if (!sponsoredCurrentEntry || !sponsoredBanners.includes(sponsoredCurrentEntry)) {
+    sponsoredIndex = Math.max(0, Math.min(sponsoredIndex, sponsoredBanners.length - 1));
+    sponsoredCurrentEntry = sponsoredBanners[sponsoredIndex];
+  } else if (advance && sponsoredBanners.length > 1) {
+    sponsoredIndex = (sponsoredIndex + 1) % sponsoredBanners.length;
+    sponsoredCurrentEntry = sponsoredBanners[sponsoredIndex];
+  }
+  const entry = sponsoredCurrentEntry;
+  if (!entry) return;
   const hasEmbed = hasAdMeasurementConsent() && !!entry.embedUrl;
   sidebarSponsoredTitle.textContent = entry.title || "Sponsored";
   sidebarSponsoredBody.textContent = entry.body || "Sponsored content";
@@ -2407,13 +2454,7 @@ async function renderSponsoredBannerState() {
   if (hasAdMeasurementConsent() && entry.id && sponsoredLastImpressionId !== entry.id) {
     sponsoredLastImpressionId = entry.id;
     appendLog(`[sponsored] Impression: ${entry.id}`);
-    if (entry.impressionUrl) {
-      void fetch(entry.impressionUrl, {
-        method: "GET",
-        mode: "no-cors",
-        cache: "no-store"
-      }).catch(() => {});
-    }
+    void postLauncherAdEvent("impression", entry.id);
   }
 }
 
@@ -2426,8 +2467,8 @@ function renderConsentBannerState() {
 function ensureSponsoredRotation() {
   if (sponsoredRotateTimer != null) return;
   sponsoredRotateTimer = window.setInterval(() => {
-    void renderSponsoredBannerState();
-  }, 45_000);
+    void renderSponsoredBannerState(true);
+  }, SPONSORED_ROTATE_MS);
 }
 
 // Set view.
@@ -7812,12 +7853,8 @@ sidebarSponsoredCta.onclick = () => {
       return;
     }
     appendLog(`[sponsored] Opened: ${target}`);
-    if (hasAdMeasurementConsent() && sponsoredCurrentEntry?.clickUrl) {
-      void fetch(sponsoredCurrentEntry.clickUrl, {
-        method: "GET",
-        mode: "no-cors",
-        cache: "no-store"
-      }).catch(() => {});
+    if (hasAdMeasurementConsent() && sponsoredCurrentEntry?.id) {
+      void postLauncherAdEvent("click", sponsoredCurrentEntry.id);
     }
   });
 };
