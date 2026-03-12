@@ -278,6 +278,7 @@ let cloudSyncIntervalId: number | null = null;
 let runningStatusPollId: number | null = null;
 let lastRunningSignature = "";
 let profileRenderToken = 0;
+let launcherSignInPromptShown = false;
 let preflightState: any = null;
 let hasAutoCheckedUpdates = false;
 let promptedUpdateVersion: string | null = null;
@@ -1524,6 +1525,11 @@ const INSTANCE_PRESETS: Record<Exclude<InstancePresetId, "none">, InstancePreset
       }
     }
   }
+};
+
+const PRESET_MODRINTH_PACK_PROJECTS: Partial<Record<Exclude<InstancePresetId, "none">, string>> = {
+  "max-fps": "fishbattery-fps",
+  pvp: "fishbattery-pvp"
 };
 
 type PresetModFallbackChains = Partial<Record<Exclude<InstancePresetId, "none">, Record<string, string[]>>>;
@@ -3997,6 +4003,22 @@ async function runCloudSync(manual: boolean, forcedPolicy?: "prefer-local" | "pr
     await renderInstances();
   }
 
+  if (result.status === "error") {
+    const syncErr = String(result.message || "").toLowerCase();
+    if (
+      syncErr.includes("invalid token") ||
+      syncErr.includes("jwt") ||
+      syncErr.includes("not signed in") ||
+      syncErr.includes("session expired")
+    ) {
+      try {
+        state.launcherAccount = await backend.launcherAccountGetState();
+        await refreshLauncherSubscription();
+        await renderAccounts();
+      } catch {}
+    }
+  }
+
   if (result.status === "conflict" && manual && policy === "ask") {
     // Interactive conflict resolution for user-triggered sync runs.
     const useCloud = confirm(
@@ -4094,8 +4116,39 @@ function availablePresetIdsForLoader(loader: LoaderKind): InstancePresetId[] {
   return allInstancePresetIds();
 }
 
+const PRESET_AVAILABILITY_CACHE = new Map<string, boolean>();
+let presetAvailabilityRequestToken = 0;
+
+function getPresetAvailabilityCacheKey(projectId: string, loader: LoaderKind, mcVersion: string) {
+  return `${projectId}|${loader}|${mcVersion}`;
+}
+
+async function hasCompatiblePresetPackUpload(projectId: string, loader: LoaderKind, mcVersion: string): Promise<boolean> {
+  const gameVersion = String(mcVersion || "").trim();
+  if (!gameVersion || loader === "vanilla") return false;
+  const key = getPresetAvailabilityCacheKey(projectId, loader, gameVersion);
+  const cached = PRESET_AVAILABILITY_CACHE.get(key);
+  if (typeof cached === "boolean") return cached;
+
+  const params = new URLSearchParams();
+  params.set("game_versions", JSON.stringify([gameVersion]));
+  params.set("loaders", JSON.stringify([loader]));
+  const url = `https://api.modrinth.com/v2/project/${encodeURIComponent(projectId)}/version?${params.toString()}`;
+  const res = await fetch(url, { cache: "no-store" });
+  if (!res.ok) throw new Error(`Modrinth lookup failed (${res.status})`);
+  const versions = await res.json();
+  const ok = Array.isArray(versions) && versions.length > 0;
+  PRESET_AVAILABILITY_CACHE.set(key, ok);
+  return ok;
+}
+
 // Fill instance preset dropdown.
-function fillInstancePresetDropdown(selectedId: string | null, loader: LoaderKind = "fabric") {
+function fillInstancePresetDropdown(
+  selectedId: string | null,
+  loader: LoaderKind = "fabric",
+  mcVersion = "",
+  availability: Partial<Record<Exclude<InstancePresetId, "none">, boolean | null>> = {}
+) {
   instancePreset.innerHTML = "";
 
   const none = document.createElement("option");
@@ -4107,16 +4160,82 @@ function fillInstancePresetDropdown(selectedId: string | null, loader: LoaderKin
     const p = INSTANCE_PRESETS[id];
     const opt = document.createElement("option");
     opt.value = id;
-    const available = loader !== "vanilla";
-    opt.textContent = available ? p.name : `${p.name} (Not available on vanilla)`;
-    opt.disabled = !available;
+    const mappedProject = PRESET_MODRINTH_PACK_PROJECTS[id];
+    let disabled = loader === "vanilla";
+    let label = p.name;
+
+    if (loader === "vanilla") {
+      label = `${p.name} (Not available on vanilla)`;
+      disabled = true;
+    } else if (!mappedProject) {
+      label = `${p.name} (coming soon)`;
+      disabled = true;
+    } else if (mappedProject) {
+      const status = availability[id];
+      if (status === null) {
+        label = `${p.name} (Checking upload availability...)`;
+        disabled = true;
+      } else if (status === false) {
+        label = `${p.name} (Not uploaded for ${loader} ${mcVersion || "selected version"})`;
+        disabled = true;
+      }
+    }
+
+    opt.textContent = label;
+    opt.disabled = disabled;
     instancePreset.appendChild(opt);
   }
 
-  const safe = availablePresetIdsForLoader(loader).includes((selectedId ?? "none") as InstancePresetId)
-    ? (selectedId ?? "none")
-    : "none";
+  const wanted = (selectedId ?? "none") as InstancePresetId;
+  const safe =
+    wanted === "none"
+      ? "none"
+      : availablePresetIdsForLoader(loader).includes(wanted) &&
+          !!instancePreset.querySelector(`option[value="${wanted}"]:not([disabled])`)
+        ? wanted
+        : "none";
   instancePreset.value = safe;
+}
+
+async function refreshPresetDropdownAvailability(
+  selectedId: string | null,
+  loader: LoaderKind = "fabric",
+  mcVersion = ""
+) {
+  const token = ++presetAvailabilityRequestToken;
+  const availability: Partial<Record<Exclude<InstancePresetId, "none">, boolean | null>> = {};
+  for (const id of Object.keys(PRESET_MODRINTH_PACK_PROJECTS) as Array<Exclude<InstancePresetId, "none">>) {
+    availability[id] = null;
+  }
+  fillInstancePresetDropdown(selectedId, loader, mcVersion, availability);
+
+  if (loader === "vanilla") return;
+  const gameVersion = String(mcVersion || "").trim();
+  if (!gameVersion) {
+    for (const id of Object.keys(PRESET_MODRINTH_PACK_PROJECTS) as Array<Exclude<InstancePresetId, "none">>) {
+      availability[id] = false;
+    }
+    fillInstancePresetDropdown(selectedId, loader, mcVersion, availability);
+    return;
+  }
+
+  const checks = await Promise.all(
+    (Object.keys(PRESET_MODRINTH_PACK_PROJECTS) as Array<Exclude<InstancePresetId, "none">>).map(async (id) => {
+      const projectId = PRESET_MODRINTH_PACK_PROJECTS[id];
+      if (!projectId) return [id, true] as const;
+      try {
+        const ok = await hasCompatiblePresetPackUpload(projectId, loader, gameVersion);
+        return [id, ok] as const;
+      } catch {
+        // Keep presets selectable if availability check fails due to transient network/API issues.
+        return [id, true] as const;
+      }
+    })
+  );
+
+  if (token !== presetAvailabilityRequestToken) return;
+  for (const [id, ok] of checks) availability[id] = ok;
+  fillInstancePresetDropdown(selectedId, loader, mcVersion, availability);
 }
 
 // Apply instance preset.
@@ -4128,6 +4247,17 @@ async function applyInstancePreset(instanceId: string, mcVersion: string, loader
   }
   const preset = INSTANCE_PRESETS[presetId];
   if (!preset) return;
+  const presetModrinthPackProject = PRESET_MODRINTH_PACK_PROJECTS[presetId as Exclude<InstancePresetId, "none">];
+  if (!presetModrinthPackProject) {
+    appendLog(`[preset] "${preset.name}" is coming soon and is currently unavailable.`);
+    return;
+  }
+  if (presetModrinthPackProject) {
+    appendLog(
+      `[preset] "${preset.name}" is now pack-backed (${presetModrinthPackProject}) and is applied during instance creation.`
+    );
+    return;
+  }
   const resolved = resolvePresetVariantForLoader(preset, loader, mcVersion);
   if (!resolved) {
     appendLog(`[preset] "${preset.name}" has no usable variant definition.`);
@@ -6098,6 +6228,43 @@ async function runLauncherAccountAction(fn: () => Promise<void>) {
   }
 }
 
+async function promptLauncherSignInOnStartup() {
+  if (launcherSignInPromptShown) return;
+  launcherSignInPromptShown = true;
+  if (!state.launcherAccount?.configured) return;
+  if (state.launcherAccount?.activeAccountId) return;
+
+  const accountError = String(state.launcherAccount?.error || "").toLowerCase();
+  if (accountError.includes("could not reach") || accountError.includes("network")) return;
+
+  try {
+    const values = await openLauncherAuthDialog("login");
+    if (!values) return;
+    if (values.action === "google") {
+      await showLauncherAlert("A browser window will open for Google sign-in. Complete it, then return to the launcher.");
+      state.launcherAccount = await backend.launcherAccountGoogleLogin();
+    } else if (values.mode === "register") {
+      state.launcherAccount = await backend.launcherAccountRegister(values.email, values.password, values.displayName);
+    } else {
+      const loginResult = await backend.launcherAccountLogin(values.email, values.password);
+      if (loginResult?.requiresTwoFactor) {
+        const code = await openLauncherTwoFactorDialog();
+        if (!code) return;
+        state.launcherAccount = await backend.launcherAccountLogin2fa(loginResult.challengeToken, code);
+      } else {
+        state.launcherAccount = loginResult.state;
+      }
+    }
+    await refreshLauncherSubscription();
+    await renderAccounts();
+  } catch (err: unknown) {
+    const message =
+      (err && typeof err === "object" && "message" in err && String((err as { message?: unknown }).message)) ||
+      "Launcher account request failed.";
+    await showLauncherAlert(message);
+  }
+}
+
 // Refresh launcher subscription.
 async function refreshLauncherSubscription() {
   if (!state.launcherAccount?.activeAccountId) {
@@ -7111,7 +7278,11 @@ async function openInstanceWorkspace(
   instanceIconHint.textContent = "Keep existing icon unless you pick a new one.";
   setIconPreviewSource(null);
   resetSelectedIconTransform();
-  fillInstancePresetDropdown(i.instancePreset ?? "none", (i.loader ?? "fabric") as LoaderKind);
+  await refreshPresetDropdownAvailability(
+    i.instancePreset ?? "none",
+    (i.loader ?? "fabric") as LoaderKind,
+    String(i.mcVersion || "")
+  );
   await fillInstanceAccountDropdown(i.accountId ?? null);
   await renderServerEntries(i.id);
 
@@ -7662,9 +7833,15 @@ async function runProviderSearch() {
     const msg = document.createElement("div");
     msg.className = "muted";
     msg.style.fontSize = "12px";
-    msg.textContent = String(err?.message ?? err ?? "Provider search failed.");
+    const rawError = String(err?.message ?? err ?? "Provider search failed.");
+    const missingCfKey =
+      provider === "curseforge" &&
+      rawError.toLowerCase().includes("missing curseforge api key");
+    msg.textContent = missingCfKey
+      ? "CurseForge browse is not configured in this build. Set FISHBATTERY_CURSEFORGE_API_KEY or add secrets/curseforge-api-key.txt."
+      : rawError;
     providerSearchResults.appendChild(msg);
-    appendLog(`[provider-search] ${String(err?.message ?? err ?? "Provider search failed.")}`);
+    appendLog(`[provider-search] ${rawError}`);
     return;
   }
 
@@ -7807,6 +7984,7 @@ async function refreshAll() {
 
   // 3) Render all visible top-level sections from freshly loaded state.
   await renderAccounts();
+  await promptLauncherSignInOnStartup();
   await renderInstances();
   await loadSponsoredBannersFromFeed();
   await renderSponsoredBannerState();
@@ -7940,17 +8118,38 @@ createFilterReleases.onclick = () => {
   if (!createIncludeReleases && !createIncludeSnapshots) createIncludeSnapshots = true;
   renderCreateFilterButtons();
   fillCreateVersionOptions();
+  void refreshPresetDropdownAvailability(
+    instancePreset.value || "none",
+    (createLoaderType.value || "fabric") as LoaderKind,
+    newVersion.value || ""
+  );
 };
 createFilterSnapshots.onclick = () => {
   createIncludeSnapshots = !createIncludeSnapshots;
   if (!createIncludeReleases && !createIncludeSnapshots) createIncludeReleases = true;
   renderCreateFilterButtons();
   fillCreateVersionOptions();
+  void refreshPresetDropdownAvailability(
+    instancePreset.value || "none",
+    (createLoaderType.value || "fabric") as LoaderKind,
+    newVersion.value || ""
+  );
 };
 createLoaderType.onchange = () => {
   // Loader selection drives both loader-version input affordance and preset availability.
   updateCreateLoaderUi();
-  fillInstancePresetDropdown(instancePreset.value || "none", (createLoaderType.value || "fabric") as LoaderKind);
+  void refreshPresetDropdownAvailability(
+    instancePreset.value || "none",
+    (createLoaderType.value || "fabric") as LoaderKind,
+    newVersion.value || ""
+  );
+};
+newVersion.onchange = () => {
+  void refreshPresetDropdownAvailability(
+    instancePreset.value || "none",
+    (createLoaderType.value || "fabric") as LoaderKind,
+    newVersion.value || ""
+  );
 };
 instanceSyncEnabled.onclick = () => {
   modalInstanceSyncEnabled = !modalInstanceSyncEnabled;
@@ -8154,7 +8353,7 @@ btnCreate.onclick = async () => {
   modalTitle.textContent = "Create an instance";
   newName.value = "";
   newMem.value = String(getSettings().defaultMemoryMb ?? 4096);
-  fillInstancePresetDropdown("none", "fabric");
+  fillInstancePresetDropdown("none", "fabric", "");
   createIncludeReleases = true;
   createIncludeSnapshots = false;
   renderCreateFilterButtons();
@@ -8162,6 +8361,7 @@ btnCreate.onclick = async () => {
   createLoaderType.value = "fabric";
   createLoaderVersion.value = "";
   updateCreateLoaderUi();
+  await refreshPresetDropdownAvailability("none", "fabric", newVersion.value || "");
   setCreateSource("custom");
   selectedModrinthPack = null;
   selectedProviderPack = null;
@@ -8367,6 +8567,10 @@ modalCreate.onclick = () =>
       const mcVersion = newVersion.value;
       const loader = String(createLoaderType.value || "fabric");
       const selectedPreset = (instancePreset.value || "none") as InstancePresetId;
+      const presetModrinthPackProject =
+        selectedPreset !== "none"
+          ? PRESET_MODRINTH_PACK_PROJECTS[selectedPreset as Exclude<InstancePresetId, "none">]
+          : undefined;
 
       if (!mcVersion) {
         alert("Select a Minecraft version first.");
@@ -8374,6 +8578,63 @@ modalCreate.onclick = () =>
       }
       if (!["vanilla", "fabric", "quilt", "forge", "neoforge"].includes(loader)) {
         alert(`Unsupported loader: ${loader}`);
+        return;
+      }
+      if (presetModrinthPackProject) {
+        closeModal();
+        const presetMeta = selectedPreset !== "none" ? INSTANCE_PRESETS[selectedPreset as Exclude<InstancePresetId, "none">] : null;
+        const presetLabel = presetMeta?.name || selectedPreset;
+        const res = await runTrackedInstall(
+          `Installing ${presetLabel}`,
+          async (update) => {
+            update("Creating instance from Modrinth preset pack");
+            const created = await backend.modrinthPacksInstall({
+              projectId: presetModrinthPackProject,
+              nameOverride: newName.value?.trim() || presetLabel,
+              accountId: instanceAccount.value || null,
+              memoryMb: Number(newMem.value || 4096)
+            });
+            if (created.instance?.id) {
+              await backend.instancesUpdate(created.instance.id, {
+                accountId: instanceAccount.value || null,
+                memoryMb: Number(newMem.value || 4096),
+                instancePreset: selectedPreset,
+                syncEnabled: modalInstanceSyncEnabled
+              });
+            }
+            if (created.instance?.id && created.instance?.mcVersion && created.instance?.loader) {
+              update("Preparing loader/runtime");
+              await ensureFabricApiForFabricInstance(
+                created.instance.id,
+                created.instance.mcVersion,
+                created.instance.loader as LoaderKind
+              );
+            }
+            if (created.instance?.id) {
+              update("Applying icon");
+              if (selectedCreateIconPath) {
+                try {
+                  await backend.instancesSetIconFromFile(
+                    created.instance.id,
+                    selectedCreateIconPath,
+                    getSelectedIconTransformPayload()
+                  );
+                } catch (err: any) {
+                  appendLog(`[icon] Failed applying selected icon: ${String(err?.message ?? err)}`);
+                }
+              } else {
+                await backend.instancesSetIconFallback(created.instance.id, presetLabel, "green");
+              }
+            }
+            update("Refreshing library");
+            return created;
+          }
+        );
+        state.instances = await backend.instancesList();
+        await renderInstances();
+        appendLog(
+          `[preset] Installed "${presetLabel}" from Modrinth project "${presetModrinthPackProject}" as "${res.instance?.name ?? "instance"}".`
+        );
         return;
       }
 

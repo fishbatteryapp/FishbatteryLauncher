@@ -21,8 +21,6 @@ jobs:
         include:
           - os: windows-latest
             windows_sign: true
-          - os: macos-latest
-            windows_sign: false
 
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -49,6 +47,16 @@ jobs:
 
       - name: Install frontend dependencies (Tauri)
         run: npm ci
+
+      - name: Materialize CurseForge API key resource
+        shell: bash
+        run: |
+          if [ -z "${FISHBATTERY_CURSEFORGE_API_KEY}" ]; then
+            echo "Missing required secret: FISHBATTERY_CURSEFORGE_API_KEY"
+            exit 1
+          fi
+          mkdir -p src-tauri/resources/secrets
+          printf '%s' "${FISHBATTERY_CURSEFORGE_API_KEY}" > src-tauri/resources/secrets/curseforge-api-key.txt
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable

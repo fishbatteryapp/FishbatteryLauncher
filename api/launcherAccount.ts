@@ -280,11 +280,23 @@ export async function requestLauncherAccountAuthed(
 ): Promise<AuthResponse> {
   const session = loadSession();
   if (!session?.accessToken) throw new Error("Not signed in.");
-  return requestAuth(path, {
-    method: init.method,
-    body: init.body,
-    accessToken: session.accessToken
-  });
+  try {
+    return await requestAuth(path, {
+      method: init.method,
+      body: init.body,
+      accessToken: session.accessToken
+    });
+  } catch (err: unknown) {
+    const statusCode = Number((err as any)?.statusCode || 0);
+    const msg = String((err as Error)?.message || err || "");
+    if (shouldInvalidateLocalSession(statusCode, msg)) {
+      saveSession(null);
+      const db: LauncherAccountDb = { activeAccountId: null, accounts: [], updatedAt: Date.now() };
+      writeDb(db);
+      throw new Error("Session expired. Please sign in again.");
+    }
+    throw err;
+  }
 }
 
 function applyAuthResponse(payload: AuthResponse, fallbackAccountId?: string | null): LauncherAccountState {
