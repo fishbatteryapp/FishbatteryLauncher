@@ -3900,6 +3900,13 @@ fn curseforge_api_key(app: &tauri::AppHandle) -> Option<String> {
     let candidates = [
       resource_dir.join("curseforge-api-key.txt"),
       resource_dir.join("secrets").join("curseforge-api-key.txt"),
+      resource_dir
+        .join("resources")
+        .join("secrets")
+        .join("curseforge-api-key.txt"),
+      resource_dir
+        .join("resources")
+        .join("curseforge-api-key.txt"),
     ];
     for p in candidates {
       if let Some(k) = read_secret_text(&p) {
@@ -3913,6 +3920,13 @@ fn curseforge_api_key(app: &tauri::AppHandle) -> Option<String> {
       let candidates = [
         exe_dir.join("curseforge-api-key.txt"),
         exe_dir.join("secrets").join("curseforge-api-key.txt"),
+        exe_dir
+          .join("resources")
+          .join("secrets")
+          .join("curseforge-api-key.txt"),
+        exe_dir
+          .join("resources")
+          .join("curseforge-api-key.txt"),
       ];
       for p in candidates {
         if let Some(k) = read_secret_text(&p) {
@@ -3925,6 +3939,7 @@ fn curseforge_api_key(app: &tauri::AppHandle) -> Option<String> {
   if let Ok(cwd) = std::env::current_dir() {
     let candidates = [
       cwd.join("secrets").join("curseforge-api-key.txt"),
+      cwd.join("src-tauri").join("resources").join("secrets").join("curseforge-api-key.txt"),
       cwd.join("..").join("secrets").join("curseforge-api-key.txt"),
       cwd.join("..").join("..").join("secrets").join("curseforge-api-key.txt"),
       cwd.join("tauri").join("secrets").join("curseforge-api-key.txt"),
