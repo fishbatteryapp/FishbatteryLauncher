@@ -409,6 +409,9 @@ declare global {
       modrinthPacksInstall: (payload: {
         projectId: string;
         versionId?: string;
+        mcVersion?: string;
+        loader?: "vanilla" | "fabric" | "quilt" | "forge" | "neoforge";
+        requireCompatibility?: boolean;
         nameOverride?: string;
         accountId?: string | null;
         memoryMb?: number;

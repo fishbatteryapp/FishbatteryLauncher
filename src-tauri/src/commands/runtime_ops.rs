@@ -2,7 +2,7 @@ use std::fs;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use std::collections::{BTreeSet, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
@@ -2303,6 +2303,8 @@ struct MrpackFileEntry {
 #[derive(Debug, Deserialize)]
 struct MrpackIndex {
   files: Vec<MrpackFileEntry>,
+  #[serde(default)]
+  dependencies: HashMap<String, String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -2640,51 +2642,90 @@ pub async fn loader_install(
   // Forge/NeoForge current Phase 5 behavior: resolve version + prefetch installer.
   if (loader_norm == "forge" || loader_norm == "neoforge") && resolved.is_some() {
     let version = resolved.clone().unwrap_or_default();
-    let (url, file_name) = if loader_norm == "forge" {
-      (
-        format!(
-          "https://maven.minecraftforge.net/net/minecraftforge/forge/{0}/forge-{0}-installer.jar",
-          urlencoding::encode(&version)
-        ),
-        format!("forge-{version}-installer.jar"),
-      )
-    } else {
-      (
-        format!(
-          "https://maven.neoforged.net/releases/net/neoforged/neoforge/{0}/neoforge-{0}-installer.jar",
-          urlencoding::encode(&version)
-        ),
-        format!("neoforge-{version}-installer.jar"),
-      )
-    };
+    let mut version_candidates: Vec<String> = vec![version.clone()];
+    if loader_norm == "forge" && !mc.is_empty() {
+      // Modrinth dependencies for Forge are often short form (e.g. 11.15.1.2318),
+      // while installer maven coordinates may require legacy full forms for old MC.
+      if !version.starts_with(&(mc.clone() + "-")) {
+        version_candidates.push(format!("{mc}-{version}"));
+        version_candidates.push(format!("{mc}-{version}-{mc}"));
+      } else if !version.ends_with(&(String::from("-") + &mc)) {
+        version_candidates.push(format!("{version}-{mc}"));
+      }
+    }
+    version_candidates.retain(|v| !v.trim().is_empty());
+    {
+      let mut seen = HashSet::new();
+      version_candidates.retain(|v| seen.insert(v.clone()));
+    }
 
-    let out_dir = app
+    let base_dir = app
       .path()
       .app_data_dir()
       .map_err(into_error)?
       .join("data")
       .join("loaders")
-      .join(&loader_norm)
-      .join(&version);
-    fs::create_dir_all(&out_dir).map_err(into_error)?;
-    let out_file = out_dir.join(file_name);
-    let should_download = !out_file.exists() || fs::metadata(&out_file).map_err(into_error)?.len() == 0;
-    if should_download {
-      let bytes = reqwest::Client::new()
+      .join(&loader_norm);
+    fs::create_dir_all(&base_dir).map_err(into_error)?;
+
+    let client = reqwest::Client::new();
+    let mut selected: Option<(String, PathBuf)> = None;
+    let mut last_error = String::new();
+    for candidate in version_candidates {
+      let (url, file_name) = if loader_norm == "forge" {
+        (
+          format!(
+            "https://maven.minecraftforge.net/net/minecraftforge/forge/{0}/forge-{0}-installer.jar",
+            urlencoding::encode(&candidate)
+          ),
+          format!("forge-{candidate}-installer.jar"),
+        )
+      } else {
+        (
+          format!(
+            "https://maven.neoforged.net/releases/net/neoforged/neoforge/{0}/neoforge-{0}-installer.jar",
+            urlencoding::encode(&candidate)
+          ),
+          format!("neoforge-{candidate}-installer.jar"),
+        )
+      };
+      let out_dir = base_dir.join(&candidate);
+      fs::create_dir_all(&out_dir).map_err(into_error)?;
+      let out_file = out_dir.join(file_name);
+      let already_ok = out_file.exists() && fs::metadata(&out_file).map_err(into_error)?.len() > 0;
+      if already_ok {
+        selected = Some((candidate, out_file));
+        break;
+      }
+      let resp = client
         .get(url)
         .header("user-agent", MODRINTH_USER_AGENT)
         .send()
         .await
-        .map_err(into_error)?
-        .error_for_status()
-        .map_err(into_error)?
-        .bytes()
-        .await
         .map_err(into_error)?;
+      if !resp.status().is_success() {
+        last_error = format!("HTTP {} while fetching installer", resp.status());
+        continue;
+      }
+      let bytes = resp.bytes().await.map_err(into_error)?;
+      if bytes.is_empty() {
+        last_error = "empty installer response".to_string();
+        continue;
+      }
       fs::write(&out_file, &bytes).map_err(into_error)?;
+      selected = Some((candidate, out_file));
+      break;
     }
+
+    let (selected_version, out_file) = selected.ok_or_else(|| {
+      if last_error.is_empty() {
+        format!("loader:install: failed to resolve downloadable {loader_norm} installer for {version}")
+      } else {
+        format!("loader:install: failed to resolve downloadable {loader_norm} installer for {version}: {last_error}")
+      }
+    })?;
     return Ok(json!({
-      "loaderVersion": resolved,
+      "loaderVersion": selected_version,
       "installerPath": out_file.to_string_lossy().to_string()
     }));
   }
@@ -5643,6 +5684,22 @@ pub async fn modrinth_packs_install(app: tauri::AppHandle, payload: Value) -> Ap
     .map(str::trim)
     .filter(|v| !v.is_empty())
     .map(str::to_string);
+  let requested_mc_version = payload
+    .get("mcVersion")
+    .and_then(|v| v.as_str())
+    .map(str::trim)
+    .filter(|v| !v.is_empty())
+    .map(str::to_string);
+  let requested_loader = payload
+    .get("loader")
+    .and_then(|v| v.as_str())
+    .map(str::trim)
+    .filter(|v| !v.is_empty())
+    .map(|v| v.to_ascii_lowercase());
+  let require_compatibility = payload
+    .get("requireCompatibility")
+    .and_then(|v| v.as_bool())
+    .unwrap_or(false);
   let account_id = payload.get("accountId").cloned().unwrap_or(Value::Null);
   let memory_mb = payload.get("memoryMb").and_then(|v| v.as_u64()).unwrap_or(6144);
   let name_override = payload
@@ -5663,13 +5720,48 @@ pub async fn modrinth_packs_install(app: tauri::AppHandle, payload: Value) -> Ap
     )
     .await?
   } else {
-    let versions_url = modrinth_versions_endpoint(&project_id, None, None)?;
+    let versions_url = modrinth_versions_endpoint(
+      &project_id,
+      requested_mc_version.as_deref(),
+      requested_loader.as_deref(),
+    )?;
     let mut versions: Vec<ModrinthVersion> = modrinth_get_json(&client, &versions_url).await?;
     versions.retain(|v| !v.files.is_empty());
+    if let Some(mc) = requested_mc_version.as_deref() {
+      versions.retain(|v| v.game_versions.iter().any(|gv| gv == mc));
+    }
+    if let Some(loader_hint) = requested_loader.as_deref() {
+      if loader_hint != "vanilla" {
+        versions.retain(|v| {
+          if loader_hint == "quilt" {
+            v.loaders
+              .iter()
+              .any(|l| matches!(l.as_str(), "quilt" | "fabric"))
+          } else {
+            v.loaders.iter().any(|l| l == loader_hint)
+          }
+        });
+      }
+    }
+    if versions.is_empty() && !require_compatibility {
+      let fallback_url = modrinth_versions_endpoint(&project_id, None, None)?;
+      versions = modrinth_get_json(&client, &fallback_url).await?;
+      versions.retain(|v| !v.files.is_empty());
+    }
     versions
       .into_iter()
       .next()
-      .ok_or_else(|| "modrinthPacksInstall: no installable versions found".to_string())?
+      .ok_or_else(|| {
+        if let (Some(mc), Some(loader_hint)) = (requested_mc_version.as_deref(), requested_loader.as_deref()) {
+          format!(
+            "modrinthPacksInstall: no compatible version found for Minecraft {mc} ({loader_hint})"
+          )
+        } else if let Some(mc) = requested_mc_version.as_deref() {
+          format!("modrinthPacksInstall: no compatible version found for Minecraft {mc}")
+        } else {
+          "modrinthPacksInstall: no installable versions found".to_string()
+        }
+      })?
   };
 
   let pack_file = version
@@ -5679,12 +5771,66 @@ pub async fn modrinth_packs_install(app: tauri::AppHandle, payload: Value) -> Ap
     .or_else(|| version.files.first())
     .ok_or_else(|| "modrinthPacksInstall: no downloadable file found".to_string())?;
 
+  let pack_bytes = client
+    .get(&pack_file.url)
+    .header("user-agent", MODRINTH_USER_AGENT)
+    .send()
+    .await
+    .map_err(into_error)?
+    .error_for_status()
+    .map_err(into_error)?
+    .bytes()
+    .await
+    .map_err(into_error)?;
+
+  let mut idx_raw = String::new();
+  {
+    let cursor = std::io::Cursor::new(pack_bytes.to_vec());
+    let mut zip = ZipArchive::new(cursor).map_err(into_error)?;
+    let mut idx = zip
+      .by_name("modrinth.index.json")
+      .map_err(|_| "Invalid .mrpack: missing modrinth.index.json".to_string())?;
+    idx.read_to_string(&mut idx_raw).map_err(into_error)?;
+  }
+  let index: MrpackIndex = serde_json::from_str(&idx_raw).map_err(into_error)?;
+
   let loader = loader_from_modrinth(&version);
-  let mc_version = version
-    .game_versions
-    .first()
-    .cloned()
+  let mc_version = index
+    .dependencies
+    .get("minecraft")
+    .map(|v| v.trim().to_string())
+    .filter(|v| !v.is_empty())
+    .or_else(|| {
+      version
+        .game_versions
+        .first()
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+    })
     .unwrap_or_else(|| "latest".to_string());
+  let loader_version_from_pack = match loader.as_str() {
+    "forge" => index
+      .dependencies
+      .get("forge")
+      .map(|v| v.trim().to_string())
+      .filter(|v| !v.is_empty()),
+    "neoforge" => index
+      .dependencies
+      .get("neoforge")
+      .map(|v| v.trim().to_string())
+      .filter(|v| !v.is_empty()),
+    "fabric" => index
+      .dependencies
+      .get("fabric-loader")
+      .map(|v| v.trim().to_string())
+      .filter(|v| !v.is_empty()),
+    "quilt" => index
+      .dependencies
+      .get("quilt-loader")
+      .map(|v| v.trim().to_string())
+      .filter(|v| !v.is_empty()),
+    _ => None,
+  };
 
   let mut db = read_db(&app)?;
   let desired_name = name_override.unwrap_or_else(|| {
@@ -5710,7 +5856,11 @@ pub async fn modrinth_packs_install(app: tauri::AppHandle, payload: Value) -> Ap
   });
 
   if loader != "vanilla" {
-    let resolved = loader_pick_version(loader.clone(), mc_version.clone()).await?;
+    let resolved = if let Some(v) = loader_version_from_pack.clone() {
+      Some(v)
+    } else {
+      loader_pick_version(loader.clone(), mc_version.clone()).await?
+    };
     match loader.as_str() {
       "fabric" => cfg["fabricLoaderVersion"] = json!(resolved),
       "quilt" => cfg["quiltLoaderVersion"] = json!(resolved),
@@ -5725,7 +5875,7 @@ pub async fn modrinth_packs_install(app: tauri::AppHandle, payload: Value) -> Ap
   db = read_db(&app)?;
   let _ = db;
 
-  let _ = loader_install(
+  let install_loader_res = loader_install(
     app.clone(),
     new_id.clone(),
     mc_version.clone(),
@@ -5743,30 +5893,26 @@ pub async fn modrinth_packs_install(app: tauri::AppHandle, payload: Value) -> Ap
     },
   )
   .await?;
-
-  let pack_bytes = client
-    .get(&pack_file.url)
-    .header("user-agent", MODRINTH_USER_AGENT)
-    .send()
-    .await
-    .map_err(into_error)?
-    .error_for_status()
-    .map_err(into_error)?
-    .bytes()
-    .await
-    .map_err(into_error)?;
+  if loader == "forge" || loader == "neoforge" {
+    if let Some(resolved_after_install) = install_loader_res
+      .get("loaderVersion")
+      .and_then(|v| v.as_str())
+      .map(str::trim)
+      .filter(|v| !v.is_empty())
+      .map(str::to_string)
+    {
+      let mut patch = json!({});
+      if loader == "forge" {
+        patch["forgeVersion"] = json!(resolved_after_install);
+      } else {
+        patch["neoforgeVersion"] = json!(resolved_after_install);
+      }
+      let _ = instances_update(app.clone(), new_id.clone(), patch)?;
+    }
+  }
 
   let cursor = std::io::Cursor::new(pack_bytes.to_vec());
   let mut zip = ZipArchive::new(cursor).map_err(into_error)?;
-
-  let mut idx_raw = String::new();
-  {
-    let mut idx = zip
-      .by_name("modrinth.index.json")
-      .map_err(|_| "Invalid .mrpack: missing modrinth.index.json".to_string())?;
-    idx.read_to_string(&mut idx_raw).map_err(into_error)?;
-  }
-  let index: MrpackIndex = serde_json::from_str(&idx_raw).map_err(into_error)?;
   let out_root = instance_dir(&app, &new_id)?;
   fs::create_dir_all(&out_root).map_err(into_error)?;
 

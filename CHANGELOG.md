@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.4.11 - 2026-03-13
+
+### Added
+- Added resilient Forge profile fallback for legacy installers by importing/deriving profile data when the installer does not generate a launcher profile.
+- Added Modrinth `.mrpack` dependency parsing so installs can use pack-declared Minecraft/loader versions directly.
+
+### Changed
+- Loader installer resolution now tries legacy Forge version forms automatically (including `mc-loader` and `mc-loader-mc`) and keeps the resolved installer version in instance metadata.
+- Skin/cape sidebar mannequin is now initialized globally and kept active across pages instead of only after opening Skin & Capes.
+- Launcher dialogs (`alert`/`confirm`/`prompt`) now use the unified Fishbattery modal style.
+- Sidebar mannequin UI now renders as a single card block (removed nested inner card frame).
+
+### Fixed
+- Fixed old Forge preset launches failing with `installer completed but no launch profile was generated`.
+- Fixed Windows launch-time command prompt flashes by hiding console windows for Java probes and hook command execution.
+- Fixed Modrinth pack installs choosing wrong compatibility versions in some Forge scenarios (for example PvP 1.8.9 selecting 1.12.2).
+- Fixed launcher cape catalog sync to merge authenticated and public cape payloads, improving visibility of newly added free capes.
+- Improved Minecraft session-expired messaging for official skin/cape update/upload calls.
+
 ## v0.4.10 - 2026-03-12
 
 ### Added

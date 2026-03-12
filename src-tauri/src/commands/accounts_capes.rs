@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
@@ -458,6 +459,34 @@ fn absolute_url_from_base(base: &str, raw: &str) -> String {
   }
 }
 
+fn extract_cape_items(payload: &serde_json::Value) -> Vec<serde_json::Value> {
+  payload
+    .get("items")
+    .and_then(|v| v.as_array())
+    .or_else(|| payload.get("capes").and_then(|v| v.as_array()))
+    .cloned()
+    .unwrap_or_default()
+}
+
+fn merge_cape_payloads(primary: &serde_json::Value, secondary: &serde_json::Value) -> serde_json::Value {
+  let mut out: Vec<serde_json::Value> = Vec::new();
+  let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+  for row in extract_cape_items(primary).into_iter().chain(extract_cape_items(secondary).into_iter()) {
+    let id = pick_first_string(&[
+      row.get("id").and_then(|v| v.as_str()).map(str::to_string),
+      row.get("capeId").and_then(|v| v.as_str()).map(str::to_string),
+      row.get("slug").and_then(|v| v.as_str()).map(str::to_string),
+    ])
+    .to_ascii_lowercase();
+    if id.is_empty() || seen.contains(&id) {
+      continue;
+    }
+    seen.insert(id);
+    out.push(row);
+  }
+  serde_json::json!({ "items": out })
+}
+
 fn pick_first_string(values: &[Option<String>]) -> String {
   values
     .iter()
@@ -560,32 +589,71 @@ async fn fetch_cape_catalog_payload(app: &tauri::AppHandle) -> AppResult<serde_j
     .trim()
     .to_string();
 
-  if !access_token.is_empty() {
-    let url = absolute_url_from_base(&base, &cape_catalog_path());
+  let ts = SystemTime::now()
+    .duration_since(UNIX_EPOCH)
+    .map(|d| d.as_millis())
+    .unwrap_or(0);
+  let no_cache_value = "no-cache, no-store, max-age=0";
+
+  let authed_payload = if !access_token.is_empty() {
+    let mut url = absolute_url_from_base(&base, &cape_catalog_path());
+    if !url.is_empty() {
+      url = if url.contains('?') {
+        format!("{url}&_ts={ts}")
+      } else {
+        format!("{url}?_ts={ts}")
+      };
+    }
     let res = client
       .get(url)
       .header(reqwest::header::AUTHORIZATION, format!("Bearer {access_token}"))
       .header("User-Agent", "FishbatteryLauncher/0.4.4")
       .header(reqwest::header::ACCEPT, "application/json")
+      .header(reqwest::header::CACHE_CONTROL, no_cache_value)
+      .header(reqwest::header::PRAGMA, "no-cache")
       .send()
       .await
       .map_err(into_error);
     if let Ok(response) = res {
-      if let Ok(payload) = read_json_response(response).await {
-        return Ok(payload);
-      }
+      read_json_response(response).await.ok()
+    } else {
+      None
     }
-  }
+  } else {
+    None
+  };
 
-  let public_url = absolute_url_from_base(&base, &cape_catalog_public_path());
-  let res = client
-    .get(public_url)
-    .header("User-Agent", "FishbatteryLauncher/0.4.4")
-    .header(reqwest::header::ACCEPT, "application/json")
-    .send()
-    .await
-    .map_err(into_error)?;
-  read_json_response(res).await
+  let mut public_url = absolute_url_from_base(&base, &cape_catalog_public_path());
+  if !public_url.is_empty() {
+    public_url = if public_url.contains('?') {
+      format!("{public_url}&_ts={ts}")
+    } else {
+      format!("{public_url}?_ts={ts}")
+    };
+  }
+  let public_payload = {
+    let response = client
+      .get(public_url)
+      .header("User-Agent", "FishbatteryLauncher/0.4.4")
+      .header(reqwest::header::ACCEPT, "application/json")
+      .header(reqwest::header::CACHE_CONTROL, no_cache_value)
+      .header(reqwest::header::PRAGMA, "no-cache")
+      .send()
+      .await
+      .map_err(into_error);
+    if let Ok(res) = response {
+      read_json_response(res).await.ok()
+    } else {
+      None
+    }
+  };
+
+  match (authed_payload, public_payload) {
+    (Some(a), Some(p)) => Ok(merge_cape_payloads(&a, &p)),
+    (Some(a), None) => Ok(a),
+    (None, Some(p)) => Ok(p),
+    (None, None) => Err("Fishbattery cape API returned no usable catalog payload".to_string()),
+  }
 }
 
 async fn to_data_url_if_remote(client: &reqwest::Client, source: &str, file_name: &str) -> String {
@@ -1182,6 +1250,12 @@ fn account_minecraft_token(account: &StoredAccount) -> AppResult<String> {
   Ok(token)
 }
 
+fn minecraft_session_error_for_action(action: &str) -> String {
+  format!(
+    "Minecraft session expired while trying to {action}. Re-add this account in the launcher and try again."
+  )
+}
+
 fn map_official_cape(raw: &serde_json::Value) -> Option<OfficialMinecraftCape> {
   let id = raw.get("id")?.as_str()?.trim().to_string();
   let url = raw.get("url")?.as_str()?.trim().to_string();
@@ -1409,6 +1483,9 @@ pub async fn capes_set_official_active(
   if !response.status().is_success() {
     let status = response.status();
     let text = response.text().await.unwrap_or_default();
+    if status.as_u16() == 401 || status.as_u16() == 403 {
+      return Err(minecraft_session_error_for_action("update official cape"));
+    }
     return Err(format!(
       "Could not update official cape ({}): {}",
       status.as_u16(),
@@ -1460,6 +1537,9 @@ pub async fn skins_set_official_active(
   if !res.status().is_success() {
     let status = res.status();
     let text = res.text().await.unwrap_or_default();
+    if status.as_u16() == 401 || status.as_u16() == 403 {
+      return Err(minecraft_session_error_for_action("update official skin"));
+    }
     return Err(format!(
       "Could not update official skin ({}): {}",
       status.as_u16(),
@@ -1520,6 +1600,9 @@ pub async fn skins_upload_official(
   if !res.status().is_success() {
     let status = res.status();
     let text = res.text().await.unwrap_or_default();
+    if status.as_u16() == 401 || status.as_u16() == 403 {
+      return Err(minecraft_session_error_for_action("upload skin"));
+    }
     return Err(format!(
       "Could not upload skin ({}): {}",
       status.as_u16(),

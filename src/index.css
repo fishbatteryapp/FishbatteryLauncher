@@ -311,6 +311,37 @@ body{
   margin-top: auto;
 }
 
+.sidebarFooterStack{
+  margin-top: auto;
+  display: grid;
+  gap: 10px;
+}
+
+.sidebarCapesPreview{
+  border: 1px solid var(--border);
+  border-radius: var(--r16);
+  background: rgba(255,255,255,.02);
+  padding: 10px 12px;
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+}
+
+.sidebarCapesPreviewStage{
+  width: 100%;
+  max-width: 180px;
+  height: 230px;
+  display: grid;
+  place-items: end center;
+  overflow: visible;
+}
+
+.sidebarCapesPreviewHelp{
+  font-size: 12px;
+  color: var(--muted);
+  text-align: center;
+}
+
 .sidebarSponsored{
   border: 1px solid var(--border);
   border-radius: var(--r16);
@@ -827,6 +858,46 @@ body{
   flex-wrap: wrap;
 }
 
+.instanceGroup{
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.instanceGroupHeader{
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 2px 2px 0;
+}
+
+.instanceGroupHeader strong{
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--muted);
+}
+
+.instanceGroupLine{
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.instanceGroupGrid{
+  width: 100%;
+}
+
+.instanceGroupEmpty{
+  border: 1px dashed var(--border2);
+  border-radius: 12px;
+  background: rgba(255,255,255,.02);
+  padding: 12px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 /* Logs */
 .logs{
   margin-top: 14px;
@@ -896,6 +967,50 @@ pre{
   z-index: 100;
 }
 .modalBackdrop.open{ display:flex; }
+
+.launcherDialogBackdrop{
+  position: fixed;
+  inset: 0;
+  z-index: 100000;
+  display: grid;
+  place-items: center;
+  padding: 12px;
+  background: rgba(4, 10, 18, .72);
+}
+
+.launcherDialog{
+  width: min(460px, calc(100vw - 24px));
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  box-shadow: var(--shadow);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.launcherDialogTitle{
+  margin: 0;
+  font-size: 22px;
+  color: var(--text);
+}
+
+.launcherDialogBody{
+  margin: 0;
+  white-space: pre-wrap;
+  line-height: 1.4;
+  color: var(--text);
+}
+
+.launcherDialogInput{
+  margin-top: 2px;
+}
+
+.launcherDialogActions{
+  justify-content: flex-end;
+  gap: 8px;
+}
 
 .modal{
   width: min(980px, calc(100vw - 28px));
@@ -1135,6 +1250,10 @@ pre{
   }
 
   .sidebarSponsored{
+    display: none !important;
+  }
+
+  .sidebarCapesPreview{
     display: none !important;
   }
 

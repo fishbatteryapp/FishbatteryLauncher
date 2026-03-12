@@ -40,6 +40,8 @@ const searchInstances = $("searchInstances") as HTMLInputElement;
 const navLibrary = $("navLibrary");
 const navCapes = $("navCapes");
 const navSettings = $("navSettings");
+const sidebarCapesPreview = $("sidebarCapesPreview");
+const sidebarCapesPreviewHost = $("sidebarCapesPreviewHost");
 const sidebarSponsored = $("sidebarSponsored");
 const sidebarSponsoredBy = $("sidebarSponsoredBy");
 const sidebarSponsoredMedia = $("sidebarSponsoredMedia");
@@ -2008,66 +2010,119 @@ function setStatus(text: string) {
   statusText.textContent = text || "";
 }
 
-async function showLauncherAlert(message: string, title = "Fishbattery Launcher") {
-  return new Promise<void>((resolve) => {
+async function showLauncherDialog(options: {
+  mode: "alert" | "confirm" | "prompt";
+  message: string;
+  title?: string;
+  defaultValue?: string;
+  okLabel?: string;
+  cancelLabel?: string;
+}): Promise<void | boolean | string | null> {
+  const {
+    mode,
+    message,
+    title = "Fishbattery Launcher",
+    defaultValue = "",
+    okLabel = "OK",
+    cancelLabel = "Cancel"
+  } = options;
+  return new Promise((resolve) => {
     const backdrop = document.createElement("div");
-    backdrop.style.position = "fixed";
-    backdrop.style.inset = "0";
-    backdrop.style.background = "rgba(5, 12, 22, 0.72)";
-    backdrop.style.display = "grid";
-    backdrop.style.placeItems = "center";
-    backdrop.style.zIndex = "100000";
+    backdrop.className = "launcherDialogBackdrop";
 
     const panel = document.createElement("div");
-    panel.style.width = "min(460px, calc(100vw - 24px))";
-    panel.style.padding = "14px";
-    panel.style.borderRadius = "14px";
-    panel.style.border = "1px solid var(--line)";
-    panel.style.background = "var(--panel)";
-    panel.style.boxShadow = "0 16px 50px rgba(0,0,0,.45)";
+    panel.className = "launcherDialog";
 
     const heading = document.createElement("h3");
+    heading.className = "launcherDialogTitle";
     heading.textContent = title;
-    heading.style.margin = "0 0 10px";
 
     const body = document.createElement("p");
+    body.className = "launcherDialogBody";
     body.textContent = message;
-    body.style.margin = "0 0 12px";
-    body.style.whiteSpace = "pre-wrap";
-    body.style.lineHeight = "1.4";
+
+    const input = document.createElement("input");
+    input.className = "input launcherDialogInput";
+    input.type = "text";
+    input.value = defaultValue;
+    input.style.display = mode === "prompt" ? "" : "none";
 
     const actions = document.createElement("div");
-    actions.className = "row";
-    actions.style.justifyContent = "flex-end";
+    actions.className = "row launcherDialogActions";
+    const cancelBtn = document.createElement("button");
+    cancelBtn.className = "btn";
+    cancelBtn.textContent = cancelLabel;
+    cancelBtn.style.display = mode === "alert" ? "none" : "";
     const okBtn = document.createElement("button");
     okBtn.className = "btn btnPrimary";
-    okBtn.textContent = "OK";
-    actions.appendChild(okBtn);
+    okBtn.textContent = okLabel;
+    actions.append(cancelBtn, okBtn);
 
-    panel.append(heading, body, actions);
+    panel.append(heading, body, input, actions);
     backdrop.appendChild(panel);
     document.body.appendChild(backdrop);
 
-    const close = () => {
+    const finish = (result: void | boolean | string | null) => {
       backdrop.remove();
       document.removeEventListener("keydown", onKeyDown);
-      resolve();
+      resolve(result);
+    };
+    const submit = () => {
+      if (mode === "confirm") return finish(true);
+      if (mode === "prompt") return finish(input.value);
+      finish();
+    };
+    const cancel = () => {
+      if (mode === "confirm") return finish(false);
+      if (mode === "prompt") return finish(null);
+      finish();
     };
     const onKeyDown = (ev: KeyboardEvent) => {
-      if (ev.key === "Escape" || ev.key === "Enter") {
+      if (ev.key === "Escape") {
         ev.preventDefault();
-        close();
+        cancel();
+      } else if (ev.key === "Enter") {
+        ev.preventDefault();
+        submit();
       }
     };
 
-    okBtn.onclick = close;
+    okBtn.onclick = submit;
+    cancelBtn.onclick = cancel;
     backdrop.addEventListener("click", (ev) => {
-      if (ev.target === backdrop) close();
+      if (ev.target === backdrop) cancel();
     });
     document.addEventListener("keydown", onKeyDown);
-    okBtn.focus();
+    if (mode === "prompt") {
+      input.focus();
+      input.select();
+    } else {
+      okBtn.focus();
+    }
   });
 }
+
+async function showLauncherAlert(message: string, title = "Fishbattery Launcher") {
+  await showLauncherDialog({ mode: "alert", message, title });
+}
+
+async function showLauncherConfirm(
+  message: string,
+  title = "Fishbattery Launcher",
+  okLabel = "OK",
+  cancelLabel = "Cancel"
+) {
+  return Boolean(await showLauncherDialog({ mode: "confirm", message, title, okLabel, cancelLabel }));
+}
+
+async function showLauncherPrompt(message: string, defaultValue = "", title = "Fishbattery Launcher") {
+  const out = await showLauncherDialog({ mode: "prompt", message, title, defaultValue });
+  return typeof out === "string" ? out : null;
+}
+
+window.alert = (message?: any) => {
+  void showLauncherAlert(String(message ?? ""));
+};
 
 async function runTrackedInstall<T>(
   title: string,
@@ -2224,7 +2279,7 @@ async function maybeOfferRollback(instanceId: string, diag: any | null) {
 
   const stamp = new Date(Number(latest.createdAt || Date.now())).toLocaleString();
   const reason = describeRollbackReason(String(latest.reason || ""));
-  const yes = confirm(
+  const yes = await showLauncherConfirm(
     `A critical launch issue was detected.\n\nRollback to last-known-good snapshot from ${stamp} (${reason})?`
   );
   if (!yes) return;
@@ -2502,12 +2557,75 @@ function setView(which: "library" | "capes" | "settings") {
   navLibrary.classList.toggle("active", which === "library");
   navCapes.classList.toggle("active", which === "capes");
   navSettings.classList.toggle("active", which === "settings");
-  if (which !== "capes") {
-    disposeCapesCharacterPreview();
+  if (sidebarCapesPreview) sidebarCapesPreview.style.display = "";
+  if (which === "capes") void renderCapesView();
+}
+
+async function renderSidebarCharacterPreview(
+  skinSourceUrl: string | null,
+  capeSourceUrl: string | null
+) {
+  if (!sidebarCapesPreview || !sidebarCapesPreviewHost) return;
+  sidebarCapesPreview.style.display = "";
+  await renderInteractiveCharacterPreview(sidebarCapesPreviewHost, skinSourceUrl, capeSourceUrl);
+}
+
+async function refreshSidebarCharacterPreview(forceRefreshOfficial = false) {
+  if (!sidebarCapesPreview || !sidebarCapesPreviewHost) return;
+  sidebarCapesPreview.style.display = "";
+
+  const accounts = state.accounts?.accounts ?? [];
+  const activeId = state.accounts?.activeId ?? null;
+  const activeMc = accounts.find((a: any) => a.id === activeId) ?? accounts[0] ?? null;
+  const activeMcId = String(activeMc?.id || "");
+
+  let localCapeCatalog: { items?: Array<{ id: string; previewDataUrl?: string | null }> } | null = null;
+  try {
+    localCapeCatalog = await backend.capesListLocal();
+  } catch {
+    localCapeCatalog = null;
   }
-  if (which === "capes") {
-    void renderCapesView();
+
+  let selectedLocalCapeId = "";
+  if (activeMcId) {
+    try {
+      const sel = await backend.capesGetLocalSelection(activeMcId);
+      selectedLocalCapeId = String(sel?.capeId || "");
+    } catch {
+      selectedLocalCapeId = "";
+    }
   }
+
+  let capeState:
+    | {
+        skinUrl: string | null;
+        skinDataUrl: string | null;
+        activeCapeId: string | null;
+        capes: Array<{
+          id: string;
+          url: string;
+          previewDataUrl: string | null;
+        }>;
+      }
+    | null = null;
+  if (activeMcId) {
+    try {
+      capeState = await backend.capesListOfficial(activeMcId, forceRefreshOfficial);
+      setOfficialCapeStateCache(activeMcId, capeState);
+    } catch {
+      capeState = getOfficialCapeStateCache(activeMcId);
+    }
+  }
+
+  const activeLocalCape = (localCapeCatalog?.items || []).find((x: any) => x.id === selectedLocalCapeId) ?? null;
+  const activeOfficialCape =
+    capeState?.activeCapeId && capeState?.capes?.length
+      ? capeState.capes.find((x) => x.id === capeState?.activeCapeId) ?? null
+      : null;
+  const capeSource =
+    (activeLocalCape?.previewDataUrl || null) ?? (activeOfficialCape?.previewDataUrl || activeOfficialCape?.url || null);
+  const skinSource = capeState?.skinDataUrl || capeState?.skinUrl || null;
+  await renderSidebarCharacterPreview(skinSource, capeSource);
 }
 
 // Render capes view.
@@ -2651,50 +2769,30 @@ async function renderCapesView(forceRefresh = false) {
     (activeLocalCape?.previewDataUrl || null) ??
     (activeOfficialCape?.previewDataUrl || activeOfficialCape?.url || null);
   const mannequinSkinSource = capeState?.skinDataUrl || capeState?.skinUrl || null;
-  const mannequinLabel = activeLocalCape
-    ? `${activeLocalCape.name} (Launcher ${localCapeTierLabel(activeLocalCape.tier)})`
-    : activeOfficialCape
-      ? `${activeOfficialCape.name} (Official)`
-      : "No Cape";
-
-  const previewRow = document.createElement("div");
-  previewRow.className = "capeMannequinRow";
-  const stage = document.createElement("div");
-  stage.className = "capeMannequinStage";
-  const mannequinHost = document.createElement("div");
-  mannequinHost.className = "capeMannequinHost";
-  stage.appendChild(mannequinHost);
-  previewRow.appendChild(stage);
-
-  const meta = document.createElement("div");
-  meta.className = "capeMannequinMeta";
-  const metaTitle = document.createElement("div");
-  metaTitle.className = "capeMannequinTitle";
-  metaTitle.textContent = "Current";
-  const metaText = document.createElement("div");
-  metaText.className = "capeMannequinText";
-  metaText.textContent = mannequinLabel;
-  meta.appendChild(metaTitle);
-  meta.appendChild(metaText);
-  const metaHelp = document.createElement("div");
-  metaHelp.className = "capeMannequinHelp";
-  metaHelp.textContent = "Drag to rotate";
-  meta.appendChild(metaHelp);
-  previewRow.appendChild(meta);
-  shell.appendChild(previewRow);
-  await renderInteractiveCharacterPreview(mannequinHost, mannequinSkinSource, mannequinCapeSource);
+  await renderSidebarCharacterPreview(mannequinSkinSource, mannequinCapeSource);
 
   const buildTile = (cfg: {
     label: string;
     imageUrl: string | null;
     active: boolean;
-    onSelect: () => void;
+    onSelect: () => Promise<void> | void;
     subLabel?: string;
   }) => {
     const tile = document.createElement("button");
     tile.className = `capeTile${cfg.active ? " active" : ""}`;
     tile.type = "button";
-    tile.onclick = () => guarded(async () => cfg.onSelect());
+    let selecting = false;
+    tile.onclick = async () => {
+      if (selecting) return;
+      selecting = true;
+      try {
+        await cfg.onSelect();
+      } catch (err: any) {
+        await showLauncherAlert(String(err?.message ?? err ?? "Could not select cape"));
+      } finally {
+        selecting = false;
+      }
+    };
 
     const preview = document.createElement("div");
     preview.className = "capeTilePreview";
@@ -2763,6 +2861,68 @@ async function renderCapesView(forceRefresh = false) {
           onSelect: async () => {
             await backend.capesSetOfficialActive(activeMcId, item.id);
             await renderCapesView(true);
+          }
+        })
+      );
+    }
+  }
+
+  const localSection = document.createElement("div");
+  localSection.className = "capeSection";
+  localSection.style.marginTop = "14px";
+  shell.appendChild(localSection);
+
+  const localHeading = document.createElement("div");
+  localHeading.className = "capeSectionHeading";
+  localHeading.textContent = "Fishbattery capes";
+  localSection.appendChild(localHeading);
+
+  const localSub = document.createElement("div");
+  localSub.className = "capeSectionSub";
+  localSub.textContent = "Launcher cape catalog from your Fishbattery cloud account.";
+  localSection.appendChild(localSub);
+
+  const localGrid = document.createElement("div");
+  localGrid.className = "capeGrid";
+  localSection.appendChild(localGrid);
+
+  const sortedLocalItems = [...(localCapeCatalog?.items || [])].sort((a, b) => {
+    const rank = (tier: "free" | "premium" | "founder") => (tier === "free" ? 0 : tier === "premium" ? 1 : 2);
+    const tierOrder = rank(a.tier) - rank(b.tier);
+    if (tierOrder !== 0) return tierOrder;
+    return String(a.name || "").localeCompare(String(b.name || ""));
+  });
+
+  if (!sortedLocalItems.length) {
+    const localEmpty = document.createElement("div");
+    localEmpty.className = "setHelp";
+    localEmpty.style.marginTop = "12px";
+    localEmpty.textContent = "No launcher capes are available for your account right now.";
+    localSection.appendChild(localEmpty);
+  } else {
+    localGrid.appendChild(
+      buildTile({
+        label: "No Fishbattery Cape",
+        imageUrl: null,
+        active: !selectedLocalCapeId,
+        onSelect: async () => {
+          if (activeMcId) await backend.capesSetLocalSelection(activeMcId, null);
+          setStatus("Launcher cape selection cleared.");
+          await renderCapesView(false);
+        }
+      })
+    );
+    for (const localItem of sortedLocalItems) {
+      localGrid.appendChild(
+        buildTile({
+          label: localItem.name,
+          imageUrl: localItem.previewDataUrl || null,
+          active: selectedLocalCapeId === localItem.id,
+          subLabel: localCapeTierLabel(localItem.tier),
+          onSelect: async () => {
+            if (activeMcId) await backend.capesSetLocalSelection(activeMcId, localItem.id);
+            setStatus(`Selected launcher ${localItem.tier} cape: ${localItem.name}`);
+            await renderCapesView(false);
           }
         })
       );
@@ -2884,8 +3044,8 @@ async function renderCapesView(forceRefresh = false) {
       const isActive = selectionMode === "saved" && skinUiSelection.activeSavedId === skin.id;
       tile.className = `capeTile skinTile${isActive ? " active" : ""}`;
       tile.type = "button";
-      const runRename = () => {
-        const nextName = prompt("Rename skin", skin.name || `Skin ${idx + 1}`);
+      const runRename = async () => {
+        const nextName = await showLauncherPrompt("Rename skin", skin.name || `Skin ${idx + 1}`);
         if (nextName == null) return;
         const trimmed = String(nextName).trim();
         if (!trimmed) return;
@@ -2893,17 +3053,20 @@ async function renderCapesView(forceRefresh = false) {
         setSavedSkins(activeMcId, updated);
         void renderCapesView(false);
       };
-      tile.onclick = () =>
-        guarded(async () => {
+      tile.onclick = async () => {
+        try {
           await backend.skinsUploadOfficial(activeMcId, skin.dataUrl, skin.variant);
           setSkinUiSelection(activeMcId, { mode: "saved", defaultKey: undefined, activeSavedId: skin.id });
           setStatus(`Selected skin: ${skin.name || `Skin ${idx + 1}`}`);
           await renderCapesView(true);
-        });
+        } catch (err: any) {
+          await showLauncherAlert(String(err?.message ?? err ?? "Could not select skin"));
+        }
+      };
       tile.ondblclick = (e) => {
         e.preventDefault();
         e.stopPropagation();
-        runRename();
+        void runRename();
       };
 
       const preview = document.createElement("div");
@@ -2942,7 +3105,7 @@ async function renderCapesView(forceRefresh = false) {
       renameBtn.onclick = (e) => {
         e.preventDefault();
         e.stopPropagation();
-        runRename();
+        void runRename();
       };
       actions.appendChild(renameBtn);
 
@@ -2952,10 +3115,10 @@ async function renderCapesView(forceRefresh = false) {
       deleteBtn.textContent = "Delete";
       deleteBtn.style.padding = "4px 8px";
       deleteBtn.style.fontSize = "11px";
-      deleteBtn.onclick = (e) => {
+      deleteBtn.onclick = async (e) => {
         e.preventDefault();
         e.stopPropagation();
-        const ok = confirm(`Delete saved skin "${skin.name || `Skin ${idx + 1}`}"?`);
+        const ok = await showLauncherConfirm(`Delete saved skin "${skin.name || `Skin ${idx + 1}`}"?`);
         if (!ok) return;
         const updated = savedSkins.filter((s) => s.id !== skin.id);
         setSavedSkins(activeMcId, updated);
@@ -2975,8 +3138,8 @@ async function renderCapesView(forceRefresh = false) {
       const isActive = selectionMode === "default" && skinUiSelection.defaultKey === def.key;
       tile.className = `capeTile skinTile skinDefaultTile${isActive ? " active" : ""}`;
       tile.type = "button";
-      tile.onclick = () =>
-        guarded(async () => {
+      tile.onclick = async () => {
+        try {
           const currentMap = getSkinUiSelection(activeMcId);
           const knownSkinId = currentMap.defaultSkinIds?.[def.key];
           if (knownSkinId && officialSkins.some((s) => s.id === knownSkinId)) {
@@ -2994,7 +3157,10 @@ async function renderCapesView(forceRefresh = false) {
           setSkinUiSelection(activeMcId, { mode: "default", defaultKey: def.key, activeSavedId: undefined });
           setStatus(`Selected default skin: ${def.name}`);
           await renderCapesView(true);
-        });
+        } catch (err: any) {
+          await showLauncherAlert(String(err?.message ?? err ?? "Could not select default skin"));
+        }
+      };
 
       const preview = document.createElement("div");
       preview.className = "capeTilePreview skinTilePreview";
@@ -3022,67 +3188,6 @@ async function renderCapesView(forceRefresh = false) {
     });
   }
 
-  const localSection = document.createElement("div");
-  localSection.className = "capeSection";
-  localSection.style.marginTop = "14px";
-  shell.appendChild(localSection);
-
-  const localHeading = document.createElement("div");
-  localHeading.className = "capeSectionHeading";
-  localHeading.textContent = "Fishbattery capes";
-  localSection.appendChild(localHeading);
-
-  const localSub = document.createElement("div");
-  localSub.className = "capeSectionSub";
-  localSub.textContent = "Launcher cape catalog from your Fishbattery cloud account.";
-  localSection.appendChild(localSub);
-
-  const localGrid = document.createElement("div");
-  localGrid.className = "capeGrid";
-  localSection.appendChild(localGrid);
-
-  const sortedLocalItems = [...(localCapeCatalog?.items || [])].sort((a, b) => {
-    const rank = (tier: "free" | "premium" | "founder") => (tier === "free" ? 0 : tier === "premium" ? 1 : 2);
-    const tierOrder = rank(a.tier) - rank(b.tier);
-    if (tierOrder !== 0) return tierOrder;
-    return String(a.name || "").localeCompare(String(b.name || ""));
-  });
-
-  if (!sortedLocalItems.length) {
-    const localEmpty = document.createElement("div");
-    localEmpty.className = "setHelp";
-    localEmpty.style.marginTop = "12px";
-    localEmpty.textContent = "No launcher capes are available for your account right now.";
-    localSection.appendChild(localEmpty);
-  } else {
-    localGrid.appendChild(
-      buildTile({
-        label: "No Fishbattery Cape",
-        imageUrl: null,
-        active: !selectedLocalCapeId,
-        onSelect: async () => {
-          if (activeMcId) await backend.capesSetLocalSelection(activeMcId, null);
-          setStatus("Launcher cape selection cleared.");
-          await renderCapesView(false);
-        }
-      })
-    );
-    for (const localItem of sortedLocalItems) {
-      localGrid.appendChild(
-        buildTile({
-          label: localItem.name,
-          imageUrl: localItem.previewDataUrl || null,
-          active: selectedLocalCapeId === localItem.id,
-          subLabel: localCapeTierLabel(localItem.tier),
-          onSelect: async () => {
-            if (activeMcId) await backend.capesSetLocalSelection(activeMcId, localItem.id);
-            setStatus(`Selected launcher ${localItem.tier} cape: ${localItem.name}`);
-            await renderCapesView(false);
-          }
-        })
-      );
-    }
-  }
 }
 
 const capePreviewCache = new Map<string, string | null>();
@@ -3159,7 +3264,9 @@ async function buildSkinPanelPreviewDataUrlFallback2d(
   const px = 5;
   const modelX = Math.round((outW - 16 * px) / 2);
   const modelY = Math.round((outH - 32 * px) / 2);
-  const armWidth = variant === "SLIM" ? 3 : 4;
+  // 2D thumbnail projection can mis-sample slim UV columns on some skins.
+  // Use classic arm width in thumbnails to keep previews stable.
+  const armWidth = 4;
   const draw = (sx: number, sy: number, sw: number, sh: number, dx: number, dy: number) => {
     ctx.drawImage(
       sourceCanvas,
@@ -4021,7 +4128,7 @@ async function runCloudSync(manual: boolean, forcedPolicy?: "prefer-local" | "pr
 
   if (result.status === "conflict" && manual && policy === "ask") {
     // Interactive conflict resolution for user-triggered sync runs.
-    const useCloud = confirm(
+    const useCloud = await showLauncherConfirm(
       "Cloud sync conflict detected.\n\nOK = use cloud state\nCancel = keep local state\n\nYou can change this behavior in:\nSettings > Install > Conflict policy"
     );
     await runCloudSync(true, useCloud ? "prefer-cloud" : "prefer-local");
@@ -4407,7 +4514,7 @@ async function optimizeActiveModalInstance() {
   }
   const profile = (optProfile.value || "balanced") as "conservative" | "balanced" | "aggressive";
   const preview = await backend.optimizerPreview(profile);
-  const yes = confirm(
+  const yes = await showLauncherConfirm(
     [
       `Optimize instance with profile "${profile}"?`,
       "",
@@ -4435,7 +4542,7 @@ async function restoreActiveModalOptimization() {
     alert("Select an instance first.");
     return;
   }
-  const yes = confirm("Restore optimizer defaults for this instance?");
+  const yes = await showLauncherConfirm("Restore optimizer defaults for this instance?");
   if (!yes) return;
   await backend.optimizerRestore(id);
   state.instances = await backend.instancesList();
@@ -4544,7 +4651,7 @@ function renderSettingsPanels() {
       const next = sel.value as AppSettings["theme"];
       if (!premium && PREMIUM_THEMES.has(next)) {
         const label = THEME_OPTIONS.find((x) => x.value === next)?.label || "This theme";
-        const goUpgrade = confirm(`${label} is a Premium theme.\n\nOpen upgrade page now?`);
+        const goUpgrade = await showLauncherConfirm(`${label} is a Premium theme.\n\nOpen upgrade page now?`);
         if (goUpgrade) await openUpgradeFlow();
         sel.value = s.theme;
         return;
@@ -5579,7 +5686,7 @@ async function launchForInstance(inst: any, serverAddress?: string) {
       .slice(0, 8)
       .map((x) => `- ${x.title}`)
       .join("\n");
-    const launchAnyway = confirm(
+    const launchAnyway = await showLauncherConfirm(
       `Critical mod conflicts detected:\n${detail}\n\nUse "Update Mods" or fix duplicates first.\nLaunch anyway?`
     );
     if (!launchAnyway) return;
@@ -6942,11 +7049,12 @@ async function renderAccounts() {
     btnRemoveAccount.onclick = (e) => {
       e.stopPropagation();
       void guarded(async () => {
-        const ok = confirm(`Remove account "${getAccountLabel(a)}"?`);
+        const ok = await showLauncherConfirm(`Remove account "${getAccountLabel(a)}"?`);
         if (!ok) return;
         await backend.accountsRemove(a.id);
         state.accounts = await backend.accountsList();
         await renderAccounts();
+        void renderCapesView(false);
       });
     };
     right.appendChild(btnRemoveAccount);
@@ -6958,6 +7066,7 @@ async function renderAccounts() {
       await backend.accountsSetActive(a.id);
       state.accounts = await backend.accountsList();
       await renderAccounts();
+      void renderCapesView(false);
       accountDropdown.classList.remove("open");
     };
 
@@ -7168,6 +7277,7 @@ async function renderAccounts() {
       if (updated) await renderAccounts();
     })();
   }
+  void refreshSidebarCharacterPreview(false);
   void renderSponsoredBannerState();
   ensureCloudSyncTimer();
 }
@@ -7336,7 +7446,7 @@ async function renderInstances() {
     })
   );
 
-  for (const i of items) {
+  const createInstanceCard = (i: any) => {
     const card = document.createElement("div");
     card.className = "card";
     card.style.cursor = "pointer";
@@ -7439,7 +7549,7 @@ async function renderInstances() {
     btnDelete.textContent = "Delete";
     btnDelete.onclick = async (ev) => {
       ev.stopPropagation();
-      const ok = confirm(`Delete "${i.name ?? "Instance"}"? This will remove the entire instance folder.`);
+      const ok = await showLauncherConfirm(`Delete "${i.name ?? "Instance"}"? This will remove the entire instance folder.`);
       if (!ok) return;
       await backend.instancesRemove(i.id);
       state.instances = await backend.instancesList();
@@ -7467,8 +7577,43 @@ async function renderInstances() {
     inner.appendChild(actions);
 
     card.appendChild(inner);
-    instancesGrid.appendChild(card);
-  }
+    return card;
+  };
+
+  const vanillaInstances = items.filter((i: any) => String(i?.loader || "vanilla").toLowerCase() === "vanilla");
+  const moddedInstances = items.filter((i: any) => String(i?.loader || "vanilla").toLowerCase() !== "vanilla");
+
+  const appendGroup = (label: string, groupItems: any[]) => {
+    const group = document.createElement("section");
+    group.className = "instanceGroup";
+
+    const header = document.createElement("div");
+    header.className = "instanceGroupHeader";
+    const title = document.createElement("strong");
+    title.textContent = label;
+    const line = document.createElement("div");
+    line.className = "instanceGroupLine";
+    header.append(title, line);
+
+    const grid = document.createElement("div");
+    grid.className = "grid instanceGroupGrid";
+    if (!groupItems.length) {
+      const empty = document.createElement("div");
+      empty.className = "instanceGroupEmpty";
+      empty.textContent = label === "Default instances" ? "No default instances yet." : "No modded instances yet.";
+      grid.appendChild(empty);
+    } else {
+      for (const instance of groupItems) {
+        grid.appendChild(createInstanceCard(instance));
+      }
+    }
+
+    group.append(header, grid);
+    instancesGrid.appendChild(group);
+  };
+
+  appendGroup("Default instances", vanillaInstances);
+  appendGroup("Modded instances", moddedInstances);
 }
 
 // Fill instance account dropdown.
@@ -7984,8 +8129,18 @@ async function refreshAll() {
 
   // 3) Render all visible top-level sections from freshly loaded state.
   await renderAccounts();
+  try {
+    await refreshSidebarCharacterPreview(false);
+  } catch (err: any) {
+    appendLog(`[startup] sidebar preview failed: ${String(err?.message ?? err)}`);
+  }
   await promptLauncherSignInOnStartup();
   await renderInstances();
+  try {
+    await renderCapesView(false);
+  } catch (err: any) {
+    appendLog(`[startup] capes preview failed: ${String(err?.message ?? err)}`);
+  }
   await loadSponsoredBannersFromFeed();
   await renderSponsoredBannerState();
   renderConsentBannerState();
@@ -8590,6 +8745,9 @@ modalCreate.onclick = () =>
             update("Creating instance from Modrinth preset pack");
             const created = await backend.modrinthPacksInstall({
               projectId: presetModrinthPackProject,
+              mcVersion,
+              loader: loader as "vanilla" | "fabric" | "quilt" | "forge" | "neoforge",
+              requireCompatibility: true,
               nameOverride: newName.value?.trim() || presetLabel,
               accountId: instanceAccount.value || null,
               memoryMb: Number(newMem.value || 4096)
@@ -8981,7 +9139,7 @@ modalUpdateMods.onclick = () =>
     }
 
     const summary = buildModUpdateSummary(plan);
-    const choiceRaw = prompt(
+    const choiceRaw = await showLauncherPrompt(
       `${summary}\n\nChoose action:\n- all\n- individual\n- skip`,
       "all"
     );
@@ -8995,7 +9153,7 @@ modalUpdateMods.onclick = () =>
     let selectedIds: string[] = [];
     if (choice === "individual") {
       const suggested = plan.updates.map((u: any) => u.id).slice(0, 5).join(",");
-      const rawIds = prompt("Enter mod IDs to update (comma-separated).", suggested);
+      const rawIds = await showLauncherPrompt("Enter mod IDs to update (comma-separated).", suggested);
       selectedIds = String(rawIds || "")
         .split(",")
         .map((x) => x.trim())
@@ -9025,7 +9183,7 @@ modalUpdateMods.onclick = () =>
       }
     } catch (err: any) {
       const msg = String(err?.message ?? err);
-      const doRollback = confirm(`Mod update failed:\n${msg}\n\nRestore latest snapshot now?`);
+      const doRollback = await showLauncherConfirm(`Mod update failed:\n${msg}\n\nRestore latest snapshot now?`);
       if (doRollback) {
         await backend.rollbackRestoreLatest(inst.id);
         appendLog("[rollback] Restored latest snapshot after update failure.");
@@ -9039,7 +9197,7 @@ modalUpdateMods.onclick = () =>
     if (v.summary === "critical") {
       const dup = v.issues.filter((x: any) => x.code === "duplicate-mod-id").length;
       if (dup > 0) {
-        const fix = confirm(`Detected ${dup} duplicate mod conflict(s). Auto-fix duplicates now?`);
+        const fix = await showLauncherConfirm(`Detected ${dup} duplicate mod conflict(s). Auto-fix duplicates now?`);
         if (fix) {
           const r = await backend.modsFixDuplicates(inst.id);
           appendLog(`[validation] Removed duplicates: ${r.removed.join(", ") || "none"}`);
@@ -9087,7 +9245,7 @@ backend.onLaunchLog((line) => {
     void runLaunchDiagnosis(active);
   }
 });
-backend.onUpdaterEvent((evt) => {
+backend.onUpdaterEvent(async (evt) => {
   updaterState = evt;
   if (settingsTabInstall.classList.contains("active")) {
     renderSettingsPanels();
@@ -9103,7 +9261,7 @@ backend.onUpdaterEvent((evt) => {
     const v = String(evt.latestVersion ?? "");
     if (v && promptedUpdateVersion !== v) {
       promptedUpdateVersion = v;
-      const yes = confirm(`Update v${v} is available. Download now?`);
+      const yes = await showLauncherConfirm(`Update v${v} is available. Download now?`);
       if (yes) {
         void backend.updaterDownload();
       }
@@ -9114,7 +9272,7 @@ backend.onUpdaterEvent((evt) => {
     const v = String(evt.latestVersion ?? "");
     if (v && promptedInstallVersion !== v) {
       promptedInstallVersion = v;
-      const yes = confirm(`Update v${v} downloaded. Restart now to install?`);
+      const yes = await showLauncherConfirm(`Update v${v} downloaded. Restart now to install?`);
       if (yes) {
         void backend.updaterInstall();
       }

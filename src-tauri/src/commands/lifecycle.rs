@@ -19,6 +19,18 @@ use crate::state::AppState;
 
 const MAX_ROLLBACK_SNAPSHOTS: usize = 8;
 
+#[cfg(target_os = "windows")]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+#[cfg(target_os = "windows")]
+fn hide_console_window(cmd: &mut Command) {
+  use std::os::windows::process::CommandExt;
+  cmd.creation_flags(CREATE_NO_WINDOW);
+}
+
+#[cfg(not(target_os = "windows"))]
+fn hide_console_window(_cmd: &mut Command) {}
+
 fn now_ms() -> u64 {
   SystemTime::now()
     .duration_since(UNIX_EPOCH)
@@ -536,7 +548,10 @@ fn parse_java_major_from_text(text: &str) -> Option<u32> {
 }
 
 fn probe_java_major(program: &str) -> Option<u32> {
-  let out = Command::new(program).arg("-version").output().ok()?;
+  let mut cmd = Command::new(program);
+  cmd.arg("-version");
+  hide_console_window(&mut cmd);
+  let out = cmd.output().ok()?;
   let stderr = String::from_utf8_lossy(&out.stderr).to_string();
   let stdout = String::from_utf8_lossy(&out.stdout).to_string();
   let text = if stderr.trim().is_empty() { stdout } else { stderr };
@@ -544,10 +559,10 @@ fn probe_java_major(program: &str) -> Option<u32> {
 }
 
 fn probe_java_data_model(program: &str) -> Option<u32> {
-  let out = Command::new(program)
-    .args(["-XshowSettings:properties", "-version"])
-    .output()
-    .ok()?;
+  let mut cmd = Command::new(program);
+  cmd.args(["-XshowSettings:properties", "-version"]);
+  hide_console_window(&mut cmd);
+  let out = cmd.output().ok()?;
   let stderr = String::from_utf8_lossy(&out.stderr);
   let stdout = String::from_utf8_lossy(&out.stdout);
   let text = if stderr.trim().is_empty() {
@@ -878,7 +893,10 @@ fn run_hook_command(phase: &str, command: &str, app: &tauri::AppHandle) -> AppRe
   let _ = emit_launch_log_app(app, format!("[hook] Running {phase} hook: {cmd}"));
 
   let status = if cfg!(target_os = "windows") {
-    Command::new("cmd").args(["/C", cmd]).status().map_err(into_error)?
+    let mut proc = Command::new("cmd");
+    proc.args(["/C", cmd]);
+    hide_console_window(&mut proc);
+    proc.status().map_err(into_error)?
   } else {
     Command::new("sh").args(["-c", cmd]).status().map_err(into_error)?
   };
@@ -1248,19 +1266,37 @@ fn profile_id_matches_loader_version(id: &str, mc_version: &str, loader_version:
   if lv_lower.is_empty() {
     return true;
   }
-  if id_lower.contains(&lv_lower) {
-    return true;
-  }
-
-  // Forge-style versions can include the MC prefix (e.g. 1.12.2-14.23.5.2864)
-  // while generated profile ids are usually mc-forge-build (1.12.2-forge-14.23.5.2864).
+  let mut candidates: Vec<String> = vec![lv_lower.clone()];
   if let Some(stripped) = lv_lower.strip_prefix(&(mc_lower.clone() + "-")) {
-    if !stripped.is_empty() && id_lower.contains(stripped) {
-      return true;
+    if !stripped.is_empty() {
+      candidates.push(stripped.to_string());
     }
   }
-  if let Some(stripped) = lv_lower.strip_prefix(&(mc_lower + "_")) {
-    if !stripped.is_empty() && id_lower.contains(stripped) {
+  if let Some(stripped) = lv_lower.strip_prefix(&(mc_lower.clone() + "_")) {
+    if !stripped.is_empty() {
+      candidates.push(stripped.to_string());
+    }
+  }
+  if let Some(stripped) = lv_lower.strip_suffix(&("-".to_string() + &mc_lower)) {
+    if !stripped.is_empty() {
+      candidates.push(stripped.to_string());
+    }
+  }
+  if let Some(stripped) = lv_lower.strip_suffix(&("_".to_string() + &mc_lower)) {
+    if !stripped.is_empty() {
+      candidates.push(stripped.to_string());
+    }
+  }
+  // Legacy Forge can encode as mc-forgeBuild-mc; include middle forge build token.
+  let dash_parts: Vec<&str> = lv_lower.split('-').collect();
+  if dash_parts.len() >= 3 {
+    let middle = dash_parts[1..dash_parts.len() - 1].join("-");
+    if !middle.is_empty() {
+      candidates.push(middle);
+    }
+  }
+  for token in candidates {
+    if !token.is_empty() && id_lower.contains(&token) {
       return true;
     }
   }
@@ -1330,6 +1366,163 @@ fn find_forge_like_profile_id(
   }
   loose_candidates.sort_by(|a, b| b.0.cmp(&a.0));
   loose_candidates.first().map(|(_, id)| id.clone())
+}
+
+fn copy_dir_recursive(src: &Path, dst: &Path) -> AppResult<()> {
+  if !src.exists() {
+    return Ok(());
+  }
+  fs::create_dir_all(dst).map_err(into_error)?;
+  let rd = fs::read_dir(src).map_err(into_error)?;
+  for ent in rd.flatten() {
+    let src_path = ent.path();
+    let dst_path = dst.join(ent.file_name());
+    let meta = match ent.metadata() {
+      Ok(m) => m,
+      Err(_) => continue,
+    };
+    if meta.is_dir() {
+      copy_dir_recursive(&src_path, &dst_path)?;
+    } else if meta.is_file() {
+      if let Some(parent) = dst_path.parent() {
+        fs::create_dir_all(parent).map_err(into_error)?;
+      }
+      let _ = fs::copy(&src_path, &dst_path).map_err(into_error)?;
+    }
+  }
+  Ok(())
+}
+
+fn default_minecraft_roots() -> Vec<PathBuf> {
+  let mut roots: Vec<PathBuf> = Vec::new();
+  #[cfg(target_os = "windows")]
+  {
+    if let Ok(appdata) = std::env::var("APPDATA") {
+      roots.push(PathBuf::from(appdata).join(".minecraft"));
+    }
+    if let Ok(home) = std::env::var("USERPROFILE") {
+      roots.push(
+        PathBuf::from(home)
+          .join("AppData")
+          .join("Roaming")
+          .join(".minecraft"),
+      );
+    }
+  }
+  #[cfg(target_os = "macos")]
+  {
+    if let Ok(home) = std::env::var("HOME") {
+      roots.push(
+        PathBuf::from(home)
+          .join("Library")
+          .join("Application Support")
+          .join("minecraft"),
+      );
+    }
+  }
+  #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+  {
+    if let Ok(home) = std::env::var("HOME") {
+      roots.push(PathBuf::from(home).join(".minecraft"));
+    }
+  }
+  roots.sort();
+  roots.dedup();
+  roots
+}
+
+fn import_forge_profile_from_default_minecraft(
+  versions_root: &Path,
+  mc_version: &str,
+  loader: &str,
+  loader_version: &str,
+) -> Option<String> {
+  for root in default_minecraft_roots() {
+    let src_versions = root.join("versions");
+    if !src_versions.exists() {
+      continue;
+    }
+    let Some(profile_id) = find_forge_like_profile_id(&src_versions, mc_version, loader, loader_version) else {
+      continue;
+    };
+    let src_profile_dir = src_versions.join(&profile_id);
+    if !src_profile_dir.exists() {
+      continue;
+    }
+    let dst_profile_dir = versions_root.join(&profile_id);
+    if copy_dir_recursive(&src_profile_dir, &dst_profile_dir).is_ok() {
+      return Some(profile_id);
+    }
+  }
+  None
+}
+
+fn install_legacy_forge_profile_from_installer(
+  app: &tauri::AppHandle,
+  installer_path: &Path,
+  versions_root: &Path,
+) -> AppResult<Option<String>> {
+  if !installer_path.exists() {
+    return Ok(None);
+  }
+  let file = fs::File::open(installer_path).map_err(into_error)?;
+  let mut zip = ZipArchive::new(file).map_err(into_error)?;
+  let mut profile_raw = String::new();
+  {
+    let mut entry = match zip.by_name("install_profile.json") {
+      Ok(v) => v,
+      Err(_) => return Ok(None),
+    };
+    entry.read_to_string(&mut profile_raw).map_err(into_error)?;
+  }
+  let profile: Value = serde_json::from_str(&profile_raw).map_err(into_error)?;
+  let install = profile.get("install").and_then(|v| v.as_object()).cloned().unwrap_or_default();
+  let mut version_info = match profile.get("versionInfo").cloned() {
+    Some(v) => v,
+    None => return Ok(None),
+  };
+  let target_id = install
+    .get("target")
+    .and_then(|v| v.as_str())
+    .map(str::trim)
+    .filter(|v| !v.is_empty())
+    .ok_or_else(|| "legacy forge installer missing install.target".to_string())?
+    .to_string();
+  version_info["id"] = json!(target_id.clone());
+  if version_info
+    .get("type")
+    .and_then(|v| v.as_str())
+    .map(str::trim)
+    .filter(|v| !v.is_empty())
+    .is_none()
+  {
+    version_info["type"] = json!("release");
+  }
+
+  let vdir = versions_root.join(&target_id);
+  fs::create_dir_all(&vdir).map_err(into_error)?;
+  let out_json = vdir.join(format!("{target_id}.json"));
+  fs::write(out_json, serde_json::to_string_pretty(&version_info).map_err(into_error)?).map_err(into_error)?;
+
+  let maybe_file_path = install.get("filePath").and_then(|v| v.as_str()).map(str::trim).filter(|v| !v.is_empty());
+  let maybe_maven_name = install.get("path").and_then(|v| v.as_str()).map(str::trim).filter(|v| !v.is_empty());
+  if let (Some(file_path), Some(maven_name)) = (maybe_file_path, maybe_maven_name) {
+    if let Some((rel_path, _, _)) = parse_maven_name(maven_name) {
+      if let Ok(mut entry) = zip.by_name(file_path) {
+        let mut bytes: Vec<u8> = Vec::new();
+        entry.read_to_end(&mut bytes).map_err(into_error)?;
+        if !bytes.is_empty() {
+          let lib_target = libraries_root(app)?.join(rel_path);
+          if let Some(parent) = lib_target.parent() {
+            fs::create_dir_all(parent).map_err(into_error)?;
+          }
+          fs::write(lib_target, bytes).map_err(into_error)?;
+        }
+      }
+    }
+  }
+
+  Ok(Some(target_id))
 }
 
 fn load_profile_recursive(versions_root: &Path, version_id: &str, depth: usize) -> AppResult<Value> {
@@ -1780,6 +1973,31 @@ async fn resolve_launch_profile_id(
           install_ok = true;
           break;
         }
+        if let Some(imported) = import_forge_profile_from_default_minecraft(
+          &versions,
+          &mc_version,
+          &loader,
+          &loader_version,
+        ) {
+          let _ = emit_launch_log_app(
+            &app,
+            format!(
+              "[launcher] Imported {loader} profile from default .minecraft: {imported}"
+            ),
+          );
+          install_ok = true;
+          break;
+        }
+        if let Ok(Some(generated)) =
+          install_legacy_forge_profile_from_installer(&app, Path::new(&installer_path), &versions)
+        {
+          let _ = emit_launch_log_app(
+            &app,
+            format!("[launcher] Generated legacy {loader} profile from installer metadata: {generated}"),
+          );
+          install_ok = true;
+          break;
+        }
         last_error_msg = "installer completed but no launch profile was generated".to_string();
         let _ = emit_launch_log_app(
           &app,
@@ -1793,7 +2011,15 @@ async fn resolve_launch_profile_id(
       last_error_msg = msg;
       let _ = emit_launch_log_app(
         &app,
-        format!("[launcher] {loader} installer attempt failed: {}", args.join(" ")),
+        if last_error_msg.is_empty() {
+          format!("[launcher] {loader} installer attempt failed: {}", args.join(" "))
+        } else {
+          format!(
+            "[launcher] {loader} installer attempt failed: {} :: {}",
+            args.join(" "),
+            last_error_msg
+          )
+        },
       );
     }
     if !install_ok {
@@ -2434,13 +2660,15 @@ pub async fn launch(
     format!("[launcher] Launch command: {} {}", java_exe, safe_args.join(" ")),
   );
 
-  let mut child = match Command::new(&java_exe)
+  let mut launch_cmd = Command::new(&java_exe);
+  launch_cmd
     .args(&args)
     .current_dir(&game_dir)
     .stdout(Stdio::piped())
-    .stderr(Stdio::piped())
-    .spawn()
-  {
+    .stderr(Stdio::piped());
+  hide_console_window(&mut launch_cmd);
+
+  let mut child = match launch_cmd.spawn() {
     Ok(c) => c,
     Err(err) => {
       let msg = format!("launch: failed to spawn java process ({err})");
