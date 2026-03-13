@@ -12,15 +12,14 @@ permissions:
 
 jobs:
   release:
-    name: Release (${{ matrix.name }})
+    name: Release (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     environment: release
     strategy:
       fail-fast: false
       matrix:
         include:
-          - name: windows-latest
-            os: windows-latest
+          - os: windows-latest
             windows_sign: true
 
     env:
@@ -146,26 +145,6 @@ jobs:
 
           Set-Content -Path (Join-Path $env:GITHUB_WORKSPACE "src-tauri/tauri.windows.conf.json") -Value $config -NoNewline
 
-      - name: Extract release notes from changelog
-        id: release_notes
-        shell: pwsh
-        run: |
-          $tag = "${{ github.ref_name }}"
-          $changelog = Get-Content (Join-Path $env:GITHUB_WORKSPACE "CHANGELOG.md") -Raw
-          $escapedTag = [regex]::Escape($tag)
-          $match = [regex]::Match($changelog, "(?ms)^##\s+$escapedTag\b.*?(?=^##\s+|\z)")
-
-          if (-not $match.Success) {
-            throw "Could not find changelog section for $tag in CHANGELOG.md"
-          }
-
-          $body = $match.Value.Trim()
-          @"
-body<<__EOF__
-$body
-__EOF__
-"@ | Add-Content -Path $env:GITHUB_OUTPUT
-
       - name: Build and publish Tauri release
         uses: tauri-apps/tauri-action@v0
         env:
@@ -185,10 +164,27 @@ __EOF__
           tauriScript: npx tauri
           tagName: ${{ github.ref_name }}
           releaseName: Fishbattery Launcher ${{ github.ref_name }}
-          releaseBody: ${{ steps.release_notes.outputs.body }}
+          releaseBody: See the assets to download this version.
           releaseDraft: false
           prerelease: ${{ contains(github.ref_name, '-beta') || contains(github.ref_name, '-rc') }}
           includeUpdaterJson: true
+
+      - name: Update GitHub release notes from changelog
+        if: matrix.windows_sign
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $changelog = Get-Content (Join-Path $env:GITHUB_WORKSPACE "CHANGELOG.md") -Raw
+          $escapedTag = [regex]::Escape($tag)
+          $match = [regex]::Match($changelog, "(?ms)^##\s+$escapedTag\b.*?(?=^##\s+|\z)")
+
+          if (-not $match.Success) {
+            throw "Could not find changelog section for $tag in CHANGELOG.md"
+          }
+
+          $notesPath = Join-Path $env:RUNNER_TEMP "release-notes.md"
+          Set-Content -Path $notesPath -Value $match.Value.Trim()
+          gh release edit $tag --notes-file $notesPath
 
       - name: Sign Windows release artifacts (post-build)
         if: matrix.windows_sign
