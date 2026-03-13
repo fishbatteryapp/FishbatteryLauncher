@@ -1,4 +1,5 @@
 import { Auth } from "msmc";
+import { spawn } from "node:child_process";
 
 function fail(message) {
   process.stderr.write(String(message || "Unknown error"));
@@ -6,76 +7,153 @@ function fail(message) {
 }
 
 const ACCOUNT_JSON_PREFIX = "__FB_ACCOUNT_JSON__:";
+const LOGIN_TIMEOUT_MS = 5 * 60 * 1000;
 
-function pickMsmcFrameworkOrder() {
-  const override = String(process.env.MSMC_FRAMEWORK || "").toLowerCase();
-  if (override === "electron") return ["electron", "raw"];
-  if (override === "raw") return ["raw", "electron"];
-  return ["raw", "electron"];
-}
-
-function asHelpfulAuthError(err, framework) {
+function asHelpfulAuthError(err) {
   const msg = String((err && err.message) || err || "Unknown error");
   if (/different device|authentication method|error\\s*400/i.test(msg)) {
     return (
-      `Microsoft sign-in was blocked in the ${framework} flow.\n` +
-      "Fix: use the system-browser login flow (MSMC raw).\n\n" +
+      "Microsoft sign-in was blocked by the browser or Microsoft auth flow.\n" +
+      "Fix: retry the sign-in and complete it in your default browser.\n\n" +
       `Details: ${msg}`
     );
   }
-  return `Microsoft sign-in failed in the ${framework} flow: ${msg}`;
+  return `Microsoft sign-in failed: ${msg}`;
+}
+
+function buildAccount(xboxManager, mc) {
+  const uuid = mc?.profile?.id ?? mc?.profile?.uuid ?? null;
+  const username = mc?.profile?.name ?? null;
+  if (!uuid || !username) {
+    throw new Error(
+      "Microsoft login succeeded, but no Minecraft profile was returned. " +
+        "The account may not own Minecraft Java."
+    );
+  }
+
+  const mclcAuth = typeof mc?.mclc === "function" ? mc.mclc() : mc?.mclc;
+  if (!mclcAuth || typeof mclcAuth !== "object") {
+    throw new Error("MSMC did not return mclc auth payload.");
+  }
+
+  const xuid = mclcAuth?.meta?.xuid ?? null;
+  if (!xuid) {
+    throw new Error("MSMC auth missing meta.xuid.");
+  }
+
+  const msmcRefreshToken =
+    typeof xboxManager?.save === "function"
+      ? String(xboxManager.save() || "").trim() || undefined
+      : undefined;
+
+  return {
+    id: String(uuid),
+    username: String(username),
+    mclcAuth,
+    accessToken: mclcAuth?.access_token ?? mclcAuth?.accessToken ?? undefined,
+    msmcRefreshToken,
+    addedAt: Date.now()
+  };
+}
+
+function openUrl(url) {
+  const target = String(url || "").trim();
+  if (!target) {
+    return Promise.reject(new Error("Missing sign-in URL."));
+  }
+
+  return new Promise((resolve, reject) => {
+    let command;
+    let args;
+
+    switch (process.platform) {
+      case "win32":
+        command = "cmd";
+        args = ["/c", "start", "", target];
+        break;
+      case "darwin":
+        command = "open";
+        args = [target];
+        break;
+      default:
+        command = "xdg-open";
+        args = [target];
+        break;
+    }
+
+    const child = spawn(command, args, {
+      detached: true,
+      stdio: "ignore"
+    });
+
+    child.once("error", reject);
+    child.once("spawn", () => {
+      child.unref();
+      resolve();
+    });
+  });
+}
+
+async function loginInSystemBrowser() {
+  const authManager = new Auth("select_account");
+
+  let serverInfo = null;
+  let timeoutHandle = null;
+  let isSettled = false;
+
+  const closeServer = () => {
+    try {
+      serverInfo?.server?.close?.();
+    } catch {
+      // Ignore close failures.
+    }
+  };
+
+  const accountPromise = new Promise((resolve, reject) => {
+    const settle = (handler, value) => {
+      if (isSettled) return;
+      isSettled = true;
+      if (timeoutHandle) clearTimeout(timeoutHandle);
+      closeServer();
+      handler(value);
+    };
+
+    authManager
+      .setServer(
+        async (xboxManager) => {
+          try {
+            const mc = await xboxManager.getMinecraft();
+            settle(resolve, buildAccount(xboxManager, mc));
+          } catch (err) {
+            settle(reject, err);
+          }
+        },
+        "Fishbattery sign-in complete. You can close this tab.",
+        0
+      )
+      .then((info) => {
+        serverInfo = info;
+        timeoutHandle = setTimeout(() => {
+          settle(
+            reject,
+            new Error("Timed out waiting for Microsoft sign-in to complete.")
+          );
+        }, LOGIN_TIMEOUT_MS);
+
+        return openUrl(info.link);
+      })
+      .catch((err) => {
+        settle(reject, err);
+      });
+  });
+
+  return await accountPromise;
 }
 
 try {
-  const authManager = new Auth("select_account");
-  let lastErr = null;
-
-  for (const framework of pickMsmcFrameworkOrder()) {
-    try {
-      const xboxManager = await authManager.launch(framework);
-      const mc = await xboxManager.getMinecraft();
-
-      const uuid = mc?.profile?.id ?? mc?.profile?.uuid ?? null;
-      const username = mc?.profile?.name ?? null;
-      if (!uuid || !username) {
-        throw new Error(
-          "Microsoft login succeeded, but no Minecraft profile was returned. " +
-            "The account may not own Minecraft Java."
-        );
-      }
-
-      const mclcAuth = typeof mc?.mclc === "function" ? mc.mclc() : mc?.mclc;
-      if (!mclcAuth || typeof mclcAuth !== "object") {
-        throw new Error("MSMC did not return mclc auth payload.");
-      }
-
-      const xuid = mclcAuth?.meta?.xuid ?? null;
-      if (!xuid) {
-        throw new Error("MSMC auth missing meta.xuid.");
-      }
-
-      const msmcRefreshToken =
-        typeof xboxManager?.save === "function"
-          ? String(xboxManager.save() || "").trim() || undefined
-          : undefined;
-
-      const account = {
-        id: String(uuid),
-        username: String(username),
-        mclcAuth,
-        accessToken: mclcAuth?.access_token ?? mclcAuth?.accessToken ?? undefined,
-        msmcRefreshToken,
-        addedAt: Date.now()
-      };
-
-      process.stdout.write(`${ACCOUNT_JSON_PREFIX}${JSON.stringify(account)}\n`);
-      process.exit(0);
-    } catch (err) {
-      lastErr = asHelpfulAuthError(err, framework);
-    }
-  }
-
-  fail(lastErr || "Microsoft sign-in failed.");
+  const account = await loginInSystemBrowser();
+  process.stdout.write(`${ACCOUNT_JSON_PREFIX}${JSON.stringify(account)}\n`);
+  process.exit(0);
 } catch (err) {
-  fail((err && err.message) || String(err));
+  fail(asHelpfulAuthError(err));
 }

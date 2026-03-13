@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.4.12 - 2026-03-13
+
+### Changed
+- Microsoft account sign-in now completes in the system browser using a localhost callback flow instead of MSMC's built-in popup launcher flow.
+
+### Fixed
+- Fixed Microsoft login hitting Microsoft's removed `oauth20_desktop.srf` redirect page during account connection.
+- Fixed repeated Windows registry lookup errors during Microsoft sign-in on systems where MSMC could not resolve a compatible browser path.
+
 ## v0.4.11 - 2026-03-13
 
 ### Added
