@@ -1029,6 +1029,7 @@ fn default_repo_for_library(name: &str) -> &'static str {
   if name.starts_with("net.minecraftforge:")
     || name.starts_with("cpw.mods:")
     || name.starts_with("net.md-5:")
+    || name.starts_with("lzma:")
   {
     return "https://maven.minecraftforge.net/";
   }
@@ -1036,6 +1037,22 @@ fn default_repo_for_library(name: &str) -> &'static str {
     return "https://libraries.minecraft.net/";
   }
   "https://repo1.maven.org/maven2/"
+}
+
+fn rewrite_legacy_library_url(name: &str, rel: &str, current_url: Option<&str>) -> Option<String> {
+  let url = current_url?.trim();
+  if url.is_empty() {
+    return None;
+  }
+
+  let needs_forge_maven = name.starts_with("lzma:lzma:");
+  let uses_maven_central = url.contains("repo1.maven.org/maven2/") || url.contains("repo.maven.apache.org/maven2/");
+
+  if needs_forge_maven && uses_maven_central {
+    return Some(format!("https://maven.minecraftforge.net/{rel}"));
+  }
+
+  None
 }
 
 fn ensure_library_download_fields(lib: &mut Value) {
@@ -1080,6 +1097,18 @@ fn ensure_library_download_fields(lib: &mut Value) {
   let Some((rel, _ext, _)) = parse_maven_name(name) else {
     return;
   };
+  if has_artifact {
+    let current_url = lib
+      .get("downloads")
+      .and_then(|v| v.get("artifact"))
+      .and_then(|v| v.get("url"))
+      .and_then(|v| v.as_str());
+    if let Some(rewritten_url) = rewrite_legacy_library_url(name, &rel, current_url) {
+      lib["downloads"]["artifact"]["url"] = json!(rewritten_url);
+    }
+    return;
+  }
+
   let base = lib
     .get("url")
     .and_then(|v| v.as_str())
@@ -1962,11 +1991,10 @@ async fn resolve_launch_profile_id(
     let mut install_ok = false;
     let mut last_error_msg = String::new();
     for args in installer_attempts {
-      let out = Command::new(java_exe)
-        .args(&args)
-        .current_dir(&minecraft_dir)
-        .output()
-        .map_err(into_error)?;
+      let mut installer_cmd = Command::new(java_exe);
+      installer_cmd.args(&args).current_dir(&minecraft_dir);
+      hide_console_window(&mut installer_cmd);
+      let out = installer_cmd.output().map_err(into_error)?;
       if out.status.success() {
         if let Some(found) = find_forge_like_profile_id(&versions, &mc_version, &loader, &loader_version) {
           let _ = emit_launch_log_app(&app, format!("[launcher] Installed {loader} profile: {found}"));
@@ -2190,7 +2218,10 @@ pub async fn launch(
   } else {
     let _ = emit_launch_log(&window, "[launcher] No bundled Java found; using PATH java".to_string());
   }
-  match Command::new(&java_exe).arg("-version").output() {
+  let mut java_check_cmd = Command::new(&java_exe);
+  java_check_cmd.arg("-version");
+  hide_console_window(&mut java_check_cmd);
+  match java_check_cmd.output() {
     Ok(out) => {
       let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
       let stdout = String::from_utf8_lossy(&out.stdout).trim().to_string();

@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.4.15-beta.1 - 2026-03-14
+
+### Fixed
+- Fixed legacy Forge launches failing when `lzma:lzma:0.0.1` was resolved against Maven Central instead of Forge's Maven.
+- Fixed additional Windows command prompt flashes during launch-time Java runtime checks and legacy loader installer execution.
+
 ## v0.4.14 - 2026-03-14
 
 ### Changed
