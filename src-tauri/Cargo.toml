@@ -1,6 +1,6 @@
 [package]
 name = "fishbattery-launcher"
-version = "0.4.13"
+version = "0.4.14"
 description = "A fast, underwater-themed Minecraft launcher focused on clean UX, modded play, and reliable cross-device updates."
 authors = ["Fishbattery"]
 license = "GPL-3.0"
@@ -32,4 +32,3 @@ zip = { version = "2", default-features = false, features = ["deflate"] }
 [features]
 default = ["custom-protocol"]
 custom-protocol = ["tauri/custom-protocol"]
-

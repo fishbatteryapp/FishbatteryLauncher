@@ -1,14 +1,14 @@
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Command;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
 use serde::{Deserialize, Serialize};
 use tauri::command;
 use tauri::Manager;
+use tokio::time::sleep;
 
 use crate::error::{into_error, AppResult};
 
@@ -24,6 +24,315 @@ pub struct StoredAccount {
   pub msmc_refresh_token: Option<String>,
   #[serde(rename = "addedAt")]
   pub added_at: u64,
+}
+
+const DEVICE_AUTH_CLIENT_ID: &str = "00000000441cc96b";
+const DEVICE_AUTH_SCOPE: &str = "service::user.auth.xboxlive.com::MBI_SSL";
+const DEVICE_AUTH_TIMEOUT: Duration = Duration::from_secs(5 * 60);
+
+#[derive(Debug, Clone, Deserialize)]
+struct DeviceCodeResponse {
+  user_code: String,
+  device_code: String,
+  verification_uri: String,
+  expires_in: u64,
+  interval: u64,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct MicrosoftAccessTokenResponse {
+  access_token: String,
+  refresh_token: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct MicrosoftDeviceErrorResponse {
+  error: Option<String>,
+  error_description: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+struct XboxLiveAuthResponse {
+  token: String,
+  display_claims: HashMap<String, Vec<HashMap<String, String>>>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct MinecraftAccessTokenResponse {
+  username: String,
+  access_token: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct MinecraftProfileResponse {
+  id: String,
+  name: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct MinecraftOwnershipResponse {
+  items: Vec<serde_json::Value>,
+}
+
+fn http_error_message(status: reqwest::StatusCode, body: &str, fallback: &str) -> String {
+  let text = body.trim();
+  if text.is_empty() {
+    format!("{fallback} (HTTP {})", status.as_u16())
+  } else {
+    format!("{fallback} (HTTP {}): {text}", status.as_u16())
+  }
+}
+
+async fn request_device_code(client: &reqwest::Client) -> AppResult<DeviceCodeResponse> {
+  let res = client
+    .post("https://login.live.com/oauth20_connect.srf")
+    .form(&[
+      ("scope", DEVICE_AUTH_SCOPE),
+      ("client_id", DEVICE_AUTH_CLIENT_ID),
+      ("response_type", "device_code"),
+    ])
+    .send()
+    .await
+    .map_err(into_error)?;
+  let status = res.status();
+  let text = res.text().await.map_err(into_error)?;
+  if !status.is_success() {
+    return Err(http_error_message(
+      status,
+      &text,
+      "Microsoft device sign-in could not be started",
+    ));
+  }
+  serde_json::from_str::<DeviceCodeResponse>(&text).map_err(into_error)
+}
+
+async fn poll_device_access_token(
+  client: &reqwest::Client,
+  device: &DeviceCodeResponse,
+) -> AppResult<MicrosoftAccessTokenResponse> {
+  let timeout = Instant::now() + DEVICE_AUTH_TIMEOUT.min(Duration::from_secs(device.expires_in));
+  let interval = Duration::from_secs(device.interval.max(1));
+
+  while Instant::now() < timeout {
+    sleep(interval).await;
+
+    let res = client
+      .post("https://login.live.com/oauth20_token.srf")
+      .form(&[
+        ("client_id", DEVICE_AUTH_CLIENT_ID),
+        ("device_code", device.device_code.as_str()),
+        ("grant_type", "urn:ietf:params:oauth:grant-type:device_code"),
+      ])
+      .send()
+      .await
+      .map_err(into_error)?;
+    let status = res.status();
+    let text = res.text().await.map_err(into_error)?;
+
+    if status.is_success() {
+      if let Ok(token) = serde_json::from_str::<MicrosoftAccessTokenResponse>(&text) {
+        return Ok(token);
+      }
+    }
+
+    if let Ok(err) = serde_json::from_str::<MicrosoftDeviceErrorResponse>(&text) {
+      match err.error.as_deref().unwrap_or_default() {
+        "authorization_pending" | "slow_down" => continue,
+        "authorization_declined" => {
+          return Err("Microsoft sign-in was cancelled.".to_string());
+        }
+        "expired_token" => {
+          return Err("Microsoft sign-in timed out. Retry and finish the browser sign-in sooner.".to_string());
+        }
+        _ => {
+          let detail = err
+            .error_description
+            .or(err.error)
+            .unwrap_or_else(|| "Unknown device sign-in error".to_string());
+          return Err(format!("Microsoft sign-in failed: {detail}"));
+        }
+      }
+    }
+  }
+
+  Err("Microsoft sign-in timed out. Retry and finish the browser sign-in sooner.".to_string())
+}
+
+async fn authenticate_xbox_live(
+  client: &reqwest::Client,
+  microsoft_access_token: &str,
+) -> AppResult<(String, String)> {
+  let res = client
+    .post("https://user.auth.xboxlive.com/user/authenticate")
+    .header(reqwest::header::CONTENT_TYPE, "application/json")
+    .header(reqwest::header::ACCEPT, "application/json")
+    .header("x-xbl-contract-version", "1")
+    .json(&serde_json::json!({
+      "Properties": {
+        "AuthMethod": "RPS",
+        "SiteName": "user.auth.xboxlive.com",
+        "RpsTicket": microsoft_access_token,
+      },
+      "RelyingParty": "http://auth.xboxlive.com",
+      "TokenType": "JWT",
+    }))
+    .send()
+    .await
+    .map_err(into_error)?;
+  let status = res.status();
+  let text = res.text().await.map_err(into_error)?;
+  if !status.is_success() {
+    return Err(http_error_message(
+      status,
+      &text,
+      "Xbox Live authentication failed",
+    ));
+  }
+  let payload = serde_json::from_str::<XboxLiveAuthResponse>(&text).map_err(into_error)?;
+  let user_hash = payload
+    .display_claims
+    .get("xui")
+    .and_then(|rows| rows.first())
+    .and_then(|row| row.get("uhs"))
+    .map(|s| s.trim().to_string())
+    .filter(|s| !s.is_empty())
+    .ok_or_else(|| "Xbox Live authentication succeeded but no user hash was returned.".to_string())?;
+  Ok((payload.token, user_hash))
+}
+
+async fn obtain_xsts_for_minecraft(client: &reqwest::Client, xbox_token: &str) -> AppResult<String> {
+  let res = client
+    .post("https://xsts.auth.xboxlive.com/xsts/authorize")
+    .header(reqwest::header::ACCEPT, "application/json")
+    .json(&serde_json::json!({
+      "Properties": {
+        "SandboxId": "RETAIL",
+        "UserTokens": [xbox_token]
+      },
+      "RelyingParty": "rp://api.minecraftservices.com/",
+      "TokenType": "JWT"
+    }))
+    .send()
+    .await
+    .map_err(into_error)?;
+  let status = res.status();
+  let text = res.text().await.map_err(into_error)?;
+  if !status.is_success() {
+    return Err(http_error_message(
+      status,
+      &text,
+      "Xbox security token generation failed",
+    ));
+  }
+  let payload = serde_json::from_str::<XboxLiveAuthResponse>(&text).map_err(into_error)?;
+  Ok(payload.token)
+}
+
+async fn authenticate_minecraft(
+  client: &reqwest::Client,
+  user_hash: &str,
+  xsts_token: &str,
+) -> AppResult<MinecraftAccessTokenResponse> {
+  let res = client
+    .post("https://api.minecraftservices.com/authentication/login_with_xbox")
+    .header(reqwest::header::ACCEPT, "application/json")
+    .json(&serde_json::json!({
+      "identityToken": format!("XBL3.0 x={user_hash};{xsts_token}")
+    }))
+    .send()
+    .await
+    .map_err(into_error)?;
+  let status = res.status();
+  let text = res.text().await.map_err(into_error)?;
+  if !status.is_success() {
+    return Err(http_error_message(
+      status,
+      &text,
+      "Minecraft authentication failed after Xbox sign-in",
+    ));
+  }
+  serde_json::from_str::<MinecraftAccessTokenResponse>(&text).map_err(into_error)
+}
+
+async fn fetch_minecraft_profile_with_token(
+  client: &reqwest::Client,
+  minecraft_access_token: &str,
+) -> AppResult<MinecraftProfileResponse> {
+  let res = client
+    .get("https://api.minecraftservices.com/minecraft/profile")
+    .header(reqwest::header::AUTHORIZATION, format!("Bearer {minecraft_access_token}"))
+    .send()
+    .await
+    .map_err(into_error)?;
+  let status = res.status();
+  let text = res.text().await.map_err(into_error)?;
+  if !status.is_success() {
+    if status.as_u16() == 404 {
+      return Err("Microsoft sign-in succeeded, but this account does not appear to own Minecraft Java.".to_string());
+    }
+    return Err(http_error_message(status, &text, "Minecraft profile lookup failed"));
+  }
+  serde_json::from_str::<MinecraftProfileResponse>(&text).map_err(into_error)
+}
+
+async fn verify_minecraft_ownership(client: &reqwest::Client, minecraft_access_token: &str) -> AppResult<()> {
+  let res = client
+    .get("https://api.minecraftservices.com/entitlements/mcstore")
+    .header(reqwest::header::AUTHORIZATION, format!("Bearer {minecraft_access_token}"))
+    .send()
+    .await
+    .map_err(into_error)?;
+  let status = res.status();
+  let text = res.text().await.map_err(into_error)?;
+  if !status.is_success() {
+    return Err(http_error_message(
+      status,
+      &text,
+      "Minecraft ownership check failed",
+    ));
+  }
+  let payload = serde_json::from_str::<MinecraftOwnershipResponse>(&text).map_err(into_error)?;
+  if payload.items.is_empty() {
+    return Err("Microsoft sign-in succeeded, but this account does not appear to own Minecraft Java.".to_string());
+  }
+  Ok(())
+}
+
+async fn add_account_via_device_code() -> AppResult<StoredAccount> {
+  let client = reqwest::Client::new();
+  let device = request_device_code(&client).await?;
+  let url = format!("{}?otc={}", device.verification_uri, urlencoding::encode(&device.user_code));
+  webbrowser::open(&url).map_err(into_error)?;
+
+  let microsoft = poll_device_access_token(&client, &device).await?;
+  let (xbox_token, user_hash) = authenticate_xbox_live(&client, &microsoft.access_token).await?;
+  let xsts_token = obtain_xsts_for_minecraft(&client, &xbox_token).await?;
+  let minecraft = authenticate_minecraft(&client, &user_hash, &xsts_token).await?;
+  verify_minecraft_ownership(&client, &minecraft.access_token).await?;
+  let profile = fetch_minecraft_profile_with_token(&client, &minecraft.access_token).await?;
+
+  Ok(StoredAccount {
+    id: profile.id.clone(),
+    username: profile.name.clone(),
+    mclc_auth: serde_json::json!({
+      "access_token": minecraft.access_token,
+      "token_type": "Bearer",
+      "uuid": profile.id,
+      "name": profile.name,
+      "meta": {
+        "type": "Xbox",
+        "xuid": minecraft.username,
+      },
+      "user_properties": {}
+    }),
+    access_token: Some(minecraft.access_token),
+    msmc_refresh_token: Some(microsoft.refresh_token),
+    added_at: SystemTime::now()
+      .duration_since(UNIX_EPOCH)
+      .map(|d| d.as_millis() as u64)
+      .unwrap_or(0),
+  })
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -335,72 +644,6 @@ fn can_use_cape_tier(app: &tauri::AppHandle, tier: &str) -> bool {
 
 fn find_cape_by_id<'a>(catalog: &'a LocalCapeCatalog, cape_id: &str) -> Option<&'a LocalCapeItem> {
   catalog.items.iter().find(|item| item.id == cape_id)
-}
-
-fn repo_root() -> PathBuf {
-  let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-  let mut candidates: Vec<PathBuf> = Vec::new();
-  if let Some(parent) = manifest.parent() {
-    candidates.push(parent.to_path_buf());
-    if let Some(grand) = parent.parent() {
-      candidates.push(grand.to_path_buf());
-    }
-  }
-  candidates.push(manifest.clone());
-  for candidate in candidates {
-    if candidate.join("scripts").is_dir() && candidate.join("package.json").is_file() {
-      return candidate;
-    }
-  }
-  manifest
-}
-
-fn resolve_msmc_runtime_root(app: &tauri::AppHandle) -> Option<PathBuf> {
-  fn has_login_script(root: &Path) -> bool {
-    root.join("scripts").join("tauri-msmc-login.mjs").is_file()
-  }
-
-  fn find_runtime_root_in_tree(base: &Path, depth: usize) -> Option<PathBuf> {
-    if depth == 0 {
-      return None;
-    }
-    let entries = fs::read_dir(base).ok()?;
-    for entry in entries.flatten() {
-      let path = entry.path();
-      if path.is_dir() {
-        if has_login_script(&path) {
-          return Some(path);
-        }
-        if let Some(found) = find_runtime_root_in_tree(&path, depth - 1) {
-          return Some(found);
-        }
-      }
-    }
-    None
-  }
-
-  let mut candidates: Vec<PathBuf> = Vec::new();
-  if let Ok(resource_dir) = app.path().resource_dir() {
-    candidates.push(resource_dir.join("msmc-runtime"));
-    candidates.push(resource_dir.clone());
-    if let Some(found) = find_runtime_root_in_tree(&resource_dir, 3) {
-      candidates.push(found);
-    }
-  }
-  if let Ok(exe_dir) = app.path().executable_dir() {
-    candidates.push(exe_dir.join("resources").join("msmc-runtime"));
-    candidates.push(exe_dir.join("resources"));
-    candidates.push(exe_dir.join("msmc-runtime"));
-  }
-  if let Ok(cwd) = std::env::current_dir() {
-    candidates.push(cwd.join("src-tauri").join("resources").join("msmc-runtime"));
-    candidates.push(cwd.join("resources").join("msmc-runtime"));
-    candidates.push(cwd.join("msmc-runtime"));
-  }
-  candidates.push(repo_root().join("src-tauri").join("resources").join("msmc-runtime"));
-  candidates.push(repo_root());
-
-  candidates.into_iter().find(|path| has_login_script(path))
 }
 
 fn launcher_api_base() -> String {
@@ -926,79 +1169,6 @@ async fn persist_remote_selected_cape_id(app: &tauri::AppHandle, cape_id: Option
   )
 }
 
-fn run_msmc_login_script(app: &tauri::AppHandle) -> AppResult<StoredAccount> {
-  const ACCOUNT_JSON_PREFIX: &str = "__FB_ACCOUNT_JSON__:";
-  let runtime_root = resolve_msmc_runtime_root(app)
-    .ok_or_else(|| "accounts_add: login helper runtime is missing from app resources.".to_string())?;
-  let script_rel = PathBuf::from("scripts").join("tauri-msmc-login.mjs");
-  let script_abs = runtime_root.join(&script_rel);
-  if !script_abs.exists() {
-    return Err(format!(
-      "accounts_add: helper script not found at {}",
-      script_abs.to_string_lossy()
-    ));
-  }
-
-  let bundled_node_windows = runtime_root.join("bin").join("node.exe");
-  let bundled_node_unix = runtime_root.join("bin").join("node");
-  let node_cmd = if bundled_node_windows.is_file() {
-    bundled_node_windows
-  } else if bundled_node_unix.is_file() {
-    bundled_node_unix
-  } else {
-    PathBuf::from("node")
-  };
-
-  let output = Command::new(node_cmd.as_os_str())
-    .arg(script_rel.as_os_str())
-    .current_dir(runtime_root.as_os_str())
-    .output()
-    .map_err(|e| {
-      let msg = e.to_string().to_ascii_lowercase();
-      if msg.contains("not found") || msg.contains("cannot find") {
-        "accounts_add: Node.js is required for Microsoft login helper script.".to_string()
-      } else {
-        into_error(e)
-      }
-    })?;
-
-  if !output.status.success() {
-    let err = String::from_utf8_lossy(&output.stderr).trim().to_string();
-    return Err(if err.is_empty() {
-      "accounts_add: Microsoft login failed".to_string()
-    } else {
-      err
-    });
-  }
-
-  let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-  for line in stdout.lines() {
-    if let Some(payload) = line.strip_prefix(ACCOUNT_JSON_PREFIX) {
-      return serde_json::from_str::<StoredAccount>(payload.trim()).map_err(into_error);
-    }
-  }
-
-  if let Ok(account) = serde_json::from_str::<StoredAccount>(stdout.trim()) {
-    return Ok(account);
-  }
-
-  // Some dependencies may print extra lines to stdout; recover the JSON object if present.
-  let start = stdout.find('{');
-  let end = stdout.rfind('}');
-  if let (Some(s), Some(e)) = (start, end) {
-    if e > s {
-      let candidate = &stdout[s..=e];
-      if let Ok(account) = serde_json::from_str::<StoredAccount>(candidate) {
-        return Ok(account);
-      }
-    }
-  }
-
-  Err(
-    "accounts_add: could not parse account payload from login helper output".to_string(),
-  )
-}
-
 #[command]
 pub fn accounts_list(app: tauri::AppHandle) -> AppResult<AccountsDb> {
   read_accounts_db(&app)
@@ -1030,8 +1200,8 @@ pub async fn accounts_get_avatar(
 }
 
 #[command]
-pub fn accounts_add(app: tauri::AppHandle) -> AppResult<StoredAccount> {
-  let account = run_msmc_login_script(&app)?;
+pub async fn accounts_add(app: tauri::AppHandle) -> AppResult<StoredAccount> {
+  let account = add_account_via_device_code().await?;
   let mut db = read_accounts_db(&app)?;
   db.accounts.retain(|a| a.id != account.id);
   db.accounts.insert(0, account.clone());

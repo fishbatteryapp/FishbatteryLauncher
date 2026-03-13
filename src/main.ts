@@ -237,6 +237,38 @@ let state: any = {
   instances: null
 };
 
+function formatErrorMessage(err: unknown, fallback = "Something went wrong."): string {
+  if (!err) return fallback;
+  if (typeof err === "string") {
+    const trimmed = err.trim();
+    return trimmed || fallback;
+  }
+  if (err instanceof Error) {
+    const trimmed = String(err.message || "").trim();
+    return trimmed || fallback;
+  }
+  if (typeof err === "object") {
+    const record = err as Record<string, unknown>;
+    for (const key of ["message", "error", "details", "cause"]) {
+      const value = record[key];
+      if (typeof value === "string" && value.trim()) {
+        return value.trim();
+      }
+      if (value && typeof value === "object") {
+        const nested = formatErrorMessage(value, "");
+        if (nested) return nested;
+      }
+    }
+    try {
+      const serialized = JSON.stringify(err);
+      if (serialized && serialized !== "{}") return serialized;
+    } catch {
+      // Ignore serialization failures.
+    }
+  }
+  return String(err) || fallback;
+}
+
 let busy = false;
 let modalMode: "create" | "edit" = "create";
 let editInstanceId: string | null = null;
@@ -8260,7 +8292,7 @@ accountAdd.onclick = () =>
       state.accounts = await backend.accountsList();
       await renderAccounts();
     } catch (err: any) {
-      const message = String(err?.message ?? err ?? "Could not add account.");
+      const message = formatErrorMessage(err, "Could not add account.");
       setStatus(message);
       alert(message);
     }
