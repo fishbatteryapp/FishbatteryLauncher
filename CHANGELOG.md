@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.4.14 - 2026-03-14
+
+### Changed
+- Microsoft account sign-in now uses a Rust-native browser/device-code flow in the Tauri backend instead of the bundled Node/MSMC helper runtime.
+
+### Fixed
+- Fixed Microsoft account sign-in failing after browser approval during the Xbox/Minecraft token exchange.
+- Fixed launcher auth errors surfacing as `[object Object]` instead of a readable sign-in failure message.
+
 ## v0.4.13 - 2026-03-13
 
 ### Changed
