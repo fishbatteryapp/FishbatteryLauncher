@@ -38,10 +38,13 @@ if errorlevel 1 (
 )
 
 trusted-signing-cli ^
-  -e "%AZURE_TRUSTED_SIGNING_ENDPOINT%" ^
-  -a "%AZURE_TRUSTED_SIGNING_ACCOUNT_NAME%" ^
-  -c "%AZURE_TRUSTED_SIGNING_CERT_PROFILE_NAME%" ^
-  -d "Fishbattery Launcher" ^
+  --azure-client-secret "%AZURE_CLIENT_SECRET%" ^
+  --azure-client-id "%AZURE_CLIENT_ID%" ^
+  --azure-tenant-id "%AZURE_TENANT_ID%" ^
+  --endpoint "%AZURE_TRUSTED_SIGNING_ENDPOINT%" ^
+  --account "%AZURE_TRUSTED_SIGNING_ACCOUNT_NAME%" ^
+  --certificate "%AZURE_TRUSTED_SIGNING_CERT_PROFILE_NAME%" ^
+  --description "Fishbattery Launcher" ^
   "%~1"
 
 if errorlevel 1 (

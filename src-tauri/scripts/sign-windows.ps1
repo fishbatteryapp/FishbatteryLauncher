@@ -30,10 +30,13 @@ if (-not (Get-Command trusted-signing-cli -ErrorAction SilentlyContinue)) {
 }
 
 & trusted-signing-cli `
-  -e $env:AZURE_TRUSTED_SIGNING_ENDPOINT `
-  -a $env:AZURE_TRUSTED_SIGNING_ACCOUNT_NAME `
-  -c $env:AZURE_TRUSTED_SIGNING_CERT_PROFILE_NAME `
-  -d "Fishbattery Launcher" `
+  --azure-client-secret "$env:AZURE_CLIENT_SECRET" `
+  --azure-client-id "$env:AZURE_CLIENT_ID" `
+  --azure-tenant-id "$env:AZURE_TENANT_ID" `
+  --endpoint "$env:AZURE_TRUSTED_SIGNING_ENDPOINT" `
+  --account "$env:AZURE_TRUSTED_SIGNING_ACCOUNT_NAME" `
+  --certificate "$env:AZURE_TRUSTED_SIGNING_CERT_PROFILE_NAME" `
+  --description "Fishbattery Launcher" `
   "$FileToSign"
 
 if ($LASTEXITCODE -ne 0) {

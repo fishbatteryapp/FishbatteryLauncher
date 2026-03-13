@@ -12,14 +12,15 @@ permissions:
 
 jobs:
   release:
-    name: Release (${{ matrix.os }})
+    name: Release (${{ matrix.name }})
     runs-on: ${{ matrix.os }}
     environment: release
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: windows-latest
+          - name: windows-latest
+            os: windows-latest
             windows_sign: true
 
     env:
@@ -27,6 +28,7 @@ jobs:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       CSC_IDENTITY_AUTO_DISCOVERY: "false"
       FISHBATTERY_CURSEFORGE_API_KEY: ${{ secrets.FISHBATTERY_CURSEFORGE_API_KEY }}
+      DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
       FISHBATTERY_UPDATER_PUBKEY: ${{ vars.FISHBATTERY_UPDATER_PUBKEY }}
       FISHBATTERY_UPDATER_ENDPOINT_STABLE: ${{ vars.FISHBATTERY_UPDATER_ENDPOINT_STABLE }}
       FISHBATTERY_UPDATER_ENDPOINT_BETA: ${{ vars.FISHBATTERY_UPDATER_ENDPOINT_BETA }}
@@ -127,6 +129,43 @@ jobs:
             exit 1
           fi
 
+      - name: Configure Tauri Windows app-binary signing
+        if: matrix.windows_sign
+        shell: pwsh
+        run: |
+          $config = @{
+            bundle = @{
+              windows = @{
+                signCommand = @{
+                  cmd = "cmd"
+                  args = @("/c", "scripts\\sign-windows.cmd", "%1")
+                }
+              }
+            }
+          } | ConvertTo-Json -Depth 10
+
+          Set-Content -Path (Join-Path $env:GITHUB_WORKSPACE "src-tauri/tauri.windows.conf.json") -Value $config -NoNewline
+
+      - name: Extract release notes from changelog
+        id: release_notes
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $changelog = Get-Content (Join-Path $env:GITHUB_WORKSPACE "CHANGELOG.md") -Raw
+          $escapedTag = [regex]::Escape($tag)
+          $match = [regex]::Match($changelog, "(?ms)^##\s+$escapedTag\b.*?(?=^##\s+|\z)")
+
+          if (-not $match.Success) {
+            throw "Could not find changelog section for $tag in CHANGELOG.md"
+          }
+
+          $body = $match.Value.Trim()
+          @"
+body<<__EOF__
+$body
+__EOF__
+"@ | Add-Content -Path $env:GITHUB_OUTPUT
+
       - name: Build and publish Tauri release
         uses: tauri-apps/tauri-action@v0
         env:
@@ -146,7 +185,7 @@ jobs:
           tauriScript: npx tauri
           tagName: ${{ github.ref_name }}
           releaseName: Fishbattery Launcher ${{ github.ref_name }}
-          releaseBody: See the assets to download this version.
+          releaseBody: ${{ steps.release_notes.outputs.body }}
           releaseDraft: false
           prerelease: ${{ contains(github.ref_name, '-beta') || contains(github.ref_name, '-rc') }}
           includeUpdaterJson: true
@@ -233,4 +272,89 @@ jobs:
           foreach ($file in $targets) {
             Write-Host "Uploading signed asset $($file.Name) to release $tag"
             gh release upload $tag "$($file.FullName)" --clobber
+          }
+
+      - name: Send release notes to Discord webhook
+        if: matrix.windows_sign && env.DISCORD_WEBHOOK_URL != ''
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $release = gh release view $tag --json name,body,url,isPrerelease | ConvertFrom-Json
+          $roleId = "1482000498969149580"
+
+          $title = if ([string]::IsNullOrWhiteSpace($release.name)) {
+            "Fishbattery Launcher $tag"
+          } else {
+            [string]$release.name
+          }
+
+          $body = [string]$release.body
+          if ([string]::IsNullOrWhiteSpace($body)) {
+            $body = "No changelog text was included in this release."
+          }
+
+          $maxChunkLength = 1800
+          $chunks = New-Object System.Collections.Generic.List[string]
+
+          while ($body.Length -gt $maxChunkLength) {
+            $slice = $body.Substring(0, $maxChunkLength)
+            $splitAt = $slice.LastIndexOf("`n")
+            if ($splitAt -lt 200) {
+              $splitAt = $maxChunkLength
+            }
+
+            $chunks.Add($body.Substring(0, $splitAt).Trim())
+            $body = $body.Substring($splitAt).Trim()
+          }
+
+          if (-not [string]::IsNullOrWhiteSpace($body)) {
+            $chunks.Add($body)
+          }
+
+          if ($chunks.Count -eq 0) {
+            $chunks.Add("No changelog text was included in this release.")
+          }
+
+          $color = if ($release.isPrerelease) { 16763904 } else { 5763719 }
+
+          for ($i = 0; $i -lt $chunks.Count; $i++) {
+            $embedTitle = if ($chunks.Count -eq 1) {
+              $title
+            } else {
+              "$title ($($i + 1)/$($chunks.Count))"
+            }
+
+            $payload = @{
+              content = "<@&$roleId>"
+              allowed_mentions = @{
+                parse = @()
+                roles = @($roleId)
+              }
+              embeds = @(
+                @{
+                  title = $embedTitle
+                  url = [string]$release.url
+                  description = $chunks[$i]
+                  color = $color
+                  fields = @(
+                    @{
+                      name = "Type"
+                      value = $(if ($release.isPrerelease) { "Prerelease" } else { "Release" })
+                      inline = $true
+                    },
+                    @{
+                      name = "Tag"
+                      value = $tag
+                      inline = $true
+                    }
+                  )
+                }
+              )
+            } | ConvertTo-Json -Depth 8 -Compress
+
+            Invoke-RestMethod `
+              -Method Post `
+              -Uri $env:DISCORD_WEBHOOK_URL `
+              -ContentType "application/json" `
+              -Body $payload | Out-Null
           }

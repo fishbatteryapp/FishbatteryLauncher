@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.4.12 - 2026-03-13
+## v0.4.13 - 2026-03-13
 
 ### Changed
 - Microsoft account sign-in now completes in the system browser using a localhost callback flow instead of MSMC's built-in popup launcher flow.
