@@ -8,10 +8,58 @@ function fail(message) {
 
 const ACCOUNT_JSON_PREFIX = "__FB_ACCOUNT_JSON__:";
 const LOGIN_TIMEOUT_MS = 5 * 60 * 1000;
+const FISHBATTERY_MS_TOKEN = {
+  client_id: "901072c6-44ac-4871-a9dc-c1c408639183",
+  redirect: "https://login.microsoftonline.com/common/oauth2/nativeclient",
+  prompt: "select_account"
+};
+
+function describeError(err) {
+  if (!err) return "Unknown error";
+  if (typeof err === "string") {
+    const trimmed = err.trim();
+    return trimmed || "Unknown error";
+  }
+  if (err instanceof Error) {
+    const details = [err.message, err.cause].filter(Boolean).map((v) => String(v).trim()).filter(Boolean);
+    return details[0] || err.toString() || "Unknown error";
+  }
+  if (typeof err === "object") {
+    const record = err;
+    const candidates = [
+      record.message,
+      record.errorMessage,
+      record.error_description,
+      record.errorDescription,
+      record.details,
+      record.detail,
+      record.reason,
+      record.error,
+      record.cause
+    ];
+    for (const value of candidates) {
+      if (typeof value === "string" && value.trim()) {
+        return value.trim();
+      }
+      if (value && typeof value === "object") {
+        const nested = describeError(value);
+        if (nested && nested !== "Unknown error") return nested;
+      }
+    }
+    try {
+      const serialized = JSON.stringify(record, null, 2);
+      if (serialized && serialized !== "{}") return serialized;
+    } catch {
+      // Ignore serialization failures.
+    }
+  }
+  const fallback = String(err).trim();
+  return fallback || "Unknown error";
+}
 
 function asHelpfulAuthError(err) {
-  const msg = String((err && err.message) || err || "Unknown error");
-  if (/different device|authentication method|error\\s*400/i.test(msg)) {
+  const msg = describeError(err);
+  if (/different device|authentication method|error\s*400/i.test(msg)) {
     return (
       "Microsoft sign-in was blocked by the browser or Microsoft auth flow.\n" +
       "Fix: retry the sign-in and complete it in your default browser.\n\n" +
@@ -95,7 +143,7 @@ function openUrl(url) {
 }
 
 async function loginInSystemBrowser() {
-  const authManager = new Auth("select_account");
+  const authManager = new Auth(FISHBATTERY_MS_TOKEN);
 
   let serverInfo = null;
   let timeoutHandle = null;

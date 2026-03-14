@@ -24,6 +24,7 @@ import defaultSkinZuri from "./default-skins/zuri.png";
 
 // Small DOM helper (keeps your current style)
 const $ = (id: string) => document.getElementById(id) as HTMLElement;
+const pickEl = (...ids: string[]) => ids.map((id) => document.getElementById(id)).find(Boolean) as HTMLElement | null;
 
 // --- Core UI refs (IDs must match index.html) ---
 const logsEl = $("logs") as HTMLPreElement;
@@ -97,6 +98,9 @@ function setButtonIcon(btn: HTMLButtonElement | null, svgPath: string) {
   `;
 }
 
+const TRASH_ICON_PATH =
+  "M9.5 3.5c0-.83.67-1.5 1.5-1.5h2c.83 0 1.5.67 1.5 1.5V4h3.75C19.77 4 21 5.23 21 6.75S19.77 9.5 18.25 9.5H18l-1.02 9.2A4 4 0 0 1 13 22H11a4 4 0 0 1-3.98-3.3L6 9.5h-.25A2.75 2.75 0 0 1 3 6.75C3 5.23 4.23 4 5.75 4H9.5z";
+
 function applyActionButtonIcons() {
   setButtonIcon(btnCreate, "M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6z");
   setButtonIcon(btnImport, "M12 3v10.17l3.59-3.58L17 11l-5 5-5-5 1.41-1.41L11 13.17V3zM5 19h14v2H5z");
@@ -105,7 +109,7 @@ function applyActionButtonIcons() {
   setButtonIcon(btnToggleDiagnosisDetails, "M11 17h2v2h-2zm0-12h2v10h-2z");
   setButtonIcon(btnToggleDebugLogs, "M3 4h18v2H3zm0 7h12v2H3zm0 7h18v2H3z");
   setButtonIcon(btnCopyDiagnosisReport, "M16 1H4v14h2V3h10zM8 7h12v16H8z");
-  setButtonIcon(btnClearLogs, "M9 3h6l1 2h5v2H3V5h5zm-1 4h10l-1 13H9L8 7zm3 3h2v8h-2zm4 0h2v8h-2z");
+  setButtonIcon(btnClearLogs, TRASH_ICON_PATH);
 }
 applyActionButtonIcons();
 
@@ -133,30 +137,39 @@ const modalTitle = $("modalTitle");
 const modalClose = $("modalClose");
 const modalCancel = $("modalCancel");
 const modalCreate = $("modalCreate");
+const modalBusyOverlay = $("modalBusyOverlay");
+const modalBusyTitle = $("modalBusyTitle");
+const modalBusyDetail = $("modalBusyDetail");
+const actionBusyBanner = $("actionBusyBanner");
+const actionBusyTitle = $("actionBusyTitle");
+const actionBusyDetail = $("actionBusyDetail");
 
 const newName = $("newName") as HTMLInputElement;
 const newVersion = $("newVersion") as HTMLSelectElement;
 const newMem = $("newMem") as HTMLInputElement;
 
-const modalTabGeneral = $("modalTabGeneral");
-const modalTabMods = $("modalTabMods");
-const modalTabPacks = $("modalTabPacks");
-const modalPanelGeneral = $("modalPanelGeneral");
-const modalPanelMods = $("modalPanelMods");
-const modalPanelPacks = $("modalPanelPacks");
+const modalTabGeneral = pickEl("modalTabGeneral");
+const modalTabInstalled = pickEl("modalTabInstalled", "modalTabMods");
+const modalTabDiscover = pickEl("modalTabDiscover", "modalTabPacks", "modalTabImport");
+const modalPanelGeneral = pickEl("modalPanelGeneral");
+const modalPanelInstalled = pickEl("modalPanelInstalled", "modalPanelMods");
+const modalPanelDiscover = pickEl("modalPanelDiscover", "modalPanelPacks", "modalPanelImport");
 
-const modalUpdateMods = $("modalUpdateMods");
-const modalModsHint = $("modalModsHint");
+const modalUpdateMods = $("modalUpdateMods") as HTMLButtonElement;
+const modalInstalledHint = pickEl("modalInstalledHint", "modalModsHint");
 const modalCompatGuidance = $("modalCompatGuidance");
 
 const modalUploadLocalMod = $("modalUploadLocalMod");
 const modalOpenInstanceFolder = $("modalOpenInstanceFolder");
+const modalInstalledModsSearch = $("modalInstalledModsSearch") as HTMLInputElement;
 const modalLocalModsList = $("modalLocalModsList");
 
 const btnUploadResourcepack = $("btnUploadResourcepack");
 const btnUploadShaderpack = $("btnUploadShaderpack");
 const btnOpenInstanceFolder2 = $("btnOpenInstanceFolder2");
 const btnOpenInstanceFolder3 = $("btnOpenInstanceFolder3");
+const btnImportInstanceArchiveIntoCurrent = $("btnImportInstanceArchiveIntoCurrent");
+const btnImportPackArchiveIntoCurrent = $("btnImportPackArchiveIntoCurrent");
 const resourcepacksList = $("resourcepacksList");
 const shaderpacksList = $("shaderpacksList");
 
@@ -187,6 +200,14 @@ const createProviderMarketplaceTitle = $("createProviderMarketplaceTitle");
 const createProviderMarketplaceHelp = $("createProviderMarketplaceHelp");
 const createModrinthPanel = $("createModrinthPanel");
 const createCurseForgePanel = $("createCurseForgePanel");
+const localModrinthProfilesHelp = $("localModrinthProfilesHelp");
+const localModrinthProfilesSelect = $("localModrinthProfilesSelect") as HTMLSelectElement;
+const btnRefreshLocalModrinthProfiles = $("btnRefreshLocalModrinthProfiles");
+const btnImportLocalModrinthProfile = $("btnImportLocalModrinthProfile");
+const localCurseForgeProfilesHelp = $("localCurseForgeProfilesHelp");
+const localCurseForgeProfilesSelect = $("localCurseForgeProfilesSelect") as HTMLSelectElement;
+const btnRefreshLocalCurseForgeProfiles = $("btnRefreshLocalCurseForgeProfiles");
+const btnImportLocalCurseForgeProfile = $("btnImportLocalCurseForgeProfile");
 const providerArchiveActions = $("providerArchiveActions");
 const providerArchiveHelp = $("providerArchiveHelp");
 const providerSearchInput = $("providerSearchInput") as HTMLInputElement;
@@ -210,6 +231,7 @@ const instanceModrinthSearchResults = $("instanceModrinthSearchResults");
 const btnPickInstanceIcon = $("btnPickInstanceIcon");
 const btnClearInstanceIcon = $("btnClearInstanceIcon");
 const btnResetInstanceIconTransform = $("btnResetInstanceIconTransform");
+setButtonIcon(btnClearInstanceIcon as HTMLButtonElement | null, TRASH_ICON_PATH);
 const instanceIconHint = $("instanceIconHint");
 const instanceIconPreviewWrap = $("instanceIconPreviewWrap");
 const instanceIconPreviewFrame = $("instanceIconPreviewFrame");
@@ -237,6 +259,34 @@ let state: any = {
   launcherSubscription: null,
   instances: null
 };
+
+type ModalTabId = "general" | "installed" | "discover";
+let activeModalTab: ModalTabId = "general";
+let modalBusyDepth = 0;
+let globalBusyDepth = 0;
+let localModrinthProfilesCache: any[] = [];
+let localCurseForgeProfilesCache: any[] = [];
+
+function getInstanceDisplayLoader(inst: any): LoaderKind {
+  const display = String(inst?.displayLoader || "").trim().toLowerCase();
+  if (display === "vanilla" || display === "fabric" || display === "quilt" || display === "forge" || display === "neoforge") {
+    return display as LoaderKind;
+  }
+  return String(inst?.loader || "fabric").trim().toLowerCase() as LoaderKind;
+}
+
+function getEffectiveRuntimeLoader(loaderChoice: string): LoaderKind {
+  const normalized = String(loaderChoice || "fabric").trim().toLowerCase();
+  if (normalized === "vanilla") return "fabric";
+  if (normalized === "fabric" || normalized === "quilt" || normalized === "forge" || normalized === "neoforge") {
+    return normalized as LoaderKind;
+  }
+  return "fabric";
+}
+
+function getPersistedDisplayLoader(loaderChoice: string): LoaderKind | null {
+  return String(loaderChoice || "").trim().toLowerCase() === "vanilla" ? "vanilla" : null;
+}
 
 function formatErrorMessage(err: unknown, fallback = "Something went wrong."): string {
   if (!err) return fallback;
@@ -2043,6 +2093,58 @@ function setStatus(text: string) {
   statusText.textContent = text || "";
 }
 
+function setGlobalActionBusy(visible: boolean, title = "Working...", detail = "Please wait while Fishbattery finishes this action.") {
+  if (actionBusyTitle) actionBusyTitle.textContent = title;
+  if (actionBusyDetail) actionBusyDetail.textContent = detail;
+  if (actionBusyBanner) actionBusyBanner.style.display = visible ? "flex" : "none";
+}
+
+function setModalBusy(visible: boolean, title = "Working...", detail = "Please wait while Fishbattery finishes this action.") {
+  if (modalBusyTitle) modalBusyTitle.textContent = title;
+  if (modalBusyDetail) modalBusyDetail.textContent = detail;
+  if (modalBusyOverlay) modalBusyOverlay.style.display = visible ? "grid" : "none";
+  modalClose.toggleAttribute("disabled", visible);
+  modalCancel.toggleAttribute("disabled", visible);
+  modalCreate.toggleAttribute("disabled", visible);
+}
+
+async function withGlobalActionProgress<T>(
+  title: string,
+  detail: string,
+  work: (update?: (nextDetail: string) => void) => Promise<T>
+): Promise<T> {
+  globalBusyDepth += 1;
+  setGlobalActionBusy(true, title, detail);
+  try {
+    return await work((nextDetail) => setGlobalActionBusy(true, title, nextDetail));
+  } finally {
+    globalBusyDepth = Math.max(0, globalBusyDepth - 1);
+    if (globalBusyDepth === 0) setGlobalActionBusy(false);
+  }
+}
+
+async function withModalProgress<T>(
+  title: string,
+  detail: string,
+  work: (update?: (nextDetail: string) => void) => Promise<T>
+): Promise<T> {
+  modalBusyDepth += 1;
+  setModalBusy(true, title, detail);
+  setGlobalActionBusy(true, title, detail);
+  globalBusyDepth += 1;
+  try {
+    return await work((nextDetail) => {
+      setModalBusy(true, title, nextDetail);
+      setGlobalActionBusy(true, title, nextDetail);
+    });
+  } finally {
+    modalBusyDepth = Math.max(0, modalBusyDepth - 1);
+    if (modalBusyDepth === 0) setModalBusy(false);
+    globalBusyDepth = Math.max(0, globalBusyDepth - 1);
+    if (globalBusyDepth === 0) setGlobalActionBusy(false);
+  }
+}
+
 async function showLauncherDialog(options: {
   mode: "alert" | "confirm" | "prompt";
   message: string;
@@ -2161,52 +2263,58 @@ async function runTrackedInstall<T>(
   title: string,
   work: (update: (stage: string) => void) => Promise<T>
 ): Promise<T> {
-  const startedAt = Date.now();
-  let lastHeartbeatBucket = -1;
-  let warnedSlow = false;
-  let currentStage = "Starting";
+  return withGlobalActionProgress(title, "Starting...", async (showProgress) => {
+    const startedAt = Date.now();
+    let lastHeartbeatBucket = -1;
+    let warnedSlow = false;
+    let currentStage = "Starting";
 
-  const update = (stage: string) => {
-    currentStage = stage;
-    const msg = `${title}: ${stage}`;
-    setStatus(msg);
-    appendLog(`[install] ${stage}`);
-  };
+    const update = (stage: string) => {
+      currentStage = stage;
+      const msg = `${title}: ${stage}`;
+      setStatus(msg);
+      showProgress?.(stage);
+      appendLog(`[install] ${stage}`);
+    };
 
-  setStatus(`${title}...`);
-  appendLog(`[install] ${title}`);
+    setStatus(`${title}...`);
+    appendLog(`[install] ${title}`);
 
-  const timer = window.setInterval(() => {
-    const elapsedSec = Math.max(1, Math.floor((Date.now() - startedAt) / 1000));
-    const heartbeatBucket = Math.floor(elapsedSec / 20);
-    const slow = elapsedSec >= 90;
-    const stageWithElapsed = `${title}: ${currentStage} (${elapsedSec}s)`;
-    setStatus(
-      slow
-        ? `${stageWithElapsed} (taking longer than usual)`
-        : stageWithElapsed
-    );
-    if (heartbeatBucket > lastHeartbeatBucket) {
-      lastHeartbeatBucket = heartbeatBucket;
-      appendLog(`[install] Still working... ${elapsedSec}s elapsed.`);
-    }
-    if (slow && !warnedSlow) {
-      warnedSlow = true;
-      appendLog(
-        "[install] This is taking longer than usual. Check network/API availability if it stays on this step."
+    const timer = window.setInterval(() => {
+      const elapsedSec = Math.max(1, Math.floor((Date.now() - startedAt) / 1000));
+      const heartbeatBucket = Math.floor(elapsedSec / 20);
+      const slow = elapsedSec >= 90;
+      const stageWithElapsed = `${currentStage} (${elapsedSec}s)`;
+      setStatus(
+        slow
+          ? `${title}: ${stageWithElapsed} (taking longer than usual)`
+          : `${title}: ${stageWithElapsed}`
       );
-    }
-  }, 5000);
+      showProgress?.(
+        slow ? `${stageWithElapsed} • taking longer than usual` : stageWithElapsed
+      );
+      if (heartbeatBucket > lastHeartbeatBucket) {
+        lastHeartbeatBucket = heartbeatBucket;
+        appendLog(`[install] Still working... ${elapsedSec}s elapsed.`);
+      }
+      if (slow && !warnedSlow) {
+        warnedSlow = true;
+        appendLog(
+          "[install] This is taking longer than usual. Check network/API availability if it stays on this step."
+        );
+      }
+    }, 5000);
 
-  try {
-    const result = await work(update);
-    const elapsedSec = Math.max(1, Math.floor((Date.now() - startedAt) / 1000));
-    appendLog(`[install] Completed in ${elapsedSec}s.`);
-    return result;
-  } finally {
-    window.clearInterval(timer);
-    setStatus("");
-  }
+    try {
+      const result = await work(update);
+      const elapsedSec = Math.max(1, Math.floor((Date.now() - startedAt) / 1000));
+      appendLog(`[install] Completed in ${elapsedSec}s.`);
+      return result;
+    } finally {
+      window.clearInterval(timer);
+      setStatus("");
+    }
+  });
 }
 
 // Summarize log for status.
@@ -3529,7 +3637,7 @@ async function renderInteractiveCharacterPreview(
 }
 
 // Open modal.
-function openModal(which: "general" | "mods" | "packs" = "general") {
+function openModal(which: ModalTabId = "general") {
   modalBackdrop.classList.add("open");
   setModalTab(which);
 }
@@ -3539,35 +3647,54 @@ function closeModal() {
   modalBackdrop.classList.remove("open");
 }
 
-// Set modal tab.
-function setModalTab(which: "general" | "mods" | "packs") {
-  const canShowInstanceTabs = modalMode === "edit" && !!editInstanceId;
-  const showMods = which === "mods" && canShowInstanceTabs;
-  const showPacks = which === "packs" && canShowInstanceTabs;
-
-  modalTabGeneral.classList.toggle("active", !showMods && !showPacks);
-  modalTabMods.classList.toggle("active", showMods);
-  modalTabPacks.classList.toggle("active", showPacks);
-
-  modalPanelGeneral.style.display = showMods || showPacks ? "none" : "";
-  modalPanelMods.style.display = showMods ? "" : "none";
-  modalPanelPacks.style.display = showPacks ? "" : "none";
-
-  modalTabMods.toggleAttribute("disabled", !canShowInstanceTabs);
-  modalTabPacks.toggleAttribute("disabled", !canShowInstanceTabs);
+function editedInstanceLoader(): LoaderKind {
+  if (!editInstanceId) return "fabric";
+  const inst = (state.instances?.instances ?? []).find((x: any) => String(x.id) === String(editInstanceId)) ?? null;
+  return getInstanceDisplayLoader(inst);
 }
 
-modalTabGeneral.onclick = () => setModalTab("general");
-modalTabMods.onclick = async () => {
-  setModalTab("mods");
-  await renderLocalContent(editInstanceId);
-  await renderInstanceMods(editInstanceId);
-};
-modalTabPacks.onclick = async () => {
-  setModalTab("packs");
-  await renderLocalContent(editInstanceId);
-  await runInstanceModrinthContentSearch(editInstanceId);
-};
+// Set modal tab.
+function setModalTab(which: ModalTabId) {
+  if (!modalTabGeneral || !modalTabInstalled || !modalTabDiscover || !modalPanelGeneral || !modalPanelInstalled || !modalPanelDiscover) {
+    return;
+  }
+  const canShowInstanceTabs = modalMode === "edit" && !!editInstanceId;
+  const showInstalled = which === "installed" && canShowInstanceTabs;
+  const showDiscover = which === "discover" && canShowInstanceTabs;
+  const isCreateMode = modalMode === "create";
+  activeModalTab = showInstalled || showDiscover ? which : "general";
+
+  modalTabGeneral.textContent = isCreateMode ? "Create" : "Edit";
+
+  modalTabGeneral.classList.toggle("active", !showInstalled && !showDiscover);
+  modalTabInstalled.classList.toggle("active", showInstalled);
+  modalTabDiscover.classList.toggle("active", showDiscover);
+  modalTabGeneral.style.display = "";
+  modalTabInstalled.style.display = isCreateMode ? "none" : "";
+  modalTabDiscover.style.display = isCreateMode ? "none" : "";
+
+  modalPanelGeneral.style.display = showInstalled || showDiscover ? "none" : "";
+  modalPanelInstalled.style.display = showInstalled ? "" : "none";
+  modalPanelDiscover.style.display = showDiscover ? "" : "none";
+
+  modalTabInstalled.toggleAttribute("disabled", !canShowInstanceTabs);
+  modalTabDiscover.toggleAttribute("disabled", !canShowInstanceTabs);
+}
+
+if (modalTabGeneral) modalTabGeneral.onclick = () => setModalTab("general");
+if (modalTabInstalled)
+  modalTabInstalled.onclick = async () => {
+    setModalTab("installed");
+    await renderLocalContent(editInstanceId);
+    await renderInstanceMods(editInstanceId);
+  };
+if (modalTabDiscover)
+  modalTabDiscover.onclick = async () => {
+    setModalTab("discover");
+    await renderLocalContent(editInstanceId);
+    await renderInstanceMods(editInstanceId);
+    await runInstanceModrinthContentSearch(editInstanceId);
+  };
 
 // Format bytes.
 function formatBytes(n: number) {
@@ -3715,16 +3842,51 @@ function renderFileList(
         source?: "modrinth";
       }
     >;
+    searchQuery?: string;
   }
 ) {
   el.innerHTML = "";
+
+  const query = String(options?.searchQuery || "").trim().toLowerCase();
+  const sortedItems = [...(items || [])].sort((a, b) => {
+    const getDisplayName = (item: { name: string }) => {
+      if (kind === "mods") {
+        const meta = options?.modMetadataByName?.[item.name.toLowerCase()];
+        return String(meta?.title || getPrettyName("mods", item.name)).toLowerCase();
+      }
+      const meta = options?.packMetadataByName?.[`${kind}:${item.name.toLowerCase()}`];
+      return String(meta?.title || getPrettyName(kind, item.name)).toLowerCase();
+    };
+    return getDisplayName(a).localeCompare(getDisplayName(b), undefined, { sensitivity: "base" });
+  });
+  const visibleItems = sortedItems.filter((item) => {
+    if (!query) return true;
+    if (kind === "mods") {
+      const meta = options?.modMetadataByName?.[item.name.toLowerCase()];
+      const haystack = [meta?.title, getPrettyName("mods", item.name), item.name, meta?.author, meta?.description]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(query);
+    }
+    const meta = options?.packMetadataByName?.[`${kind}:${item.name.toLowerCase()}`];
+    const haystack = [meta?.title, getPrettyName(kind, item.name), item.name, meta?.author, meta?.description]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+    return haystack.includes(query);
+  });
 
   if (!items?.length) {
     el.innerHTML = '<div class="muted" style="font-size:12px">Nothing installed.</div>';
     return;
   }
+  if (!visibleItems.length) {
+    el.innerHTML = '<div class="muted" style="font-size:12px">No installed mods match your search.</div>';
+    return;
+  }
 
-  for (const it of items) {
+  for (const it of visibleItems) {
     const isDisabled = it.name.endsWith(".disabled");
 
     if (kind === "mods") {
@@ -4419,7 +4581,7 @@ async function applyInstancePreset(instanceId: string, mcVersion: string, loader
       appendLog(
         `[preset] Applied "${preset.name}" from Modrinth project "${presetModrinthPackProject}" (${applied.version?.versionNumber ?? "latest"}).`
       );
-      state.instances = await backend.instancesList();
+      await refreshEditedInstanceWorkspace(activeModalTab);
       return;
     } finally {
       setStatus("");
@@ -5734,6 +5896,56 @@ async function findPreferredServerForInstance(inst: any) {
   return (data?.servers ?? []).find((x: any) => x.id === data.preferredServerId) ?? null;
 }
 
+function syncModalFieldsFromInstance(i: any) {
+  newName.value = i.name ?? "";
+  newMem.value = String(i.memoryMb ?? 4096);
+  newVersion.value = i.mcVersion ?? "";
+  const runtimeLoader = String(i.loader || "fabric").trim().toLowerCase();
+  createLoaderType.value = getInstanceDisplayLoader(i);
+  createLoaderVersion.value =
+    runtimeLoader === "fabric"
+      ? i.fabricLoaderVersion ?? ""
+      : runtimeLoader === "quilt"
+        ? i.quiltLoaderVersion ?? ""
+        : runtimeLoader === "forge"
+          ? i.forgeVersion ?? ""
+          : runtimeLoader === "neoforge"
+            ? i.neoforgeVersion ?? ""
+            : "";
+  updateCreateLoaderUi();
+  modalInstanceSyncEnabled = i.syncEnabled !== false;
+  renderModalInstanceSyncToggle();
+}
+
+async function refreshEditedInstanceWorkspace(targetTab: ModalTabId = activeModalTab) {
+  if (modalMode !== "edit" || !editInstanceId) return null;
+  state.instances = await backend.instancesList();
+  await renderInstances();
+  const inst = (state.instances?.instances ?? []).find((x: any) => String(x.id) === String(editInstanceId)) ?? null;
+  if (!inst) return null;
+
+  syncModalFieldsFromInstance(inst);
+  await refreshPresetDropdownAvailability(
+    inst.instancePreset ?? "none",
+    getInstanceDisplayLoader(inst),
+    String(inst.mcVersion || "")
+  );
+  await fillInstanceAccountDropdown(inst.accountId ?? null);
+  await renderServerEntries(inst.id);
+
+  if (targetTab === "installed" || targetTab === "discover") {
+    await renderLocalContent(inst.id);
+  }
+  if (targetTab === "installed" || targetTab === "discover") {
+    await renderInstanceMods(inst.id);
+  }
+  if (targetTab === "discover") {
+    await runInstanceModrinthContentSearch(inst.id);
+  }
+
+  return inst;
+}
+
 // Launch for instance.
 async function launchForInstance(inst: any, serverAddress?: string) {
   const accounts = state.accounts?.accounts ?? [];
@@ -5894,7 +6106,10 @@ async function renderLocalContent(instanceId: string | null) {
       await renderLocalContent(instanceId);
       await renderInstanceMods(instanceId);
     },
-    { modMetadataByName }
+    {
+      modMetadataByName,
+      searchQuery: modalInstalledModsSearch?.value || ""
+    }
   );
 
   renderFileList(
@@ -5934,11 +6149,18 @@ async function pickAndAdd(kind: "mods" | "resourcepacks" | "shaderpacks") {
     appendLog(`[content] Some files failed: ${failed.map((f: any) => `${f.name}: ${f.error}`).join(" | ")}`);
   }
 
-  await renderLocalContent(editInstanceId);
+  await refreshEditedInstanceWorkspace(activeModalTab);
   if (kind === "mods") {
     const v = await backend.modsValidate(editInstanceId);
     appendLog(`[validation] After add: ${v.summary} (${v.issues.length} issues)`);
   }
+}
+
+if (modalInstalledModsSearch) {
+  modalInstalledModsSearch.oninput = () => {
+    if (activeModalTab !== "installed" || !editInstanceId) return;
+    void renderLocalContent(editInstanceId);
+  };
 }
 
 // Run Modrinth search for instance packs tab.
@@ -6020,8 +6242,7 @@ async function runInstanceModrinthContentSearch(instanceId: string | null) {
         try {
           const res = await backend.modrinthContentInstall(instanceId, kind, h.projectId, h.latestVersionId || undefined);
           appendLog(`[modrinth-${res.kind}] Installed ${h.title} (${res.versionName || "latest"})`);
-          await renderLocalContent(instanceId);
-          await runInstanceModrinthContentSearch(instanceId);
+          await refreshEditedInstanceWorkspace("discover");
         } catch (err: any) {
           btn.disabled = false;
           btn.textContent = "Install";
@@ -6366,7 +6587,7 @@ async function renderInstanceMods(instanceId: string | null) {
   modalCompatGuidance.innerHTML = "";
 
   if (!instanceId) {
-    modalModsHint.textContent = "Select an instance first.";
+    if (modalInstalledHint) modalInstalledHint.textContent = "Select an instance first.";
     instanceModrinthResultsLabel.textContent = "Select an instance first";
     instanceModrinthSearchResults.innerHTML = '<div class="muted" style="font-size:12px">Select an instance first.</div>';
     return;
@@ -6375,7 +6596,7 @@ async function renderInstanceMods(instanceId: string | null) {
   const inst = (state.instances?.instances ?? []).find((x: any) => x.id === instanceId) ?? null;
   const mcVersion = inst?.mcVersion ?? "unknown";
   const loader = String(inst?.loader || "vanilla") as LoaderKind;
-  modalModsHint.textContent = `Mods for this instance (${mcVersion}):`;
+  if (modalInstalledHint) modalInstalledHint.textContent = `Installed content for this instance (${mcVersion}):`;
   await renderCompatibilityGuidance(instanceId);
   await runInstanceModrinthModsSearch(instanceId);
 }
@@ -7416,7 +7637,7 @@ async function getRunningSnapshot(instances: any[]): Promise<RunningSnapshot> {
 // Open instance editor/workspace with a selected tab.
 async function openInstanceWorkspace(
   i: any,
-  initialTab: "general" | "mods" | "packs" = "general"
+  initialTab: ModalTabId = "general"
 ) {
   modalMode = "edit";
   editInstanceId = i.id;
@@ -7425,21 +7646,7 @@ async function openInstanceWorkspace(
   createIncludeSnapshots = true;
   renderCreateFilterButtons();
   fillCreateVersionOptions();
-  newName.value = i.name ?? "";
-  newMem.value = String(i.memoryMb ?? 4096);
-  newVersion.value = i.mcVersion ?? "";
-  createLoaderType.value = i.loader ?? "fabric";
-  createLoaderVersion.value =
-    i.loader === "fabric"
-      ? i.fabricLoaderVersion ?? ""
-      : i.loader === "quilt"
-        ? i.quiltLoaderVersion ?? ""
-        : i.loader === "forge"
-          ? i.forgeVersion ?? ""
-          : i.loader === "neoforge"
-            ? i.neoforgeVersion ?? ""
-            : "";
-  updateCreateLoaderUi();
+  syncModalFieldsFromInstance(i);
   setCreateSource("custom");
   createSourceCustom.toggleAttribute("disabled", true);
   createSourceImport.toggleAttribute("disabled", true);
@@ -7448,8 +7655,6 @@ async function openInstanceWorkspace(
   createSourceTechnic.toggleAttribute("disabled", true);
   createSourceATLauncher.toggleAttribute("disabled", true);
   createSourceFTB.toggleAttribute("disabled", true);
-  modalInstanceSyncEnabled = i.syncEnabled !== false;
-  renderModalInstanceSyncToggle();
   selectedCreateIconPath = null;
   clearExistingIconOnSave = false;
   instanceIconHint.textContent = "Keep existing icon unless you pick a new one.";
@@ -7463,13 +7668,15 @@ async function openInstanceWorkspace(
   await fillInstanceAccountDropdown(i.accountId ?? null);
   await renderServerEntries(i.id);
 
-  openModal(initialTab);
-  if (initialTab === "mods") {
+  const resolvedInitialTab: ModalTabId = initialTab;
+
+  openModal(resolvedInitialTab);
+  if (resolvedInitialTab === "installed" || resolvedInitialTab === "discover") {
     await renderInstanceMods(i.id);
     await renderLocalContent(i.id);
-  } else if (initialTab === "packs") {
+  }
+  if (resolvedInitialTab === "discover") {
     await runInstanceModrinthContentSearch(i.id);
-    await renderLocalContent(i.id);
   }
 }
 
@@ -7527,12 +7734,12 @@ async function renderInstances() {
     card.setAttribute("role", "button");
     card.setAttribute("aria-label", `Open ${i.name ?? "instance"} workspace`);
     card.onclick = () => {
-      void openInstanceWorkspace(i, "mods");
+      void openInstanceWorkspace(i, "installed");
     };
     card.onkeydown = (ev: KeyboardEvent) => {
       if (ev.key !== "Enter" && ev.key !== " ") return;
       ev.preventDefault();
-      void openInstanceWorkspace(i, "mods");
+      void openInstanceWorkspace(i, "installed");
     };
     if (i.id === active) {
       card.style.boxShadow = "0 0 0 2px rgba(61,220,132,.18)";
@@ -7564,9 +7771,11 @@ async function renderInstances() {
     const badges = document.createElement("div");
     badges.className = "badges";
 
+    const displayLoader = getInstanceDisplayLoader(i);
+
     const b1 = document.createElement("div");
     b1.className = "badge";
-    b1.textContent = `${i.loader ?? "fabric"}`;
+    b1.textContent = `${displayLoader}`;
 
     const b2 = document.createElement("div");
     b2.className = "badge";
@@ -7577,7 +7786,7 @@ async function renderInstances() {
 
     const subtext = document.createElement("small");
     subtext.className = "instanceSubtext";
-    subtext.textContent = `${i.loader ?? "fabric"} | Minecraft ${i.mcVersion ?? "unknown"}`;
+    subtext.textContent = `${displayLoader} | Minecraft ${i.mcVersion ?? "unknown"}`;
 
     meta.appendChild(title);
     meta.appendChild(subtext);
@@ -7596,6 +7805,22 @@ async function renderInstances() {
     btnEdit.onclick = async (ev) => {
       ev.stopPropagation();
       await openInstanceWorkspace(i, "general");
+    };
+
+    const btnDeleteIcon = document.createElement("button");
+    btnDeleteIcon.className = "iconBtn instanceEditBtn instanceDeleteBtn danger";
+    btnDeleteIcon.type = "button";
+    btnDeleteIcon.title = "Delete instance";
+    btnDeleteIcon.setAttribute("aria-label", `Delete ${i.name ?? "instance"}`);
+    btnDeleteIcon.innerHTML =
+      '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M9 3.75h6a1 1 0 0 1 .9.56l.47.94H20a.75.75 0 0 1 0 1.5h-1.06l-.78 10.13A2.25 2.25 0 0 1 15.92 19H8.08a2.25 2.25 0 0 1-2.24-2.12L5.06 6.75H4a.75.75 0 0 1 0-1.5h3.16l.47-.94a1 1 0 0 1 .9-.56Zm-.12 2.5H15.13l-.25-.5h-5.76l-.25.5Zm-2.3.5.77 10.02a.75.75 0 0 0 .74.73h7.84a.75.75 0 0 0 .74-.73l.77-10.02H6.57ZM10 9a.75.75 0 0 1 .75.75v4.5a.75.75 0 0 1-1.5 0v-4.5A.75.75 0 0 1 10 9Zm4 .75a.75.75 0 0 0-1.5 0v4.5a.75.75 0 0 0 1.5 0v-4.5Z" fill="currentColor"/></svg>';
+    btnDeleteIcon.onclick = async (ev) => {
+      ev.stopPropagation();
+      const ok = await showLauncherConfirm(`Delete "${i.name ?? "Instance"}"? This will remove the entire instance folder.`);
+      if (!ok) return;
+      await backend.instancesRemove(i.id);
+      state.instances = await backend.instancesList();
+      await renderInstances();
     };
 
     const btnPlay = document.createElement("button");
@@ -7635,19 +7860,6 @@ async function renderInstances() {
       await launchForInstance(i, String(preferredServer.address || "").trim());
     };
 
-    // Delete button
-    const btnDelete = document.createElement("button");
-    btnDelete.className = "btn btnDanger";
-    btnDelete.textContent = "Delete";
-    btnDelete.onclick = async (ev) => {
-      ev.stopPropagation();
-      const ok = await showLauncherConfirm(`Delete "${i.name ?? "Instance"}"? This will remove the entire instance folder.`);
-      if (!ok) return;
-      await backend.instancesRemove(i.id);
-      state.instances = await backend.instancesList();
-      await renderInstances();
-    };
-
     const btnExport = document.createElement("button");
     btnExport.className = "btn";
     btnExport.textContent = "Export";
@@ -7662,9 +7874,9 @@ async function renderInstances() {
     actions.appendChild(btnPlay);
     actions.appendChild(btnJoin);
     actions.appendChild(btnExport);
-    actions.appendChild(btnDelete);
 
     card.appendChild(btnEdit);
+    card.appendChild(btnDeleteIcon);
     inner.appendChild(thumb);
     inner.appendChild(meta);
     inner.appendChild(actions);
@@ -7673,8 +7885,8 @@ async function renderInstances() {
     return card;
   };
 
-  const vanillaInstances = items.filter((i: any) => String(i?.loader || "vanilla").toLowerCase() === "vanilla");
-  const moddedInstances = items.filter((i: any) => String(i?.loader || "vanilla").toLowerCase() !== "vanilla");
+  const vanillaInstances = items.filter((i: any) => getInstanceDisplayLoader(i) === "vanilla");
+  const moddedInstances = items.filter((i: any) => getInstanceDisplayLoader(i) !== "vanilla");
 
   const appendGroup = (label: string, groupItems: any[]) => {
     const group = document.createElement("section");
@@ -7772,7 +7984,7 @@ function updateCreateLoaderUi() {
   createLoaderVersion.value = "";
   createLoaderVersion.disabled = true;
   if (loader === "vanilla") {
-    createLoaderHint.textContent = "Vanilla instances do not require a loader version.";
+    createLoaderHint.textContent = "Shown as vanilla, but uses Fishbattery's Fabric compatibility layer so cape features still work.";
     return;
   }
   createLoaderHint.textContent = "Select a supported loader.";
@@ -7784,12 +7996,80 @@ function renderModalInstanceSyncToggle() {
   instanceSyncEnabled.textContent = modalInstanceSyncEnabled ? "Enabled" : "Disabled";
 }
 
+function renderExternalProfileOptions(
+  selectEl: HTMLSelectElement,
+  helpEl: HTMLElement,
+  sourceLabel: string,
+  profiles: any[],
+  root: string | null,
+  found: boolean
+) {
+  selectEl.innerHTML = "";
+  const placeholder = document.createElement("option");
+  placeholder.value = "";
+  if (!found) {
+    placeholder.textContent = root ? `No ${sourceLabel} folder found at ${root}` : `No ${sourceLabel} folder found`;
+  } else if (!profiles.length) {
+    placeholder.textContent = `No ${sourceLabel} profiles found`;
+  } else {
+    placeholder.textContent = `Select a ${sourceLabel} profile...`;
+  }
+  selectEl.appendChild(placeholder);
+
+  for (const profile of profiles) {
+    const opt = document.createElement("option");
+    opt.value = String(profile.id || "");
+    const loader = String(profile.loader || "vanilla");
+    const mc = String(profile.mcVersion || "unknown");
+    opt.textContent = `${profile.name || profile.id} (${mc} | ${loader})`;
+    selectEl.appendChild(opt);
+  }
+
+  selectEl.disabled = !profiles.length;
+  helpEl.textContent = found
+    ? root
+      ? `Looking in ${root}`
+      : `Detected local ${sourceLabel} profiles.`
+    : root
+      ? `Folder not found: ${root}`
+      : `Could not resolve the default ${sourceLabel} folder.`;
+}
+
+async function refreshExternalProfiles(source: "modrinth" | "curseforge") {
+  const result = await backend.externalProfilesList(source);
+  const profiles = Array.isArray(result?.profiles) ? result.profiles : [];
+  if (source === "modrinth") {
+    localModrinthProfilesCache = profiles;
+    renderExternalProfileOptions(
+      localModrinthProfilesSelect,
+      localModrinthProfilesHelp,
+      "Modrinth",
+      profiles,
+      result?.root ?? null,
+      !!result?.found
+    );
+    btnImportLocalModrinthProfile.toggleAttribute("disabled", !profiles.length);
+    return;
+  }
+  localCurseForgeProfilesCache = profiles;
+  renderExternalProfileOptions(
+    localCurseForgeProfilesSelect,
+    localCurseForgeProfilesHelp,
+    "CurseForge",
+    profiles,
+    result?.root ?? null,
+    !!result?.found
+  );
+  btnImportLocalCurseForgeProfile.toggleAttribute("disabled", !profiles.length);
+}
+
 // Set create source.
 function setCreateSource(next: "custom" | "import" | "modrinth" | "curseforge" | "technic" | "atlauncher" | "ftb") {
   createSource = next;
   const isCustom = next === "custom";
   const isImport = next === "import";
   const isMarket = next === "modrinth" || next === "curseforge" || next === "technic" || next === "atlauncher" || next === "ftb";
+  const isTechnicArchiveOnly = next === "technic";
 
   createSourceCustom.classList.toggle("btnPrimary", next === "custom");
   createSourceImport.classList.toggle("btnPrimary", next === "import");
@@ -7813,6 +8093,9 @@ function setCreateSource(next: "custom" | "import" | "modrinth" | "curseforge" |
   const isArchiveProvider = next === "curseforge" || next === "technic";
   createModrinthPanel.style.display = next === "modrinth" ? "" : "none";
   createCurseForgePanel.style.display = next === "modrinth" ? "none" : "";
+  providerSearchInput.parentElement!.style.display = isTechnicArchiveOnly ? "none" : "";
+  providerResultsLabel.style.display = isTechnicArchiveOnly ? "none" : "";
+  providerSearchResults.style.display = isTechnicArchiveOnly ? "none" : "";
   if (modalMode === "edit") modalCreate.textContent = "Save";
   else modalCreate.textContent = isCustom ? "Create" : isImport ? "Import" : "Install";
 
@@ -7822,6 +8105,9 @@ function setCreateSource(next: "custom" | "import" | "modrinth" | "curseforge" |
   }
   if (isImport) {
     createSourceHint.textContent = "Import an existing instance/pack archive.";
+    void guarded(async () => {
+      await Promise.all([refreshExternalProfiles("modrinth"), refreshExternalProfiles("curseforge")]);
+    });
     return;
   }
   createProviderMarketplaceTitle.textContent =
@@ -7837,12 +8123,16 @@ function setCreateSource(next: "custom" | "import" | "modrinth" | "curseforge" |
   createProviderMarketplaceHelp.textContent =
     next === "modrinth"
       ? "Browse and install Modrinth modpacks into a new isolated instance."
+      : isTechnicArchiveOnly
+        ? "Technic packs can only be imported from a local archive in this build."
       : isArchiveProvider
         ? "Search and import provider pack archives into a new isolated instance."
         : "Search and install directly from provider catalog.";
   createSourceHint.textContent =
     next === "modrinth"
       ? "Search Modrinth and install directly to a new instance."
+      : isTechnicArchiveOnly
+        ? "Import a local Technic export/archive into a new instance."
       : isArchiveProvider
         ? "Select a provider archive (.zip/.mrpack) and import it into a new instance."
         : "Search and install directly from provider catalog.";
@@ -7850,14 +8140,25 @@ function setCreateSource(next: "custom" | "import" | "modrinth" | "curseforge" |
     providerArchiveHelp.textContent = `Import ${next.toUpperCase()} archive and create a new instance.`;
   }
   providerArchiveActions.style.display = isArchiveProvider ? "" : "none";
+  if (isTechnicArchiveOnly) {
+    selectedProviderPack = null;
+    providerSearchResults.innerHTML =
+      '<div class="muted" style="font-size:12px">Technic browse is not available. Use "Import pack archive" below.</div>';
+    return;
+  }
   if (next === "atlauncher" || next === "ftb" || isArchiveProvider) {
     void guarded(async () => {
       await runProviderSearch();
     });
   }
-  if (next === "modrinth" && !modrinthSearchResults.innerHTML) {
+  if (next === "modrinth") {
     void guarded(async () => {
       await runModrinthSearch();
+    });
+  }
+  if (next === "curseforge") {
+    void guarded(async () => {
+      await runProviderSearch();
     });
   }
 }
@@ -8037,8 +8338,7 @@ async function runInstanceModrinthModsSearch(instanceId: string | null) {
         try {
           const res = await backend.modrinthModsInstall(instanceId, h.projectId, h.latestVersionId || undefined);
           appendLog(`[modrinth-mod] Installed ${h.title} (${res.versionName || "latest"})`);
-          await renderLocalContent(instanceId);
-          await renderInstanceMods(instanceId);
+          await refreshEditedInstanceWorkspace("discover");
           await runInstanceModrinthModsSearch(instanceId);
         } catch (err: any) {
           btn.disabled = false;
@@ -8452,23 +8752,28 @@ providerSearchInput.onkeydown = (e) => {
 };
 btnCreateImportNow.onclick = () =>
   guarded(async () => {
-    // Fast-path import button in create modal.
-    const res = await backend.instancesImport();
-    if (!res.ok || res.canceled) return;
-    if (res.instance?.id && res.instance?.mcVersion && res.instance?.loader) {
-      await ensureFabricApiForFabricInstance(res.instance.id, res.instance.mcVersion, res.instance.loader as LoaderKind);
-    }
-    if (selectedCreateIconPath && res.instance?.id) {
-      try {
-        await backend.instancesSetIconFromFile(res.instance.id, selectedCreateIconPath, getSelectedIconTransformPayload());
-      } catch (err: any) {
-        appendLog(`[icon] Failed applying selected icon: ${String(err?.message ?? err)}`);
+    await withModalProgress("Importing modpack", "Selecting archive...", async (update) => {
+      // Fast-path import button in create modal.
+      const res = await backend.instancesImport();
+      if (!res.ok || res.canceled) return;
+      if (res.instance?.id && res.instance?.mcVersion && res.instance?.loader) {
+        update?.("Preparing loader/runtime...");
+        await ensureFabricApiForFabricInstance(res.instance.id, res.instance.mcVersion, res.instance.loader as LoaderKind);
       }
-    }
-    state.instances = await backend.instancesList();
-    await renderInstances();
-    appendLog(`[instance] Imported "${res.instance?.name ?? "instance"}"`);
-    closeModal();
+      if (selectedCreateIconPath && res.instance?.id) {
+        update?.("Applying icon...");
+        try {
+          await backend.instancesSetIconFromFile(res.instance.id, selectedCreateIconPath, getSelectedIconTransformPayload());
+        } catch (err: any) {
+          appendLog(`[icon] Failed applying selected icon: ${String(err?.message ?? err)}`);
+        }
+      }
+      update?.("Refreshing library...");
+      state.instances = await backend.instancesList();
+      await renderInstances();
+      appendLog(`[instance] Imported "${res.instance?.name ?? "instance"}"`);
+      closeModal();
+    });
   });
 btnProviderImportArchive.onclick = () =>
   guarded(async () => {
@@ -8519,6 +8824,99 @@ btnProviderImportArchive.onclick = () =>
       `[pack-import] ${provider} -> ${res.result.detectedFormat}: "${res.result.instance?.name}" (${(res.result.notes || []).join(" | ")})`
     );
     closeModal();
+  });
+
+async function importSelectedExternalProfile(source: "modrinth" | "curseforge") {
+  const selectEl = source === "modrinth" ? localModrinthProfilesSelect : localCurseForgeProfilesSelect;
+  const profileId = String(selectEl.value || "").trim();
+  if (!profileId) {
+    alert(`Select a ${source === "modrinth" ? "Modrinth" : "CurseForge"} profile first.`);
+    return;
+  }
+  await withModalProgress(
+    `Importing ${source === "modrinth" ? "Modrinth" : "CurseForge"} profile`,
+    "Copying profile files...",
+    async (update) => {
+      const res = await backend.externalProfileImport(source, profileId, {
+        name: newName.value?.trim() || undefined,
+        accountId: instanceAccount.value || null,
+        memoryMb: Number(newMem.value || 4096)
+      });
+      if (!res?.ok) return;
+      if (res.instance?.id && res.instance?.mcVersion && res.instance?.loader) {
+        update?.("Preparing loader/runtime...");
+        await ensureFabricApiForFabricInstance(res.instance.id, res.instance.mcVersion, res.instance.loader as LoaderKind);
+      }
+      if (selectedCreateIconPath && res.instance?.id) {
+        update?.("Applying icon...");
+        try {
+          await backend.instancesSetIconFromFile(
+            res.instance.id,
+            selectedCreateIconPath,
+            getSelectedIconTransformPayload()
+          );
+        } catch (err: any) {
+          appendLog(`[icon] Failed applying selected icon: ${String(err?.message ?? err)}`);
+        }
+      }
+      update?.("Refreshing library...");
+      state.instances = await backend.instancesList();
+      await renderInstances();
+      appendLog(
+        `[external-import] Imported ${source} profile "${res.profile?.name ?? profileId}" as "${res.instance?.name ?? "instance"}".`
+      );
+      closeModal();
+    }
+  );
+}
+
+btnRefreshLocalModrinthProfiles.onclick = () =>
+  guarded(async () => {
+    await refreshExternalProfiles("modrinth");
+  });
+
+btnRefreshLocalCurseForgeProfiles.onclick = () =>
+  guarded(async () => {
+    await refreshExternalProfiles("curseforge");
+  });
+
+btnImportLocalModrinthProfile.onclick = () =>
+  guarded(async () => {
+    await importSelectedExternalProfile("modrinth");
+  });
+
+btnImportLocalCurseForgeProfile.onclick = () =>
+  guarded(async () => {
+    await importSelectedExternalProfile("curseforge");
+  });
+btnImportInstanceArchiveIntoCurrent.onclick = () =>
+  guarded(async () => {
+    if (!editInstanceId) return;
+    await withModalProgress("Importing into instance", "Selecting archive...", async (update) => {
+      const res = await backend.instancesImportInto(editInstanceId);
+      if (!res.ok || res.canceled) return;
+      update?.("Refreshing current instance...");
+      await refreshEditedInstanceWorkspace("installed");
+      appendLog(`[instance-import] Merged "${res.instance?.name ?? "instance export"}" into current instance.`);
+      if (res.lockfileApplied) {
+        appendLog(
+          `[lockfile] Applied during merge: ${res.lockfileResult?.appliedMods ?? 0} mods, ${res.lockfileResult?.appliedPacks ?? 0} packs.`
+        );
+      }
+    });
+  });
+btnImportPackArchiveIntoCurrent.onclick = () =>
+  guarded(async () => {
+    if (!editInstanceId) return;
+    await withModalProgress("Applying pack archive", "Selecting archive...", async (update) => {
+      const res = await backend.packArchiveApplyToInstance(editInstanceId, { provider: "auto" });
+      if (!res.ok || res.canceled) return;
+      update?.("Refreshing current instance...");
+      await refreshEditedInstanceWorkspace("installed");
+      appendLog(
+        `[pack-import] Applied ${res.result.detectedFormat} archive into "${res.result.instance?.name ?? "instance"}" (${(res.result.notes || []).join(" | ")})`
+      );
+    });
   });
 btnPickInstanceIcon.onclick = () =>
   guarded(async () => {
@@ -8639,22 +9037,25 @@ btnCreate.onclick = async () => {
 
 btnImport.onclick = () =>
   guarded(async () => {
-    const res = await backend.instancesImport();
-    if (!res.ok || res.canceled) return;
-    state.instances = await backend.instancesList();
-    await renderInstances();
-    appendLog(`[instance] Imported "${res.instance?.name ?? "instance"}"`);
-    if (res.lockfileApplied) {
-      appendLog(
-        `[lockfile] Applied during import: ${res.lockfileResult?.appliedMods ?? 0} mods, ${res.lockfileResult?.appliedPacks ?? 0} packs.`
-      );
-      if (res.lockfileResult?.issues?.length) {
-        appendLog(`[lockfile] Apply issues: ${res.lockfileResult.issues.join(" | ")}`);
+    await withGlobalActionProgress("Importing modpack", "Selecting archive...", async (update) => {
+      const res = await backend.instancesImport();
+      if (!res.ok || res.canceled) return;
+      update?.("Refreshing library...");
+      state.instances = await backend.instancesList();
+      await renderInstances();
+      appendLog(`[instance] Imported "${res.instance?.name ?? "instance"}"`);
+      if (res.lockfileApplied) {
+        appendLog(
+          `[lockfile] Applied during import: ${res.lockfileResult?.appliedMods ?? 0} mods, ${res.lockfileResult?.appliedPacks ?? 0} packs.`
+        );
+        if (res.lockfileResult?.issues?.length) {
+          appendLog(`[lockfile] Apply issues: ${res.lockfileResult.issues.join(" | ")}`);
+        }
+        if (res.lockfileResult?.drift && !res.lockfileResult.drift.clean) {
+          appendLog(`[lockfile] Drift after import: ${res.lockfileResult.drift.issues.map((x) => `${x.id}: ${x.message}`).join(" | ")}`);
+        }
       }
-      if (res.lockfileResult?.drift && !res.lockfileResult.drift.clean) {
-        appendLog(`[lockfile] Drift after import: ${res.lockfileResult.drift.issues.map((x) => `${x.id}: ${x.message}`).join(" | ")}`);
-      }
-    }
+    });
   });
 
 modalClose.onclick = closeModal;
@@ -8665,26 +9066,31 @@ modalCreate.onclick = () =>
     if (modalMode === "create") {
       // Source-specific create flow.
       if (createSource === "import") {
-        const res = await backend.instancesImport();
-        if (!res.ok || res.canceled) return;
-        if (res.instance?.id && res.instance?.mcVersion && res.instance?.loader) {
-          await ensureFabricApiForFabricInstance(res.instance.id, res.instance.mcVersion, res.instance.loader as LoaderKind);
-        }
-        if (selectedCreateIconPath && res.instance?.id) {
-          try {
-            await backend.instancesSetIconFromFile(
-              res.instance.id,
-              selectedCreateIconPath,
-              getSelectedIconTransformPayload()
-            );
-          } catch (err: any) {
-            appendLog(`[icon] Failed applying selected icon: ${String(err?.message ?? err)}`);
+        await withModalProgress("Importing modpack", "Selecting archive...", async (update) => {
+          const res = await backend.instancesImport();
+          if (!res.ok || res.canceled) return;
+          if (res.instance?.id && res.instance?.mcVersion && res.instance?.loader) {
+            update?.("Preparing loader/runtime...");
+            await ensureFabricApiForFabricInstance(res.instance.id, res.instance.mcVersion, res.instance.loader as LoaderKind);
           }
-        }
-        state.instances = await backend.instancesList();
-        await renderInstances();
-        appendLog(`[instance] Imported "${res.instance?.name ?? "instance"}"`);
-        closeModal();
+          if (selectedCreateIconPath && res.instance?.id) {
+            update?.("Applying icon...");
+            try {
+              await backend.instancesSetIconFromFile(
+                res.instance.id,
+                selectedCreateIconPath,
+                getSelectedIconTransformPayload()
+              );
+            } catch (err: any) {
+              appendLog(`[icon] Failed applying selected icon: ${String(err?.message ?? err)}`);
+            }
+          }
+          update?.("Refreshing library...");
+          state.instances = await backend.instancesList();
+          await renderInstances();
+          appendLog(`[instance] Imported "${res.instance?.name ?? "instance"}"`);
+          closeModal();
+        });
         return;
       }
 
@@ -8811,232 +9217,250 @@ modalCreate.onclick = () =>
         return;
       }
 
-      const id = crypto.randomUUID();
-      const mcVersion = newVersion.value;
-      const loader = String(createLoaderType.value || "fabric");
-      const selectedPreset = (instancePreset.value || "none") as InstancePresetId;
-      const presetModrinthPackProject =
-        selectedPreset !== "none"
-          ? PRESET_MODRINTH_PACK_PROJECTS[selectedPreset as Exclude<InstancePresetId, "none">]
-          : undefined;
+      await withModalProgress("Creating instance", "Preparing configuration...", async (update) => {
+        const id = crypto.randomUUID();
+        const mcVersion = newVersion.value;
+        const loaderChoice = String(createLoaderType.value || "fabric");
+        const loader = getEffectiveRuntimeLoader(loaderChoice);
+        const displayLoader = getPersistedDisplayLoader(loaderChoice);
+        const selectedPreset = (instancePreset.value || "none") as InstancePresetId;
+        const presetModrinthPackProject =
+          selectedPreset !== "none"
+            ? PRESET_MODRINTH_PACK_PROJECTS[selectedPreset as Exclude<InstancePresetId, "none">]
+            : undefined;
 
-      if (!mcVersion) {
-        alert("Select a Minecraft version first.");
-        return;
-      }
-      if (!["vanilla", "fabric", "quilt", "forge", "neoforge"].includes(loader)) {
-        alert(`Unsupported loader: ${loader}`);
-        return;
-      }
-      if (presetModrinthPackProject) {
-        closeModal();
-        const presetMeta = selectedPreset !== "none" ? INSTANCE_PRESETS[selectedPreset as Exclude<InstancePresetId, "none">] : null;
-        const presetLabel = presetMeta?.name || selectedPreset;
-        const res = await runTrackedInstall(
-          `Installing ${presetLabel}`,
-          async (update) => {
-            update("Creating instance from Modrinth preset pack");
-            const created = await backend.modrinthPacksInstall({
-              projectId: presetModrinthPackProject,
-              mcVersion,
-              loader: loader as "vanilla" | "fabric" | "quilt" | "forge" | "neoforge",
-              requireCompatibility: true,
-              nameOverride: newName.value?.trim() || presetLabel,
-              accountId: instanceAccount.value || null,
-              memoryMb: Number(newMem.value || 4096)
-            });
-            if (created.instance?.id) {
-              await backend.instancesUpdate(created.instance.id, {
+        if (!mcVersion) {
+          alert("Select a Minecraft version first.");
+          return;
+        }
+        if (!["vanilla", "fabric", "quilt", "forge", "neoforge"].includes(loaderChoice)) {
+          alert(`Unsupported loader: ${loaderChoice}`);
+          return;
+        }
+        if (presetModrinthPackProject) {
+          closeModal();
+          const presetMeta = selectedPreset !== "none" ? INSTANCE_PRESETS[selectedPreset as Exclude<InstancePresetId, "none">] : null;
+          const presetLabel = presetMeta?.name || selectedPreset;
+          const res = await runTrackedInstall(
+            `Installing ${presetLabel}`,
+            async (update) => {
+              update("Creating instance from Modrinth preset pack");
+              const created = await backend.modrinthPacksInstall({
+                projectId: presetModrinthPackProject,
+                mcVersion,
+                loader: loader as "vanilla" | "fabric" | "quilt" | "forge" | "neoforge",
+                requireCompatibility: true,
+                nameOverride: newName.value?.trim() || presetLabel,
                 accountId: instanceAccount.value || null,
-                memoryMb: Number(newMem.value || 4096),
-                instancePreset: selectedPreset,
-                syncEnabled: modalInstanceSyncEnabled
+                memoryMb: Number(newMem.value || 4096)
               });
-            }
-            if (created.instance?.id && created.instance?.mcVersion && created.instance?.loader) {
-              update("Preparing loader/runtime");
-              await ensureFabricApiForFabricInstance(
-                created.instance.id,
-                created.instance.mcVersion,
-                created.instance.loader as LoaderKind
-              );
-            }
-            if (created.instance?.id) {
-              update("Applying icon");
-              if (selectedCreateIconPath) {
-                try {
-                  await backend.instancesSetIconFromFile(
-                    created.instance.id,
-                    selectedCreateIconPath,
-                    getSelectedIconTransformPayload()
-                  );
-                } catch (err: any) {
-                  appendLog(`[icon] Failed applying selected icon: ${String(err?.message ?? err)}`);
-                }
-              } else {
-                await backend.instancesSetIconFallback(created.instance.id, presetLabel, "green");
+              if (created.instance?.id) {
+                await backend.instancesUpdate(created.instance.id, {
+                  accountId: instanceAccount.value || null,
+                  memoryMb: Number(newMem.value || 4096),
+                  instancePreset: selectedPreset,
+                  syncEnabled: modalInstanceSyncEnabled,
+                  displayLoader: displayLoader
+                });
               }
+              if (created.instance?.id && created.instance?.mcVersion && created.instance?.loader) {
+                update("Preparing loader/runtime");
+                await ensureFabricApiForFabricInstance(
+                  created.instance.id,
+                  created.instance.mcVersion,
+                  created.instance.loader as LoaderKind
+                );
+              }
+              if (created.instance?.id) {
+                update("Applying icon");
+                if (selectedCreateIconPath) {
+                  try {
+                    await backend.instancesSetIconFromFile(
+                      created.instance.id,
+                      selectedCreateIconPath,
+                      getSelectedIconTransformPayload()
+                    );
+                  } catch (err: any) {
+                    appendLog(`[icon] Failed applying selected icon: ${String(err?.message ?? err)}`);
+                  }
+                } else {
+                  await backend.instancesSetIconFallback(created.instance.id, presetLabel, "green");
+                }
+              }
+              update("Refreshing library");
+              return created;
             }
-            update("Refreshing library");
-            return created;
+          );
+          state.instances = await backend.instancesList();
+          await renderInstances();
+          appendLog(
+            `[preset] Installed "${presetLabel}" from Modrinth project "${presetModrinthPackProject}" as "${res.instance?.name ?? "instance"}".`
+          );
+          return;
+        }
+
+        const cfg = {
+          id,
+          name: newName.value?.trim() || "New Instance",
+          mcVersion,
+          loader: loader as "vanilla" | "fabric" | "quilt" | "forge" | "neoforge",
+          displayLoader: displayLoader,
+          fabricLoaderVersion: undefined as string | undefined,
+          quiltLoaderVersion: undefined as string | undefined,
+          forgeVersion: undefined as string | undefined,
+          neoforgeVersion: undefined as string | undefined,
+          memoryMb: Number(newMem.value || 4096),
+          accountId: instanceAccount.value || null,
+          instancePreset: selectedPreset,
+          syncEnabled: modalInstanceSyncEnabled
+        };
+
+        if (loader !== "vanilla") {
+          update?.(`Resolving ${loader} loader...`);
+          setStatus(`Resolving ${loader} loader...`);
+          const resolved = (createLoaderVersion.value || "").trim() || (await backend.loaderPickVersion(loader as any, mcVersion)) || "";
+          if (loader === "fabric") cfg.fabricLoaderVersion = resolved;
+          if (loader === "quilt") cfg.quiltLoaderVersion = resolved;
+          if (loader === "forge") cfg.forgeVersion = resolved;
+          if (loader === "neoforge") cfg.neoforgeVersion = resolved;
+        }
+
+        update?.("Creating instance files...");
+        setStatus("Creating instance...");
+        await backend.instancesCreate(cfg);
+
+        if (selectedCreateIconPath) {
+          update?.("Applying icon...");
+          try {
+            await backend.instancesSetIconFromFile(id, selectedCreateIconPath, getSelectedIconTransformPayload());
+          } catch (err: any) {
+            appendLog(`[icon] Failed applying selected icon: ${String(err?.message ?? err)}`);
           }
+        } else {
+          await backend.instancesSetIconFallback(id, cfg.name || "Instance", "green");
+        }
+
+        update?.(`Preparing ${loader} runtime...`);
+        setStatus(`Preparing ${loader}...`);
+        await backend.loaderInstall(
+          id,
+          mcVersion,
+          loader as any,
+          loader === "fabric"
+            ? cfg.fabricLoaderVersion
+            : loader === "quilt"
+              ? cfg.quiltLoaderVersion
+              : loader === "forge"
+                ? cfg.forgeVersion
+                : loader === "neoforge"
+                  ? cfg.neoforgeVersion
+                  : undefined
         );
+        await ensureFabricApiForFabricInstance(id, mcVersion, loader as LoaderKind);
+
+        if (selectedPreset !== "none") {
+          update?.("Applying preset...");
+          await applyInstancePreset(id, mcVersion, loader as LoaderKind, selectedPreset);
+        }
+
+        update?.("Refreshing library...");
+        setStatus("");
         state.instances = await backend.instancesList();
         await renderInstances();
-        appendLog(
-          `[preset] Installed "${presetLabel}" from Modrinth project "${presetModrinthPackProject}" as "${res.instance?.name ?? "instance"}".`
-        );
-        return;
-      }
-
-      const cfg = {
-        id,
-        name: newName.value?.trim() || "New Instance",
-        mcVersion,
-        loader: loader as "vanilla" | "fabric" | "quilt" | "forge" | "neoforge",
-        fabricLoaderVersion: undefined as string | undefined,
-        quiltLoaderVersion: undefined as string | undefined,
-        forgeVersion: undefined as string | undefined,
-        neoforgeVersion: undefined as string | undefined,
-        memoryMb: Number(newMem.value || 4096),
-        accountId: instanceAccount.value || null,
-        instancePreset: selectedPreset,
-        syncEnabled: modalInstanceSyncEnabled
-      };
-
-      if (loader !== "vanilla") {
-        setStatus(`Resolving ${loader} loader...`);
-        // Resolve concrete loader build (or honor explicit override from UI).
-        const resolved = (createLoaderVersion.value || "").trim() || (await backend.loaderPickVersion(loader as any, mcVersion)) || "";
-        if (loader === "fabric") cfg.fabricLoaderVersion = resolved;
-        if (loader === "quilt") cfg.quiltLoaderVersion = resolved;
-        if (loader === "forge") cfg.forgeVersion = resolved;
-        if (loader === "neoforge") cfg.neoforgeVersion = resolved;
-      }
-
-      setStatus("Creating instance...");
-      await backend.instancesCreate(cfg);
-
-      if (selectedCreateIconPath) {
-        try {
-          await backend.instancesSetIconFromFile(id, selectedCreateIconPath, getSelectedIconTransformPayload());
-        } catch (err: any) {
-          appendLog(`[icon] Failed applying selected icon: ${String(err?.message ?? err)}`);
-        }
-      } else {
-        await backend.instancesSetIconFallback(id, cfg.name || "Instance", "green");
-      }
-
-      setStatus(`Preparing ${loader}...`);
-      await backend.loaderInstall(
-        id,
-        mcVersion,
-        loader as any,
-        loader === "fabric"
-          ? cfg.fabricLoaderVersion
-          : loader === "quilt"
-            ? cfg.quiltLoaderVersion
-            : loader === "forge"
-              ? cfg.forgeVersion
-              : loader === "neoforge"
-                ? cfg.neoforgeVersion
-                : undefined
-      );
-      await ensureFabricApiForFabricInstance(id, mcVersion, loader as LoaderKind);
-
-      if (selectedPreset !== "none") {
-        // Apply preset immediately after instance creation for predictable defaults.
-        await applyInstancePreset(id, mcVersion, loader as LoaderKind, selectedPreset);
-      }
-
-      setStatus("");
-      state.instances = await backend.instancesList();
-      await renderInstances();
-      closeModal();
+        closeModal();
+      });
       return;
     }
 
     if (modalMode === "edit" && editInstanceId) {
       // Existing instance edit flow.
-      const selectedPreset = (instancePreset.value || "none") as InstancePresetId;
-      const inst = (state.instances?.instances ?? []).find((x: any) => x.id === editInstanceId) ?? null;
-      const nextLoaderRaw = String(createLoaderType.value || inst?.loader || "fabric");
-      if (!["vanilla", "fabric", "quilt", "forge", "neoforge"].includes(nextLoaderRaw)) {
-        alert(`Unsupported loader: ${nextLoaderRaw}`);
-        return;
-      }
-      const nextLoader = nextLoaderRaw as "vanilla" | "fabric" | "quilt" | "forge" | "neoforge";
-      const nextVersion = newVersion.value || inst?.mcVersion;
-      if (!nextVersion) {
-        alert("Select a Minecraft version first.");
-        return;
-      }
-
-      let nextFabricLoaderVersion: string | undefined = undefined;
-      let nextQuiltLoaderVersion: string | undefined = undefined;
-      let nextForgeVersion: string | undefined = undefined;
-      let nextNeoForgeVersion: string | undefined = undefined;
-      if (nextLoader !== "vanilla") {
-        // Resolve loader version for edited runtime when custom value is not provided.
-        const resolved = (createLoaderVersion.value || "").trim() || (await backend.loaderPickVersion(nextLoader as any, nextVersion)) || "";
-        if (nextLoader === "fabric") nextFabricLoaderVersion = resolved;
-        if (nextLoader === "quilt") nextQuiltLoaderVersion = resolved;
-        if (nextLoader === "forge") nextForgeVersion = resolved;
-        if (nextLoader === "neoforge") nextNeoForgeVersion = resolved;
-      }
-
-      await backend.instancesUpdate(editInstanceId, {
-        name: newName.value?.trim() || "Instance",
-        mcVersion: nextVersion,
-        loader: nextLoader,
-        fabricLoaderVersion: nextFabricLoaderVersion,
-        quiltLoaderVersion: nextQuiltLoaderVersion,
-        forgeVersion: nextForgeVersion,
-        neoforgeVersion: nextNeoForgeVersion,
-        memoryMb: Number(newMem.value || 4096),
-        accountId: instanceAccount.value || null,
-        instancePreset: selectedPreset,
-        syncEnabled: modalInstanceSyncEnabled
-      });
-
-      if (selectedCreateIconPath) {
-        try {
-          await backend.instancesSetIconFromFile(
-            editInstanceId,
-            selectedCreateIconPath,
-            getSelectedIconTransformPayload()
-          );
-        } catch (err: any) {
-          appendLog(`[icon] Failed applying selected icon: ${String(err?.message ?? err)}`);
+      await withModalProgress("Saving instance", "Writing instance settings...", async (update) => {
+        const selectedPreset = (instancePreset.value || "none") as InstancePresetId;
+        const inst = (state.instances?.instances ?? []).find((x: any) => x.id === editInstanceId) ?? null;
+        const nextLoaderChoice = String(createLoaderType.value || getInstanceDisplayLoader(inst) || "fabric");
+        if (!["vanilla", "fabric", "quilt", "forge", "neoforge"].includes(nextLoaderChoice)) {
+          alert(`Unsupported loader: ${nextLoaderChoice}`);
+          return;
         }
-      } else if (clearExistingIconOnSave) {
-        await backend.instancesClearIcon(editInstanceId);
-      }
+        const nextLoader = getEffectiveRuntimeLoader(nextLoaderChoice);
+        const nextDisplayLoader = getPersistedDisplayLoader(nextLoaderChoice);
+        const nextVersion = newVersion.value || inst?.mcVersion;
+        if (!nextVersion) {
+          alert("Select a Minecraft version first.");
+          return;
+        }
 
-      setStatus(`Preparing ${nextLoader}...`);
-      await backend.loaderInstall(
-        editInstanceId,
-        nextVersion,
-        nextLoader as any,
-        nextLoader === "fabric"
-          ? nextFabricLoaderVersion
-          : nextLoader === "quilt"
-            ? nextQuiltLoaderVersion
-            : nextLoader === "forge"
-              ? nextForgeVersion
-              : nextLoader === "neoforge"
-                ? nextNeoForgeVersion
-                : undefined
-      );
-      await ensureFabricApiForFabricInstance(editInstanceId, nextVersion, nextLoader as LoaderKind);
+        let nextFabricLoaderVersion: string | undefined = undefined;
+        let nextQuiltLoaderVersion: string | undefined = undefined;
+        let nextForgeVersion: string | undefined = undefined;
+        let nextNeoForgeVersion: string | undefined = undefined;
+        if (nextLoader !== "vanilla") {
+          update?.(`Resolving ${nextLoader} loader...`);
+          const resolved = (createLoaderVersion.value || "").trim() || (await backend.loaderPickVersion(nextLoader as any, nextVersion)) || "";
+          if (nextLoader === "fabric") nextFabricLoaderVersion = resolved;
+          if (nextLoader === "quilt") nextQuiltLoaderVersion = resolved;
+          if (nextLoader === "forge") nextForgeVersion = resolved;
+          if (nextLoader === "neoforge") nextNeoForgeVersion = resolved;
+        }
 
-      if (inst && selectedPreset !== "none") {
-        await applyInstancePreset(editInstanceId, nextVersion, nextLoader as LoaderKind, selectedPreset);
-      }
-      setStatus("");
-      state.instances = await backend.instancesList();
-      await renderInstances();
-      closeModal();
+        await backend.instancesUpdate(editInstanceId, {
+          name: newName.value?.trim() || "Instance",
+          mcVersion: nextVersion,
+          loader: nextLoader,
+          displayLoader: nextDisplayLoader,
+          fabricLoaderVersion: nextFabricLoaderVersion,
+          quiltLoaderVersion: nextQuiltLoaderVersion,
+          forgeVersion: nextForgeVersion,
+          neoforgeVersion: nextNeoForgeVersion,
+          memoryMb: Number(newMem.value || 4096),
+          accountId: instanceAccount.value || null,
+          instancePreset: selectedPreset,
+          syncEnabled: modalInstanceSyncEnabled
+        });
+
+        if (selectedCreateIconPath) {
+          update?.("Applying icon...");
+          try {
+            await backend.instancesSetIconFromFile(
+              editInstanceId,
+              selectedCreateIconPath,
+              getSelectedIconTransformPayload()
+            );
+          } catch (err: any) {
+            appendLog(`[icon] Failed applying selected icon: ${String(err?.message ?? err)}`);
+          }
+        } else if (clearExistingIconOnSave) {
+          await backend.instancesClearIcon(editInstanceId);
+        }
+
+        update?.(`Preparing ${nextLoader} runtime...`);
+        setStatus(`Preparing ${nextLoader}...`);
+        await backend.loaderInstall(
+          editInstanceId,
+          nextVersion,
+          nextLoader as any,
+          nextLoader === "fabric"
+            ? nextFabricLoaderVersion
+            : nextLoader === "quilt"
+              ? nextQuiltLoaderVersion
+              : nextLoader === "forge"
+                ? nextForgeVersion
+                : nextLoader === "neoforge"
+                  ? nextNeoForgeVersion
+                  : undefined
+        );
+        await ensureFabricApiForFabricInstance(editInstanceId, nextVersion, nextLoader as LoaderKind);
+
+        if (inst && selectedPreset !== "none") {
+          update?.("Applying preset...");
+          await applyInstancePreset(editInstanceId, nextVersion, nextLoader as LoaderKind, selectedPreset);
+        }
+        update?.("Refreshing library...");
+        setStatus("");
+        state.instances = await backend.instancesList();
+        await renderInstances();
+        closeModal();
+      });
     }
   });
 
@@ -9547,8 +9971,3 @@ if (window.matchMedia) {
     media.addListener(rerenderThemeFromSystem);
   }
 }
-
-
-
-
-

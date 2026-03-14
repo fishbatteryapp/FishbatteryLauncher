@@ -85,6 +85,12 @@ const phase4Commands: Record<string, (...args: unknown[]) => Promise<unknown>> =
   instancesOpenFolder: (id: string) => invoke("instances_open_folder", { id }),
   instancesExport: (id: string) => invoke("instances_export", { id }),
   instancesImport: () => invoke("instances_import"),
+  externalProfilesList: (source: "modrinth" | "curseforge") => invoke("external_profiles_list", { source }),
+  externalProfileImport: (
+    source: "modrinth" | "curseforge",
+    profileId: string,
+    defaults?: { name?: string; accountId?: string | null; memoryMb?: number }
+  ) => invoke("external_profile_import", { source, profileId, defaults }),
   instancesPickIcon: () => invoke("instances_pick_icon"),
   instancesPreviewIconDataUrl: (iconToken: string) => invoke("instances_preview_icon_data_url", { iconToken }),
   instancesSetIconFromFile: (instanceId: string, iconToken: string, transform?: unknown) =>

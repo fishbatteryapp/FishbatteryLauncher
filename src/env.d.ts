@@ -392,6 +392,47 @@ declare global {
           }
         | { ok: false; canceled: true }
       >;
+      externalProfilesList: (source: "modrinth" | "curseforge") => Promise<{
+        ok: true;
+        source: string;
+        root: string;
+        found: boolean;
+        profiles: any[];
+      }>;
+      externalProfileImport: (
+        source: "modrinth" | "curseforge",
+        profileId: string,
+        defaults?: { name?: string; accountId?: string | null; memoryMb?: number }
+      ) => Promise<{
+        ok: true;
+        source: string;
+        instance: any;
+        profile: { id: string; name: string; path: string };
+      }>;
+      instancesImportInto: (instanceId: string) => Promise<
+        | {
+            ok: true;
+            canceled: false;
+            instance: any;
+            lockfileApplied: boolean;
+            lockfileResult: {
+              appliedMods: number;
+              appliedPacks: number;
+              issues: string[];
+              drift: {
+                clean: boolean;
+                checkedAt: string;
+                issues: Array<{
+                  id: string;
+                  category: "mod" | "pack";
+                  severity: "warning" | "critical";
+                  message: string;
+                }>;
+              };
+            } | null;
+          }
+        | { ok: false; canceled: true }
+      >;
       modrinthPacksSearch: (
         query: string,
         limit?: number
@@ -522,6 +563,21 @@ declare global {
           memoryMb?: number;
         };
       }) => Promise<
+        | {
+            ok: true;
+            canceled: false;
+            result: {
+              instance: any;
+              detectedFormat: "modrinth" | "curseforge" | "generic";
+              notes: string[];
+            };
+          }
+        | { ok: false; canceled: true }
+      >;
+      packArchiveApplyToInstance: (
+        instanceId: string,
+        payload: { provider: "auto" | "curseforge" | "technic" | "atlauncher" | "ftb" }
+      ) => Promise<
         | {
             ok: true;
             canceled: false;

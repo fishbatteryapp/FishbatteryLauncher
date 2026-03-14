@@ -2572,7 +2572,9 @@ pub async fn launch(
     fs::copy(&selected_cape, &dest).map_err(into_error)?;
     let dest_text = dest.to_string_lossy().to_string();
     runtime_jvm_args.push(format!("-Dfishbattery.cape.path={dest_text}"));
+    runtime_jvm_args.push(format!("-Dfishbattery.launcherPlayer.uuid={auth_uuid}"));
     let _ = emit_launch_log(&window, format!("[capes] Injected launcher cape: {dest_text}"));
+    let _ = emit_launch_log(&window, format!("[capes] Bound launcher cape to local player UUID: {auth_uuid}"));
     let sig_path = selected_cape.with_extension(format!(
       "{}.sig",
       selected_cape.extension().and_then(|x| x.to_str()).unwrap_or("")

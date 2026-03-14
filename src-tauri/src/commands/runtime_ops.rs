@@ -7,6 +7,7 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
 use rfd::FileDialog;
+use rusqlite::Connection;
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -189,6 +190,138 @@ fn write_db(app: &tauri::AppHandle, db: &Value) -> AppResult<()> {
   Ok(())
 }
 
+fn syncable_instance_entries(db: &Value) -> Vec<Value> {
+  db.get("instances")
+    .and_then(|v| v.as_array())
+    .cloned()
+    .unwrap_or_default()
+    .into_iter()
+    .filter(|item| item.is_object())
+    .filter(|item| item.get("syncEnabled").and_then(|v| v.as_bool()).unwrap_or(true))
+    .collect::<Vec<_>>()
+}
+
+#[command]
+pub fn instances_sync_export(app: tauri::AppHandle) -> AppResult<Value> {
+  let db = read_db(&app)?;
+  let sync_instances = syncable_instance_entries(&db);
+
+  let mut mods_state = serde_json::Map::<String, Value>::new();
+  let mut packs_state = serde_json::Map::<String, Value>::new();
+
+  for inst in &sync_instances {
+    let Some(id) = inst.get("id").and_then(|v| v.as_str()) else {
+      continue;
+    };
+    mods_state.insert(
+      id.to_string(),
+      read_json_file(&mods_state_path(&app, id)?, json!({ "enabled": {}, "resolved": {} })),
+    );
+    packs_state.insert(
+      id.to_string(),
+      read_json_file(&packs_state_path(&app, id)?, json!({ "enabled": {}, "resolved": {} })),
+    );
+  }
+
+  let active_instance_id = db
+    .get("activeInstanceId")
+    .and_then(|v| v.as_str())
+    .map(|s| s.to_string())
+    .filter(|id| sync_instances.iter().any(|inst| inst.get("id").and_then(|v| v.as_str()) == Some(id.as_str())));
+
+  Ok(json!({
+    "activeInstanceId": active_instance_id,
+    "instances": sync_instances,
+    "modsStateByInstance": mods_state,
+    "packsStateByInstance": packs_state,
+    "updatedAt": db.get("updatedAt").cloned().unwrap_or_else(|| json!(now_ms()))
+  }))
+}
+
+#[command]
+pub fn instances_sync_import(app: tauri::AppHandle, payload: Value) -> AppResult<Value> {
+  let mut current = read_db(&app)?;
+  let local_unsynced = current
+    .get("instances")
+    .and_then(|v| v.as_array())
+    .cloned()
+    .unwrap_or_default()
+    .into_iter()
+    .filter(|item| item.is_object())
+    .filter(|item| !item.get("syncEnabled").and_then(|v| v.as_bool()).unwrap_or(true))
+    .collect::<Vec<_>>();
+
+  let remote_instances = payload
+    .get("instances")
+    .and_then(|v| v.as_array())
+    .cloned()
+    .unwrap_or_default()
+    .into_iter()
+    .filter(|item| item.is_object())
+    .map(|mut item| {
+      item["syncEnabled"] = json!(item.get("syncEnabled").and_then(|v| v.as_bool()).unwrap_or(true));
+      item
+    })
+    .collect::<Vec<_>>();
+
+  let remote_ids = remote_instances
+    .iter()
+    .filter_map(|item| item.get("id").and_then(|v| v.as_str()).map(|s| s.to_string()))
+    .collect::<HashSet<_>>();
+
+  let mut combined = remote_instances;
+  combined.extend(local_unsynced);
+  current["instances"] = Value::Array(combined);
+
+  let requested_active = payload
+    .get("activeInstanceId")
+    .and_then(|v| v.as_str())
+    .map(|s| s.to_string());
+  let local_active = current
+    .get("activeInstanceId")
+    .and_then(|v| v.as_str())
+    .map(|s| s.to_string());
+  let combined_ids = current
+    .get("instances")
+    .and_then(|v| v.as_array())
+    .cloned()
+    .unwrap_or_default()
+    .into_iter()
+    .filter_map(|item| item.get("id").and_then(|v| v.as_str()).map(|s| s.to_string()))
+    .collect::<HashSet<_>>();
+
+  let next_active = requested_active
+    .filter(|id| combined_ids.contains(id))
+    .or_else(|| local_active.filter(|id| combined_ids.contains(id)))
+    .or_else(|| combined_ids.iter().next().cloned());
+  current["activeInstanceId"] = next_active.map(Value::String).unwrap_or(Value::Null);
+  current["updatedAt"] = json!(payload.get("updatedAt").and_then(|v| v.as_u64()).unwrap_or_else(now_ms));
+  current = normalize_db(current);
+  write_db(&app, &current)?;
+
+  let mods_by_instance = payload
+    .get("modsStateByInstance")
+    .and_then(|v| v.as_object())
+    .cloned()
+    .unwrap_or_default();
+  let packs_by_instance = payload
+    .get("packsStateByInstance")
+    .and_then(|v| v.as_object())
+    .cloned()
+    .unwrap_or_default();
+
+  for id in &remote_ids {
+    if let Some(value) = mods_by_instance.get(id) {
+      write_json_file(&mods_state_path(&app, id)?, value)?;
+    }
+    if let Some(value) = packs_by_instance.get(id) {
+      write_json_file(&packs_state_path(&app, id)?, value)?;
+    }
+  }
+
+  Ok(current)
+}
+
 fn instance_dir(app: &tauri::AppHandle, id: &str) -> AppResult<PathBuf> {
   let safe = validate_id(id)?;
   Ok(instances_root(app)?.join(safe))
@@ -203,6 +336,345 @@ fn copy_dir_recursive(src: &Path, dst: &Path) -> AppResult<()> {
     if from.is_dir() {
       copy_dir_recursive(&from, &to)?;
     } else {
+      fs::copy(&from, &to).map_err(into_error)?;
+    }
+  }
+  Ok(())
+}
+
+#[derive(Clone, Debug)]
+struct ExternalProfileMeta {
+  name: String,
+  mc_version: Option<String>,
+  loader: String,
+  loader_version: Option<String>,
+  icon_path: Option<PathBuf>,
+  content_root: PathBuf,
+}
+
+fn roaming_root() -> Option<PathBuf> {
+  std::env::var_os("APPDATA").map(PathBuf::from).or_else(|| {
+    dirs_home_dir().map(|home| home.join("AppData").join("Roaming"))
+  })
+}
+
+fn dirs_home_dir() -> Option<PathBuf> {
+  std::env::var_os("USERPROFILE")
+    .map(PathBuf::from)
+    .or_else(|| std::env::var_os("HOME").map(PathBuf::from))
+}
+
+fn external_profiles_root(source: &str) -> Option<PathBuf> {
+  match source {
+    "curseforge" => dirs_home_dir().map(|home| home.join("curseforge").join("minecraft").join("Instances")),
+    "modrinth" => roaming_root().map(|root| root.join("ModrinthApp").join("profiles")),
+    _ => None,
+  }
+}
+
+fn modrinth_app_db_path() -> Option<PathBuf> {
+  roaming_root().map(|root| root.join("ModrinthApp").join("app.db"))
+}
+
+fn parse_loader_from_text(raw: &str) -> (String, Option<String>) {
+  let lower = raw.trim().to_ascii_lowercase();
+  if lower.is_empty() {
+    return ("vanilla".to_string(), None);
+  }
+  let pick_version = |prefixes: &[&str]| -> Option<String> {
+    for prefix in prefixes {
+      if let Some(rest) = lower.strip_prefix(prefix) {
+        let trimmed = rest.trim_matches(['-', ' ', '_']);
+        if !trimmed.is_empty() {
+          return Some(trimmed.to_string());
+        }
+      }
+    }
+    None
+  };
+  if lower.contains("fabric") {
+    return ("fabric".to_string(), pick_version(&["fabric-loader", "fabric loader", "fabric"]));
+  }
+  if lower.contains("quilt") {
+    return ("quilt".to_string(), pick_version(&["quilt-loader", "quilt loader", "quilt"]));
+  }
+  if lower.contains("neoforge") || lower.contains("neo forge") {
+    return ("neoforge".to_string(), pick_version(&["neoforge", "neo forge"]));
+  }
+  if lower.contains("forge") {
+    return ("forge".to_string(), pick_version(&["forge"]));
+  }
+  ("vanilla".to_string(), None)
+}
+
+fn find_existing_file_case_insensitive(root: &Path, names: &[&str]) -> Option<PathBuf> {
+  let entries = fs::read_dir(root).ok()?;
+  for entry in entries.flatten() {
+    let path = entry.path();
+    if !path.is_file() {
+      continue;
+    }
+    let file_name = entry.file_name().to_string_lossy().to_ascii_lowercase();
+    if names.iter().any(|candidate| file_name == candidate.to_ascii_lowercase()) {
+      return Some(path);
+    }
+  }
+  None
+}
+
+fn parse_modrinth_profile_meta(dir: &Path, fallback_name: &str) -> ExternalProfileMeta {
+  let mut name = fallback_name.to_string();
+  let mut mc_version: Option<String> = None;
+  let mut loader = "vanilla".to_string();
+  let mut loader_version: Option<String> = None;
+  let folder_name = dir
+    .file_name()
+    .map(|v| v.to_string_lossy().to_string())
+    .unwrap_or_else(|| fallback_name.to_string());
+  let normalized_dir = dir
+    .canonicalize()
+    .unwrap_or_else(|_| dir.to_path_buf())
+    .to_string_lossy()
+    .replace('\\', "/")
+    .to_ascii_lowercase();
+
+  if let Some(db_path) = modrinth_app_db_path().filter(|p| p.exists()) {
+    if let Ok(conn) = Connection::open(db_path) {
+      if let Ok(mut stmt) = conn.prepare(
+        "SELECT name, game_version, mod_loader, mod_loader_version, icon_path, path FROM profiles"
+      ) {
+        if let Ok(rows) = stmt.query_map([], |row| {
+          Ok((
+            row.get::<_, String>(0).ok(),
+            row.get::<_, String>(1).ok(),
+            row.get::<_, String>(2).ok(),
+            row.get::<_, String>(3).ok(),
+            row.get::<_, String>(4).ok(),
+            row.get::<_, String>(5).ok(),
+          ))
+        }) {
+          for row in rows.flatten() {
+            let db_path_raw = row
+              .5
+              .unwrap_or_default();
+            let db_path = db_path_raw
+              .replace('\\', "/")
+              .to_ascii_lowercase();
+            let db_folder_name = Path::new(&db_path_raw)
+              .file_name()
+              .map(|v| v.to_string_lossy().to_string())
+              .unwrap_or_else(|| db_path_raw.clone());
+            let matches_profile = db_path == normalized_dir
+              || db_path == folder_name.to_ascii_lowercase()
+              || db_folder_name.eq_ignore_ascii_case(&folder_name);
+            if !matches_profile {
+              continue;
+            }
+            if let Some(v) = row.0.map(|s| s.trim().to_string()).filter(|s| !s.is_empty()) {
+              name = v;
+            }
+            mc_version = row.1.map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).or(mc_version);
+            if let Some(loader_raw) = row.2.as_deref() {
+              let (parsed_loader, parsed_loader_version) = parse_loader_from_text(loader_raw);
+              loader = parsed_loader;
+              loader_version = row
+                .3
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .or(parsed_loader_version)
+                .or(loader_version);
+            }
+            let icon_path = row
+              .4
+              .map(PathBuf::from)
+              .filter(|p| p.exists());
+            return ExternalProfileMeta {
+              name,
+              mc_version,
+              loader,
+              loader_version,
+              icon_path: icon_path.or_else(|| {
+                find_existing_file_case_insensitive(dir, &["icon.png", "icon.jpg", "icon.jpeg", "icon.webp"])
+              }),
+              content_root: dir.to_path_buf(),
+            };
+          }
+        }
+      }
+    }
+  }
+
+  let profile_json_path = dir.join("profile.json");
+  if let Ok(raw) = fs::read_to_string(&profile_json_path) {
+    if let Ok(v) = serde_json::from_str::<Value>(&raw) {
+      name = v
+        .get("name")
+        .and_then(|x| x.as_str())
+        .map(str::trim)
+        .filter(|x| !x.is_empty())
+        .map(str::to_string)
+        .or_else(|| {
+          v.get("metadata")
+            .and_then(|m| m.get("name"))
+            .and_then(|x| x.as_str())
+            .map(str::trim)
+            .filter(|x| !x.is_empty())
+            .map(str::to_string)
+        })
+        .unwrap_or(name);
+      mc_version = v
+        .get("game_version")
+        .and_then(|x| x.as_str())
+        .map(str::trim)
+        .filter(|x| !x.is_empty())
+        .map(str::to_string)
+        .or_else(|| {
+          v.get("gameVersion")
+            .and_then(|x| x.as_str())
+            .map(str::trim)
+            .filter(|x| !x.is_empty())
+            .map(str::to_string)
+        })
+        .or_else(|| {
+          v.get("metadata")
+            .and_then(|m| m.get("game_version"))
+            .and_then(|x| x.as_str())
+            .map(str::trim)
+            .filter(|x| !x.is_empty())
+            .map(str::to_string)
+        });
+      let loader_text = v
+        .get("loader")
+        .and_then(|x| x.as_str())
+        .or_else(|| v.get("metadata").and_then(|m| m.get("loader")).and_then(|x| x.as_str()))
+        .unwrap_or("");
+      let (parsed_loader, parsed_loader_version) = parse_loader_from_text(loader_text);
+      loader = parsed_loader;
+      loader_version = parsed_loader_version.or_else(|| {
+        v.get("loader_version")
+          .and_then(|x| x.as_str())
+          .map(str::trim)
+          .filter(|x| !x.is_empty())
+          .map(str::to_string)
+          .or_else(|| {
+            v.get("loaderVersion")
+              .and_then(|x| x.as_str())
+              .map(str::trim)
+              .filter(|x| !x.is_empty())
+              .map(str::to_string)
+          })
+      });
+    }
+  }
+
+  ExternalProfileMeta {
+    name,
+    mc_version,
+    loader,
+    loader_version,
+    icon_path: find_existing_file_case_insensitive(dir, &["icon.png", "icon.jpg", "icon.jpeg", "icon.webp"]),
+    content_root: dir.to_path_buf(),
+  }
+}
+
+fn parse_curseforge_profile_meta(dir: &Path, fallback_name: &str) -> ExternalProfileMeta {
+  let mut name = fallback_name.to_string();
+  let mut mc_version: Option<String> = None;
+  let mut loader = "vanilla".to_string();
+  let mut loader_version: Option<String> = None;
+  let manifest_path = dir.join("minecraftinstance.json");
+  if let Ok(raw) = fs::read_to_string(&manifest_path) {
+    if let Ok(v) = serde_json::from_str::<Value>(&raw) {
+      name = v
+        .get("name")
+        .and_then(|x| x.as_str())
+        .map(str::trim)
+        .filter(|x| !x.is_empty())
+        .map(str::to_string)
+        .unwrap_or(name);
+      mc_version = v
+        .get("gameVersion")
+        .and_then(|x| x.as_str())
+        .map(str::trim)
+        .filter(|x| !x.is_empty())
+        .map(str::to_string);
+      if let Some(loader_raw) = v
+        .get("baseModLoader")
+        .and_then(|x| x.as_object())
+        .and_then(|obj| {
+          obj.get("name")
+            .and_then(|x| x.as_str())
+            .or_else(|| obj.get("forgeVersion").and_then(|x| x.as_str()))
+            .or_else(|| obj.get("mavenVersionString").and_then(|x| x.as_str()))
+        })
+        .or_else(|| v.get("baseModLoader").and_then(|x| x.as_str()))
+      {
+        let (parsed_loader, parsed_loader_version) = parse_loader_from_text(loader_raw);
+        loader = parsed_loader;
+        loader_version = parsed_loader_version;
+      }
+      if loader == "vanilla" {
+        if let Some(arr) = v.get("installedModpack").and_then(|x| x.get("gameVersion")).and_then(|x| x.as_array()) {
+          let game_versions = arr
+            .iter()
+            .filter_map(|x| x.as_str().map(str::to_string))
+            .collect::<Vec<_>>();
+          if mc_version.is_none() {
+            mc_version = detect_mc_from_curseforge_versions(&game_versions);
+          }
+          loader = detect_loader_from_curseforge_versions(&game_versions);
+        }
+      }
+    }
+  }
+
+  let content_root = if dir.join(".minecraft").is_dir() {
+    dir.join(".minecraft")
+  } else {
+    dir.to_path_buf()
+  };
+  ExternalProfileMeta {
+    name,
+    mc_version,
+    loader,
+    loader_version,
+    icon_path: find_existing_file_case_insensitive(dir, &["thumbnail.png", "icon.png", "icon.jpg", "icon.jpeg", "icon.webp"]),
+    content_root,
+  }
+}
+
+fn read_external_profile_meta(source: &str, dir: &Path, fallback_name: &str) -> ExternalProfileMeta {
+  match source {
+    "curseforge" => parse_curseforge_profile_meta(dir, fallback_name),
+    "modrinth" => parse_modrinth_profile_meta(dir, fallback_name),
+    _ => ExternalProfileMeta {
+      name: fallback_name.to_string(),
+      mc_version: None,
+      loader: "vanilla".to_string(),
+      loader_version: None,
+      icon_path: None,
+      content_root: dir.to_path_buf(),
+    },
+  }
+}
+
+fn copy_profile_content_recursive(src: &Path, dst: &Path) -> AppResult<()> {
+  fs::create_dir_all(dst).map_err(into_error)?;
+  let skip_names = ["profile.json", "minecraftinstance.json", "manifest.json", "modrinth.index.json"];
+  for entry in fs::read_dir(src).map_err(into_error)? {
+    let entry = entry.map_err(into_error)?;
+    let from = entry.path();
+    let name = entry.file_name().to_string_lossy().to_string();
+    if skip_names.iter().any(|skip| name.eq_ignore_ascii_case(skip)) {
+      continue;
+    }
+    let to = dst.join(&name);
+    if from.is_dir() {
+      copy_profile_content_recursive(&from, &to)?;
+    } else {
+      if let Some(parent) = to.parent() {
+        fs::create_dir_all(parent).map_err(into_error)?;
+      }
       fs::copy(&from, &to).map_err(into_error)?;
     }
   }
@@ -850,6 +1322,7 @@ pub fn instances_export(app: tauri::AppHandle, id: String) -> AppResult<Value> {
       "name": inst.get("name").cloned().unwrap_or(json!("Instance")),
       "mcVersion": inst.get("mcVersion").cloned().unwrap_or(json!("1.21.1")),
       "loader": inst.get("loader").cloned().unwrap_or(json!("fabric")),
+      "displayLoader": inst.get("displayLoader").cloned().unwrap_or(Value::Null),
       "memoryMb": inst.get("memoryMb").cloned().unwrap_or(json!(4096)),
       "fabricLoaderVersion": inst.get("fabricLoaderVersion").cloned().unwrap_or(Value::Null),
       "quiltLoaderVersion": inst.get("quiltLoaderVersion").cloned().unwrap_or(Value::Null),
@@ -894,14 +1367,51 @@ pub fn instances_export(app: tauri::AppHandle, id: String) -> AppResult<Value> {
 }
 
 #[command]
-pub fn instances_import(app: tauri::AppHandle) -> AppResult<Value> {
+pub async fn instances_import(app: tauri::AppHandle) -> AppResult<Value> {
   let picked = FileDialog::new()
     .set_title("Import Instance")
-    .add_filter("Zip archive", &["zip"])
+    .add_filter("Archives", &["zip", "mrpack"])
     .pick_file();
   let Some(zip_path) = picked else {
     return Ok(json!({ "ok": false, "canceled": true }));
   };
+
+  let mut import_probe = ZipArchive::new(fs::File::open(&zip_path).map_err(into_error)?).map_err(into_error)?;
+  let mut probe_names = Vec::new();
+  for i in 0..import_probe.len() {
+    let entry = import_probe.by_index(i).map_err(into_error)?;
+    probe_names.push(entry.name().replace('\\', "/"));
+  }
+  let is_mrpack = zip_path
+    .extension()
+    .and_then(|v| v.to_str())
+    .map(|v| v.eq_ignore_ascii_case("mrpack"))
+    .unwrap_or(false);
+  let has_modrinth_index = probe_names.iter().any(|n| n == "modrinth.index.json");
+  if is_mrpack || has_modrinth_index {
+    let imported = import_pack_archive_from_path(app.clone(), zip_path.clone(), json!({ "provider": "auto", "defaults": {} })).await?;
+    return Ok(json!({
+      "ok": true,
+      "canceled": false,
+      "instance": imported
+        .get("result")
+        .and_then(|v| v.get("instance"))
+        .cloned()
+        .unwrap_or(Value::Null),
+      "lockfileApplied": false,
+      "lockfileResult": Value::Null,
+      "detectedFormat": imported
+        .get("result")
+        .and_then(|v| v.get("detectedFormat"))
+        .cloned()
+        .unwrap_or(Value::Null),
+      "notes": imported
+        .get("result")
+        .and_then(|v| v.get("notes"))
+        .cloned()
+        .unwrap_or_else(|| json!([]))
+    }));
+  }
 
   let mut archive = ZipArchive::new(fs::File::open(&zip_path).map_err(into_error)?).map_err(into_error)?;
   let mut manifest_value: Value = json!({});
@@ -934,6 +1444,7 @@ pub fn instances_import(app: tauri::AppHandle) -> AppResult<Value> {
       "name": new_name,
       "mcVersion": manifest_instance.get("mcVersion").cloned().unwrap_or(json!("1.21.1")),
       "loader": manifest_instance.get("loader").cloned().unwrap_or(json!("fabric")),
+      "displayLoader": manifest_instance.get("displayLoader").cloned().unwrap_or(Value::Null),
       "memoryMb": manifest_instance.get("memoryMb").cloned().unwrap_or(json!(4096)),
       "fabricLoaderVersion": manifest_instance.get("fabricLoaderVersion").cloned().unwrap_or(Value::Null),
       "quiltLoaderVersion": manifest_instance.get("quiltLoaderVersion").cloned().unwrap_or(Value::Null),
@@ -1000,6 +1511,310 @@ pub fn instances_import(app: tauri::AppHandle) -> AppResult<Value> {
     "ok": true,
     "canceled": false,
     "instance": created,
+    "lockfileApplied": lockfile_applied,
+    "lockfileResult": lockfile_result
+  }))
+}
+
+#[command]
+pub fn external_profiles_list(source: String) -> AppResult<Value> {
+  let source_norm = source.trim().to_ascii_lowercase();
+  let Some(root) = external_profiles_root(&source_norm) else {
+    return Err("external_profiles_list: unsupported source".to_string());
+  };
+  if !root.exists() {
+    return Ok(json!({
+      "ok": true,
+      "source": source_norm,
+      "root": root.to_string_lossy().to_string(),
+      "found": false,
+      "profiles": []
+    }));
+  }
+
+  let mut profiles = Vec::new();
+  for entry in fs::read_dir(&root).map_err(into_error)? {
+    let entry = entry.map_err(into_error)?;
+    let path = entry.path();
+    if !path.is_dir() {
+      continue;
+    }
+    let folder_name = entry.file_name().to_string_lossy().to_string();
+    let meta = read_external_profile_meta(&source_norm, &path, &folder_name);
+    let modified = fs::metadata(&path)
+      .ok()
+      .and_then(|m| m.modified().ok())
+      .and_then(|ts| ts.duration_since(UNIX_EPOCH).ok())
+      .map(|d| d.as_millis() as u64);
+    profiles.push(json!({
+      "id": folder_name,
+      "name": meta.name,
+      "path": path.to_string_lossy().to_string(),
+      "mcVersion": meta.mc_version,
+      "loader": meta.loader,
+      "loaderVersion": meta.loader_version,
+      "iconPath": meta.icon_path.map(|p| p.to_string_lossy().to_string()),
+      "lastModified": modified
+    }));
+  }
+  profiles.sort_by(|a, b| {
+    let a_ts = a.get("lastModified").and_then(|v| v.as_u64()).unwrap_or(0);
+    let b_ts = b.get("lastModified").and_then(|v| v.as_u64()).unwrap_or(0);
+    b_ts.cmp(&a_ts)
+  });
+
+  Ok(json!({
+    "ok": true,
+    "source": source_norm,
+    "root": root.to_string_lossy().to_string(),
+    "found": true,
+    "profiles": profiles
+  }))
+}
+
+#[command]
+pub async fn external_profile_import(
+  app: tauri::AppHandle,
+  source: String,
+  profile_id: String,
+  defaults: Option<Value>,
+) -> AppResult<Value> {
+  let source_norm = source.trim().to_ascii_lowercase();
+  let profile_key = profile_id.trim();
+  if profile_key.is_empty() {
+    return Err("external_profile_import: profile id missing".to_string());
+  }
+  let Some(root) = external_profiles_root(&source_norm) else {
+    return Err("external_profile_import: unsupported source".to_string());
+  };
+  let src_dir = root.join(profile_key);
+  if !src_dir.is_dir() {
+    return Err("external_profile_import: profile folder not found".to_string());
+  }
+
+  let defaults = defaults.unwrap_or_else(|| json!({}));
+  let profile_meta = read_external_profile_meta(&source_norm, &src_dir, profile_key);
+  let db = read_db(&app)?;
+  let desired_name = defaults
+    .get("name")
+    .and_then(|v| v.as_str())
+    .map(str::trim)
+    .filter(|v| !v.is_empty())
+    .map(str::to_string)
+    .unwrap_or_else(|| profile_meta.name.clone());
+  let unique_name = unique_instance_name(&db, &desired_name);
+  let mc_version = profile_meta.mc_version.clone().unwrap_or_else(|| "1.21.1".to_string());
+  let loader = profile_meta.loader.clone();
+  let new_id = format!("{}-profile-{}", source_norm, now_ms());
+  let mut cfg = json!({
+    "id": new_id,
+    "name": unique_name,
+    "accountId": defaults.get("accountId").cloned().unwrap_or(Value::Null),
+    "mcVersion": mc_version,
+    "loader": loader,
+    "memoryMb": defaults.get("memoryMb").and_then(|v| v.as_u64()).unwrap_or(4096),
+    "instancePreset": "none",
+    "jvmArgsOverride": Value::Null,
+    "syncEnabled": true
+  });
+  if loader != "vanilla" {
+    let resolved = if let Some(v) = profile_meta.loader_version.clone() {
+      Some(v)
+    } else {
+      loader_pick_version(loader.clone(), mc_version.clone()).await?
+    };
+    match loader.as_str() {
+      "fabric" => cfg["fabricLoaderVersion"] = json!(resolved),
+      "quilt" => cfg["quiltLoaderVersion"] = json!(resolved),
+      "forge" => cfg["forgeVersion"] = json!(resolved),
+      "neoforge" => cfg["neoforgeVersion"] = json!(resolved),
+      _ => {}
+    }
+  }
+
+  let created = instances_create(app.clone(), cfg.clone())?;
+  let created_id = created
+    .get("id")
+    .and_then(|v| v.as_str())
+    .ok_or_else(|| "external_profile_import: missing created instance id".to_string())?
+    .to_string();
+  let out_root = instance_dir(&app, &created_id)?;
+  copy_profile_content_recursive(&profile_meta.content_root, &out_root)?;
+
+  if let Some(icon_path) = profile_meta.icon_path.as_ref() {
+    let _ = instances_set_icon_from_file(
+      app.clone(),
+      created_id.clone(),
+      icon_path.to_string_lossy().to_string(),
+      None,
+    );
+  } else {
+    let _ = instances_set_icon_fallback(
+      app.clone(),
+      created_id.clone(),
+      unique_name.clone(),
+      Some(if source_norm == "curseforge" { "orange".to_string() } else { "blue".to_string() }),
+    );
+  }
+
+  let _ = loader_install(
+    app.clone(),
+    created_id.clone(),
+    mc_version.clone(),
+    loader.clone(),
+    if loader == "fabric" {
+      cfg.get("fabricLoaderVersion").and_then(|v| v.as_str()).map(str::to_string)
+    } else if loader == "quilt" {
+      cfg.get("quiltLoaderVersion").and_then(|v| v.as_str()).map(str::to_string)
+    } else if loader == "forge" {
+      cfg.get("forgeVersion").and_then(|v| v.as_str()).map(str::to_string)
+    } else if loader == "neoforge" {
+      cfg.get("neoforgeVersion").and_then(|v| v.as_str()).map(str::to_string)
+    } else {
+      None
+    },
+  )
+  .await?;
+
+  Ok(json!({
+    "ok": true,
+    "source": source_norm,
+    "instance": created,
+    "profile": {
+      "id": profile_key,
+      "name": profile_meta.name,
+      "path": src_dir.to_string_lossy().to_string()
+    }
+  }))
+}
+
+fn find_instance_record(app: &tauri::AppHandle, instance_id: &str) -> AppResult<Value> {
+  let safe_id = validate_id(instance_id)?;
+  let db = read_db(app)?;
+  db
+    .get("instances")
+    .and_then(|v| v.as_array())
+    .and_then(|items| {
+      items
+        .iter()
+        .find(|it| it.get("id").and_then(|v| v.as_str()) == Some(safe_id.as_str()))
+        .cloned()
+    })
+    .ok_or_else(|| "Instance not found".to_string())
+}
+
+fn extract_imported_instance_archive(
+  archive: &mut ZipArchive<fs::File>,
+  out_dir: &Path,
+) -> AppResult<(bool, Option<String>)> {
+  let mut imported_lockfile_raw: Option<String> = None;
+  let mut extracted_any = false;
+
+  for i in 0..archive.len() {
+    let mut entry = archive.by_index(i).map_err(into_error)?;
+    if !entry.is_file() {
+      continue;
+    }
+    let name = entry.name().to_string();
+    if name == "instance.lock.json" || name == "instance/instance.lock.json" {
+      let mut raw = String::new();
+      entry.read_to_string(&mut raw).map_err(into_error)?;
+      imported_lockfile_raw = Some(raw);
+      continue;
+    }
+    if !name.starts_with("instance/") {
+      continue;
+    }
+    let rel = &name["instance/".len()..];
+    if !is_safe_relative_archive_path(rel) {
+      continue;
+    }
+    let target = out_dir.join(rel);
+    if let Some(parent) = target.parent() {
+      fs::create_dir_all(parent).map_err(into_error)?;
+    }
+    let mut out = fs::File::create(&target).map_err(into_error)?;
+    std::io::copy(&mut entry, &mut out).map_err(into_error)?;
+    extracted_any = true;
+  }
+
+  Ok((extracted_any, imported_lockfile_raw))
+}
+
+fn lockfile_apply_result() -> Value {
+  json!({
+    "appliedMods": 0,
+    "appliedPacks": 0,
+    "issues": [],
+    "drift": {
+      "clean": true,
+      "checkedAt": chrono_like_now_iso(),
+      "issues": []
+    }
+  })
+}
+
+#[command]
+pub fn instances_import_into(app: tauri::AppHandle, instance_id: String) -> AppResult<Value> {
+  let safe_id = validate_id(&instance_id)?;
+  let picked = FileDialog::new()
+    .set_title("Import Into Instance")
+    .add_filter("Zip archive", &["zip"])
+    .pick_file();
+  let Some(zip_path) = picked else {
+    return Ok(json!({ "ok": false, "canceled": true }));
+  };
+
+  let mut archive = ZipArchive::new(fs::File::open(&zip_path).map_err(into_error)?).map_err(into_error)?;
+  let mut manifest_value: Value = json!({});
+  if let Ok(mut mf) = archive.by_name("manifest.json") {
+    let mut raw = String::new();
+    mf.read_to_string(&mut raw).map_err(into_error)?;
+    manifest_value = serde_json::from_str(&raw).unwrap_or_else(|_| json!({}));
+  }
+  let manifest_instance = manifest_value.get("instance").cloned().unwrap_or_else(|| json!({}));
+
+  let out_dir = instance_dir(&app, &safe_id)?;
+  let (extracted_any, imported_lockfile_raw) = extract_imported_instance_archive(&mut archive, &out_dir)?;
+  if !extracted_any {
+    return Err("instances:import_into: archive has no instance files".to_string());
+  }
+
+  let mut lockfile_applied = false;
+  let mut lockfile_result = Value::Null;
+  if let Some(raw) = imported_lockfile_raw {
+    let target_lockfile = lockfile_path(&app, &safe_id)?;
+    write_json_file(&target_lockfile, &serde_json::from_str::<Value>(&raw).unwrap_or_else(|_| json!({})))?;
+    lockfile_applied = true;
+    lockfile_result = lockfile_apply_result();
+  }
+
+  let mut patch = serde_json::Map::new();
+  if let Some(v) = manifest_instance.get("mcVersion") {
+    patch.insert("mcVersion".to_string(), v.clone());
+  }
+  if let Some(v) = manifest_instance.get("memoryMb") {
+    patch.insert("memoryMb".to_string(), v.clone());
+  }
+  if manifest_instance.get("loader").is_some() {
+    patch.insert("loader".to_string(), manifest_instance.get("loader").cloned().unwrap_or(json!("vanilla")));
+    patch.insert("displayLoader".to_string(), manifest_instance.get("displayLoader").cloned().unwrap_or(Value::Null));
+    patch.insert("fabricLoaderVersion".to_string(), manifest_instance.get("fabricLoaderVersion").cloned().unwrap_or(Value::Null));
+    patch.insert("quiltLoaderVersion".to_string(), manifest_instance.get("quiltLoaderVersion").cloned().unwrap_or(Value::Null));
+    patch.insert("forgeVersion".to_string(), manifest_instance.get("forgeVersion").cloned().unwrap_or(Value::Null));
+    patch.insert("neoforgeVersion".to_string(), manifest_instance.get("neoforgeVersion").cloned().unwrap_or(Value::Null));
+  }
+
+  let instance = if patch.is_empty() {
+    find_instance_record(&app, &safe_id)?
+  } else {
+    instances_update(app.clone(), safe_id.clone(), Value::Object(patch))?
+  };
+
+  Ok(json!({
+    "ok": true,
+    "canceled": false,
+    "instance": instance,
     "lockfileApplied": lockfile_applied,
     "lockfileResult": lockfile_result
   }))
@@ -3889,6 +4704,188 @@ fn detect_mc_from_curseforge_versions(game_versions: &[String]) -> Option<String
   })
 }
 
+fn archive_entry_relative_path(entry_name: &str, detected_format: &str) -> Option<String> {
+  let normalized = entry_name.replace('\\', "/");
+  if normalized.starts_with("overrides/") {
+    return Some(normalized["overrides/".len()..].to_string());
+  }
+  if normalized.starts_with("client-overrides/") {
+    return Some(normalized["client-overrides/".len()..].to_string());
+  }
+  if normalized.starts_with("instance/") {
+    return Some(normalized["instance/".len()..].to_string());
+  }
+  if detected_format == "generic" {
+    return Some(normalized);
+  }
+
+  let lower = normalized.to_ascii_lowercase();
+  if matches!(
+    lower.as_str(),
+    "manifest.json" | "modrinth.index.json" | "modlist.html" | "modlist.txt"
+  ) {
+    return None;
+  }
+
+  let allowed_prefixes = [
+    "saves/",
+    "mods/",
+    "config/",
+    "defaultconfigs/",
+    "resourcepacks/",
+    "shaderpacks/",
+    "journeymap/",
+    "xaero/",
+    "schematics/",
+    "datapacks/",
+    "kubejs/",
+    "patchouli_books/",
+    "scripts/",
+  ];
+  if allowed_prefixes.iter().any(|prefix| lower.starts_with(prefix)) {
+    return Some(normalized);
+  }
+
+  let allowed_files = [
+    "options.txt",
+    "optionsof.txt",
+    "optionsshaders.txt",
+    "servers.dat",
+    "servers.dat_old",
+  ];
+  if allowed_files.contains(&lower.as_str()) {
+    return Some(normalized);
+  }
+
+  None
+}
+
+async fn import_modrinth_archive_dependencies(
+  out_root: &Path,
+  index: &MrpackIndex,
+) -> AppResult<usize> {
+  let client = reqwest::Client::new();
+  let mut downloaded = 0usize;
+  for f in &index.files {
+    if f.path.trim().is_empty() || !is_safe_relative_archive_path(&f.path) {
+      continue;
+    }
+    let Some(download) = f.downloads.first() else {
+      continue;
+    };
+    let bytes = client
+      .get(download)
+      .header("user-agent", MODRINTH_USER_AGENT)
+      .send()
+      .await
+      .map_err(into_error)?
+      .error_for_status()
+      .map_err(into_error)?
+      .bytes()
+      .await
+      .map_err(into_error)?;
+    let out = out_root.join(&f.path);
+    if let Some(parent) = out.parent() {
+      fs::create_dir_all(parent).map_err(into_error)?;
+    }
+    fs::write(out, &bytes).map_err(into_error)?;
+    downloaded += 1;
+  }
+  Ok(downloaded)
+}
+
+async fn import_curseforge_manifest_dependencies(
+  app: &tauri::AppHandle,
+  out_root: &Path,
+  manifest: &Value,
+) -> AppResult<usize> {
+  let files = manifest
+    .get("files")
+    .and_then(|v| v.as_array())
+    .cloned()
+    .unwrap_or_default();
+  if files.is_empty() {
+    return Ok(0);
+  }
+  let api_key = curseforge_api_key(app).ok_or_else(|| {
+    "pack archive import: missing CurseForge API key. Set FISHBATTERY_CURSEFORGE_API_KEY or create secrets/curseforge-api-key.txt".to_string()
+  })?;
+  let client = reqwest::Client::new();
+  let mods_dir = out_root.join("mods");
+  fs::create_dir_all(&mods_dir).map_err(into_error)?;
+  let mut downloaded = 0usize;
+
+  for item in files {
+    let required = item.get("required").and_then(|x| x.as_bool()).unwrap_or(true);
+    if !required {
+      continue;
+    }
+    let dep_mod_id = match item.get("projectID").and_then(|x| x.as_u64()) {
+      Some(v) => v,
+      None => continue,
+    };
+    let dep_file_id = match item.get("fileID").and_then(|x| x.as_u64()) {
+      Some(v) => v,
+      None => continue,
+    };
+    let file_detail: Value = client
+      .get(format!("https://api.curseforge.com/v1/mods/{dep_mod_id}/files/{dep_file_id}"))
+      .header("user-agent", MODRINTH_USER_AGENT)
+      .header("x-api-key", &api_key)
+      .send()
+      .await
+      .map_err(into_error)?
+      .error_for_status()
+      .map_err(into_error)?
+      .json()
+      .await
+      .map_err(into_error)?;
+    let file_data = file_detail.get("data").cloned().unwrap_or_else(|| json!({}));
+    let file_name = file_data
+      .get("fileName")
+      .and_then(|v| v.as_str())
+      .unwrap_or("mod.jar")
+      .to_string();
+    let download_url = if let Some(url) = file_data.get("downloadUrl").and_then(|v| v.as_str()) {
+      url.to_string()
+    } else {
+      let url_resp: Value = client
+        .get(format!(
+          "https://api.curseforge.com/v1/mods/{dep_mod_id}/files/{dep_file_id}/download-url"
+        ))
+        .header("user-agent", MODRINTH_USER_AGENT)
+        .header("x-api-key", &api_key)
+        .send()
+        .await
+        .map_err(into_error)?
+        .error_for_status()
+        .map_err(into_error)?
+        .json()
+        .await
+        .map_err(into_error)?;
+      match url_resp.get("data").and_then(|v| v.as_str()) {
+        Some(url) => url.to_string(),
+        None => continue,
+      }
+    };
+    let bytes = client
+      .get(download_url)
+      .header("user-agent", MODRINTH_USER_AGENT)
+      .send()
+      .await
+      .map_err(into_error)?
+      .error_for_status()
+      .map_err(into_error)?
+      .bytes()
+      .await
+      .map_err(into_error)?;
+    fs::write(mods_dir.join(file_name), &bytes).map_err(into_error)?;
+    downloaded += 1;
+  }
+
+  Ok(downloaded)
+}
+
 fn read_secret_text(path: &Path) -> Option<String> {
   let raw = fs::read_to_string(path).ok()?;
   let trimmed = raw.trim().to_string();
@@ -4069,16 +5066,11 @@ pub async fn provider_packs_search_curseforge(
   Ok(json!({ "hits": hits }))
 }
 
-#[command]
-pub async fn pack_archive_import(app: tauri::AppHandle, payload: Value) -> AppResult<Value> {
-  let picked = FileDialog::new()
-    .set_title("Import Pack Archive")
-    .add_filter("Pack archives", &["zip", "mrpack"])
-    .pick_file();
-  let Some(zip_path) = picked else {
-    return Ok(json!({ "ok": false, "canceled": true }));
-  };
-
+async fn import_pack_archive_from_path(
+  app: tauri::AppHandle,
+  zip_path: PathBuf,
+  payload: Value,
+) -> AppResult<Value> {
   let mut archive = ZipArchive::new(fs::File::open(&zip_path).map_err(into_error)?).map_err(into_error)?;
   let mut names = Vec::new();
   for i in 0..archive.len() {
@@ -4104,17 +5096,42 @@ pub async fn pack_archive_import(app: tauri::AppHandle, payload: Value) -> AppRe
     .unwrap_or_else(|| "1.21.1".to_string());
   let mut loader = "vanilla".to_string();
   let mut notes: Vec<String> = Vec::new();
+  let mut modrinth_index: Option<MrpackIndex> = None;
+  let mut curseforge_manifest: Option<Value> = None;
 
   if detected_format == "modrinth" {
     if let Ok(mut idx) = archive.by_name("modrinth.index.json") {
       let mut raw = String::new();
       idx.read_to_string(&mut raw).map_err(into_error)?;
       if let Ok(parsed) = serde_json::from_str::<Value>(&raw) {
-        if let Some(v) = parsed.get("versionId").and_then(|x| x.as_str()) {
+        if let Some(v) = parsed
+          .get("dependencies")
+          .and_then(|d| d.get("minecraft"))
+          .and_then(|x| x.as_str())
+          .or_else(|| parsed.get("versionId").and_then(|x| x.as_str()))
+        {
           mc_version = v.to_string();
         }
+        if let Some(deps) = parsed.get("dependencies").and_then(|d| d.as_object()) {
+          for candidate in ["fabric-loader", "quilt-loader", "neoforge", "forge"] {
+            if deps.get(candidate).is_some() {
+              loader = match candidate {
+                "fabric-loader" => "fabric",
+                "quilt-loader" => "quilt",
+                "neoforge" => "neoforge",
+                "forge" => "forge",
+                _ => "vanilla",
+              }
+              .to_string();
+              break;
+            }
+          }
+        }
       }
-      notes.push("Modrinth archive imported. Downloadable dependency entries may require resolver step.".to_string());
+      if let Ok(parsed_index) = serde_json::from_str::<MrpackIndex>(&raw) {
+        modrinth_index = Some(parsed_index);
+      }
+      notes.push("Modrinth archive imported with dependency resolution.".to_string());
     }
   } else if detected_format == "curseforge" {
     if let Ok(mut mf) = archive.by_name("manifest.json") {
@@ -4129,8 +5146,9 @@ pub async fn pack_archive_import(app: tauri::AppHandle, payload: Value) -> AppRe
           mc_version = v.to_string();
         }
         loader = detect_loader_from_curseforge_manifest(&manifest);
+        curseforge_manifest = Some(manifest);
       }
-      notes.push("CurseForge manifest imported. Some mod files may require provider API resolution.".to_string());
+      notes.push("CurseForge manifest imported with dependency resolution.".to_string());
     }
   } else {
     notes.push("Generic archive imported without provider metadata.".to_string());
@@ -4175,21 +5193,25 @@ pub async fn pack_archive_import(app: tauri::AppHandle, payload: Value) -> AppRe
   let created = instances_create(app.clone(), cfg)?;
 
   let out_root = instance_dir(&app, &new_id)?;
+  if let Some(index) = modrinth_index.as_ref() {
+    let downloaded = import_modrinth_archive_dependencies(&out_root, index).await?;
+    if downloaded > 0 {
+      notes.push(format!("Downloaded {downloaded} files from Modrinth archive metadata."));
+    }
+  }
+  if let Some(manifest) = curseforge_manifest.as_ref() {
+    let downloaded = import_curseforge_manifest_dependencies(&app, &out_root, manifest).await?;
+    if downloaded > 0 {
+      notes.push(format!("Downloaded {downloaded} required files from CurseForge manifest."));
+    }
+  }
   for i in 0..archive.len() {
     let mut entry = archive.by_index(i).map_err(into_error)?;
     if !entry.is_file() {
       continue;
     }
     let entry_name = entry.name().replace('\\', "/");
-    let rel_opt = if entry_name.starts_with("overrides/") {
-      Some(entry_name["overrides/".len()..].to_string())
-    } else if entry_name.starts_with("client-overrides/") {
-      Some(entry_name["client-overrides/".len()..].to_string())
-    } else if detected_format == "generic" {
-      Some(entry_name.clone())
-    } else {
-      None
-    };
+    let rel_opt = archive_entry_relative_path(&entry_name, detected_format);
     let Some(rel) = rel_opt else {
       continue;
     };
@@ -4407,6 +5429,13 @@ pub async fn modrinth_mods_search(
   let mut hits = Vec::<Value>::with_capacity(hits_in.len());
   for h in hits_in {
     let project_id = h.get("project_id").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    if project_id.trim().is_empty() {
+      continue;
+    }
+    let compatible = match resolve_latest_modrinth(&client, &project_id, mc.as_str(), Some(loader_hint.as_str())).await {
+      Ok(Some(version)) => version,
+      Ok(None) | Err(_) => continue,
+    };
     let token = sanitize_project_token(&project_id);
     hits.push(json!({
       "projectId": project_id,
@@ -4417,7 +5446,7 @@ pub async fn modrinth_mods_search(
       "downloads": h.get("downloads").and_then(|v| v.as_u64()).unwrap_or(0),
       "follows": h.get("follows").and_then(|v| v.as_u64()).unwrap_or(0),
       "dateModified": h.get("date_modified").and_then(|v| v.as_str()),
-      "latestVersionId": h.get("latest_version").and_then(|v| v.as_str()),
+      "latestVersionId": compatible.get("id").and_then(|v| v.as_str()),
       "installed": installed.contains(&token)
     }));
   }
@@ -4620,6 +5649,13 @@ pub async fn modrinth_content_search(
   let mut hits = Vec::<Value>::with_capacity(hits_in.len());
   for h in hits_in {
     let project_id = h.get("project_id").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    if project_id.trim().is_empty() {
+      continue;
+    }
+    let compatible = match resolve_latest_modrinth(&client, &project_id, mc.as_str(), None).await {
+      Ok(Some(version)) => version,
+      Ok(None) | Err(_) => continue,
+    };
     let token = sanitize_project_token(&project_id);
     hits.push(json!({
       "projectId": project_id,
@@ -4631,7 +5667,7 @@ pub async fn modrinth_content_search(
       "downloads": h.get("downloads").and_then(|v| v.as_u64()).unwrap_or(0),
       "follows": h.get("follows").and_then(|v| v.as_u64()).unwrap_or(0),
       "dateModified": h.get("date_modified").and_then(|v| v.as_str()),
-      "latestVersionId": h.get("latest_version").and_then(|v| v.as_str()),
+      "latestVersionId": compatible.get("id").and_then(|v| v.as_str()),
       "installed": installed.contains(&token)
     }));
   }
@@ -5978,6 +7014,197 @@ pub async fn modrinth_packs_install(app: tauri::AppHandle, payload: Value) -> Ap
       "versionNumber": version.version_number
     }
   }))
+}
+
+#[command]
+pub async fn pack_archive_apply_to_instance(
+  app: tauri::AppHandle,
+  instance_id: String,
+  payload: Value,
+) -> AppResult<Value> {
+  let safe_id = validate_id(&instance_id)?;
+  let picked = FileDialog::new()
+    .set_title("Import Pack Archive Into Instance")
+    .add_filter("Pack archives", &["zip", "mrpack"])
+    .pick_file();
+  let Some(zip_path) = picked else {
+    return Ok(json!({ "ok": false, "canceled": true }));
+  };
+
+  let mut archive = ZipArchive::new(fs::File::open(&zip_path).map_err(into_error)?).map_err(into_error)?;
+  let mut names = Vec::new();
+  for i in 0..archive.len() {
+    let entry = archive.by_index(i).map_err(into_error)?;
+    names.push(entry.name().replace('\\', "/"));
+  }
+
+  let has_modrinth = names.iter().any(|n| n == "modrinth.index.json");
+  let has_curseforge = names.iter().any(|n| n == "manifest.json");
+  let detected_format = if has_modrinth {
+    "modrinth"
+  } else if has_curseforge {
+    "curseforge"
+  } else {
+    "generic"
+  };
+
+  let current = find_instance_record(&app, &safe_id)?;
+  let mut mc_version = current
+    .get("mcVersion")
+    .and_then(|v| v.as_str())
+    .map(str::to_string)
+    .unwrap_or_else(|| "1.21.1".to_string());
+  let mut loader = current
+    .get("loader")
+    .and_then(|v| v.as_str())
+    .map(str::to_string)
+    .unwrap_or_else(|| "vanilla".to_string());
+  let mut notes: Vec<String> = Vec::new();
+  let mut modrinth_index: Option<MrpackIndex> = None;
+  let mut curseforge_manifest: Option<Value> = None;
+
+  if detected_format == "modrinth" {
+    if let Ok(mut idx) = archive.by_name("modrinth.index.json") {
+      let mut raw = String::new();
+      idx.read_to_string(&mut raw).map_err(into_error)?;
+      if let Ok(parsed) = serde_json::from_str::<Value>(&raw) {
+        if let Some(v) = parsed
+          .get("dependencies")
+          .and_then(|d| d.get("minecraft"))
+          .and_then(|x| x.as_str())
+        {
+          mc_version = v.to_string();
+        }
+        if let Some(deps) = parsed.get("dependencies").and_then(|d| d.as_object()) {
+          for candidate in ["fabric-loader", "quilt-loader", "neoforge", "forge"] {
+            if deps.get(candidate).is_some() {
+              loader = match candidate {
+                "fabric-loader" => "fabric",
+                "quilt-loader" => "quilt",
+                "neoforge" => "neoforge",
+                "forge" => "forge",
+                _ => "vanilla",
+              }
+              .to_string();
+              break;
+            }
+          }
+        }
+      }
+      if let Ok(parsed_index) = serde_json::from_str::<MrpackIndex>(&raw) {
+        modrinth_index = Some(parsed_index);
+      }
+      notes.push("Modrinth archive applied into the current instance with dependency resolution.".to_string());
+    }
+  } else if detected_format == "curseforge" {
+    if let Ok(mut mf) = archive.by_name("manifest.json") {
+      let mut raw = String::new();
+      mf.read_to_string(&mut raw).map_err(into_error)?;
+      if let Ok(manifest) = serde_json::from_str::<Value>(&raw) {
+        if let Some(v) = manifest
+          .get("minecraft")
+          .and_then(|x| x.get("version"))
+          .and_then(|x| x.as_str())
+        {
+          mc_version = v.to_string();
+        }
+        loader = detect_loader_from_curseforge_manifest(&manifest);
+        curseforge_manifest = Some(manifest);
+      }
+      notes.push("CurseForge manifest applied into the current instance with dependency resolution.".to_string());
+    }
+  } else {
+    notes.push("Generic archive applied into the current instance.".to_string());
+  }
+
+  let out_root = instance_dir(&app, &safe_id)?;
+  if let Some(index) = modrinth_index.as_ref() {
+    let downloaded = import_modrinth_archive_dependencies(&out_root, index).await?;
+    if downloaded > 0 {
+      notes.push(format!("Downloaded {downloaded} files from Modrinth archive metadata."));
+    }
+  }
+  if let Some(manifest) = curseforge_manifest.as_ref() {
+    let downloaded = import_curseforge_manifest_dependencies(&app, &out_root, manifest).await?;
+    if downloaded > 0 {
+      notes.push(format!("Downloaded {downloaded} required files from CurseForge manifest."));
+    }
+  }
+  let mut extracted_any = false;
+  for i in 0..archive.len() {
+    let mut entry = archive.by_index(i).map_err(into_error)?;
+    if !entry.is_file() {
+      continue;
+    }
+    let entry_name = entry.name().replace('\\', "/");
+    let rel_opt = archive_entry_relative_path(&entry_name, detected_format);
+    let Some(rel) = rel_opt else {
+      continue;
+    };
+    if rel.trim().is_empty() || !is_safe_relative_archive_path(&rel) {
+      continue;
+    }
+    let out = out_root.join(rel);
+    if let Some(parent) = out.parent() {
+      fs::create_dir_all(parent).map_err(into_error)?;
+    }
+    let mut writer = fs::File::create(out).map_err(into_error)?;
+    std::io::copy(&mut entry, &mut writer).map_err(into_error)?;
+    extracted_any = true;
+  }
+  if !extracted_any {
+    return Err("pack_archive_apply_to_instance: archive has no importable files".to_string());
+  }
+
+  let mut patch = json!({
+    "mcVersion": mc_version,
+    "loader": loader,
+    "fabricLoaderVersion": Value::Null,
+    "quiltLoaderVersion": Value::Null,
+    "forgeVersion": Value::Null,
+    "neoforgeVersion": Value::Null
+  });
+  if loader != "vanilla" {
+    let resolved = loader_pick_version(loader.clone(), mc_version.clone()).await?;
+    match loader.as_str() {
+      "fabric" => patch["fabricLoaderVersion"] = json!(resolved),
+      "quilt" => patch["quiltLoaderVersion"] = json!(resolved),
+      "forge" => patch["forgeVersion"] = json!(resolved),
+      "neoforge" => patch["neoforgeVersion"] = json!(resolved),
+      _ => {}
+    }
+  }
+  if let Some(memory_mb) = payload
+    .get("defaults")
+    .and_then(|v| v.get("memoryMb"))
+    .and_then(|v| v.as_u64())
+  {
+    patch["memoryMb"] = json!(memory_mb);
+  }
+
+  let updated = instances_update(app.clone(), safe_id, patch)?;
+  Ok(json!({
+    "ok": true,
+    "canceled": false,
+    "result": {
+      "instance": updated,
+      "detectedFormat": detected_format,
+      "notes": notes
+    }
+  }))
+}
+
+#[command]
+pub async fn pack_archive_import(app: tauri::AppHandle, payload: Value) -> AppResult<Value> {
+  let picked = FileDialog::new()
+    .set_title("Import Pack Archive")
+    .add_filter("Pack archives", &["zip", "mrpack"])
+    .pick_file();
+  let Some(zip_path) = picked else {
+    return Ok(json!({ "ok": false, "canceled": true }));
+  };
+
+  import_pack_archive_from_path(app, zip_path, payload).await
 }
 
 #[command]

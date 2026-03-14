@@ -828,6 +828,9 @@ body{
   justify-content: center;
   padding: 0;
 }
+.instanceDeleteBtn{
+  right: 48px;
+}
 .instanceEditBtn svg{
   width: 15px;
   height: 15px;
@@ -968,6 +971,46 @@ pre{
 }
 .modalBackdrop.open{ display:flex; }
 
+.actionBusyBanner{
+  margin: 0 0 12px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(var(--accent-rgb), .28);
+  background:
+    linear-gradient(180deg, rgba(var(--accent-rgb), .12), rgba(var(--accent-rgb), .06)),
+    rgba(9, 18, 28, .92);
+  box-shadow: 0 10px 24px rgba(0,0,0,.18);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.actionBusyText{
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.actionBusyText strong{
+  color: var(--text);
+  font-size: 13px;
+}
+
+.actionBusyText div{
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.actionBusySpinner{
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  border: 2px solid rgba(var(--accent-rgb), .24);
+  border-top-color: rgba(var(--accent-rgb), .95);
+  animation: fishbatterySpin .9s linear infinite;
+  flex: 0 0 auto;
+}
+
 .launcherDialogBackdrop{
   position: fixed;
   inset: 0;
@@ -1023,6 +1066,7 @@ pre{
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  position: relative;
 }
 
 .modalHeader{
@@ -1039,6 +1083,47 @@ pre{
   padding: 14px;
   overflow: auto;
   min-height: 0;
+}
+
+.modalBusyOverlay{
+  position: absolute;
+  inset: 53px 0 0;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(6, 12, 20, .56);
+  backdrop-filter: blur(3px);
+}
+
+.modalBusyCard{
+  width: min(420px, calc(100% - 16px));
+  padding: 18px 20px;
+  border-radius: 18px;
+  border: 1px solid rgba(var(--accent-rgb), .24);
+  background: rgba(9, 18, 28, .96);
+  box-shadow: 0 18px 36px rgba(0,0,0,.32);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 8px;
+}
+
+.modalBusySpinner{
+  width: 26px;
+  height: 26px;
+}
+
+.modalBusyCard strong{
+  font-size: 15px;
+  color: var(--text);
+}
+
+.modalBusyDetail{
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
 }
 
 #modalPanelGeneral{
@@ -1075,6 +1160,10 @@ pre{
   display:flex;
   justify-content: flex-end;
   gap: 10px;
+}
+
+@keyframes fishbatterySpin{
+  to{ transform: rotate(360deg); }
 }
 
 /* Popover */

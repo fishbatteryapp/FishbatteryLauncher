@@ -1,10 +1,35 @@
 # Changelog
 
+## v0.5.0 - 2026-03-14
+
+### Added
+- Added direct import of installed local CurseForge and Modrinth profiles from their default launcher folders.
+- Added a dedicated `Import` workspace in the instance editor for archive/profile import into the current instance.
+- Added installed-mod search with alphabetical sorting in the instance editor.
+- Added clearer in-progress overlays and status messaging for create, save, install, and import actions.
+
+### Changed
+- Reworked the instance editor into clearer `Create`, `Installed`, and `Discover` workflows depending on context.
+- Moved `Join Server` to each instance card instead of a single top-level button.
+- Vanilla instances now run on Fabric internally for Fishbattery cape support while still displaying as vanilla in the UI.
+- Delete actions now use the icon action area on instance cards instead of breaking button-row alignment.
+
+### Fixed
+- Fixed Microsoft account login with a Rust-native device-code flow and improved error reporting.
+- Fixed local Modrinth profile imports being detected/imported as `unknown | vanilla` instead of their real loader/version.
+- Fixed custom/player-made modpack imports so `.mrpack` archives, Modrinth indexes, CurseForge manifests, and saved world/config data are preserved more reliably.
+- Fixed discover mods/packs lists showing results incompatible with the current Minecraft version or mod loader.
+- Fixed legacy Forge launches failing on `lzma:lzma:0.0.1` by adding working fallback download sources.
+- Fixed extra Windows command prompt flashes during launch-time Java/runtime helper execution.
+- Fixed launcher cape binding so other players no longer inherit the local player's selected cape.
+
 ## v0.4.15 - 2026-03-14
 
 ### Changed
 - Moved `Join Server` from the global toolbar onto each instance card, using that instance's preferred server.
 - Pack-backed preset combo actions in the instance editor now apply the same Modrinth-backed preset source used during instance creation.
+
+## v0.4.15-beta.1 - 2026-03-14
 
 ### Fixed
 - Fixed legacy Forge launches failing when `lzma:lzma:0.0.1` was resolved against dead Maven sources by adding working legacy fallback mirrors.

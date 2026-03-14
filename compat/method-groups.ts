@@ -62,6 +62,8 @@ export const SYSTEM_METHODS = new Set([
   "instancesOpenFolder",
   "instancesExport",
   "instancesImport",
+  "externalProfilesList",
+  "externalProfileImport",
   "modrinthModsSearch",
   "modrinthModsInstall",
   "modrinthContentSearch",

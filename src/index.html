@@ -130,6 +130,14 @@
             </div>
           </div>
 
+          <div id="actionBusyBanner" class="actionBusyBanner" style="display:none" aria-live="polite">
+            <div class="actionBusySpinner" aria-hidden="true"></div>
+            <div class="actionBusyText">
+              <strong id="actionBusyTitle">Working...</strong>
+              <div id="actionBusyDetail">Please wait while Fishbattery finishes this action.</div>
+            </div>
+          </div>
+
           <div id="instancesGrid" class="grid"></div>
 
           <div class="logs">
@@ -216,11 +224,19 @@
           <button id="modalClose" class="iconBtn">&times;</button>
         </div>
 
+        <div id="modalBusyOverlay" class="modalBusyOverlay" style="display:none" aria-live="polite">
+          <div class="modalBusyCard">
+            <div class="actionBusySpinner modalBusySpinner" aria-hidden="true"></div>
+            <strong id="modalBusyTitle">Working...</strong>
+            <div id="modalBusyDetail" class="modalBusyDetail">Please wait while Fishbattery finishes this action.</div>
+          </div>
+        </div>
+
         <div class="modalBody">
           <div class="tabs">
             <button id="modalTabGeneral" class="tab active">Edit</button>
-            <button id="modalTabMods" class="tab">Mods</button>
-            <button id="modalTabPacks" class="tab">Packs</button>
+            <button id="modalTabInstalled" class="tab">Installed</button>
+            <button id="modalTabDiscover" class="tab">Discover</button>
           </div>
 
           <div id="modalPanelGeneral">
@@ -241,9 +257,32 @@
             </div>
 
             <div id="createProviderImport" class="setRow" style="display:none">
-              <div>
+              <div style="width:100%">
                 <div class="setLabel">Import existing instance/pack</div>
-                <div class="setHelp">Supports current launcher import zip flow.</div>
+                <div class="setHelp">Import archives or installed profiles from other launchers.</div>
+                <div class="setRow" style="margin-top:12px; align-items:flex-end">
+                  <div style="flex:1">
+                    <div class="setLabel">Detected local Modrinth profiles</div>
+                    <div id="localModrinthProfilesHelp" class="setHelp">Import directly from Modrinth App profiles.</div>
+                    <select id="localModrinthProfilesSelect" class="setControl" style="margin-top:8px"></select>
+                  </div>
+                  <div class="row" style="gap:8px; justify-content:flex-start">
+                    <button id="btnRefreshLocalModrinthProfiles" class="btn" type="button">Refresh</button>
+                    <button id="btnImportLocalModrinthProfile" class="btn" type="button">Import selected</button>
+                  </div>
+                </div>
+                <div class="setRow" style="margin-top:12px; align-items:flex-end">
+                  <div style="flex:1">
+                    <div class="setLabel">Detected local CurseForge instances</div>
+                    <div id="localCurseForgeProfilesHelp" class="setHelp">Import directly from CurseForge installed instances.</div>
+                    <select id="localCurseForgeProfilesSelect" class="setControl" style="margin-top:8px"></select>
+                  </div>
+                  <div class="row" style="gap:8px; justify-content:flex-start">
+                    <button id="btnRefreshLocalCurseForgeProfiles" class="btn" type="button">Refresh</button>
+                    <button id="btnImportLocalCurseForgeProfile" class="btn" type="button">Import selected</button>
+                  </div>
+                </div>
+                <div style="height:12px"></div>
               </div>
               <button id="btnCreateImportNow" class="btn" type="button">Choose file and import</button>
             </div>
@@ -425,10 +464,10 @@
             </div>
           </div>
 
-          <div id="modalPanelMods" style="display:none">
+          <div id="modalPanelInstalled" style="display:none">
             <div class="row" style="justify-content:space-between; align-items:center">
               <div>
-                <div class="muted" id="modalModsHint">Select an instance first.</div>
+                <div class="muted" id="modalInstalledHint">Select an instance first.</div>
                 <div class="muted" style="font-size:12px">
                   Toggles apply instantly. Use "Update Mods" to fetch the newest compatible files.
                 </div>
@@ -451,60 +490,16 @@
             </div>
 
             <div style="height:12px"></div>
+            <input
+              id="modalInstalledModsSearch"
+              class="setControl"
+              type="search"
+              placeholder="Search installed mods..."
+              style="margin-bottom:12px"
+            />
             <div id="modalLocalModsList"></div>
 
-            <div style="height:12px"></div>
-            <div id="modalCompatGuidance"></div>
-
             <div style="height:16px"></div>
-            <div class="setRow" style="align-items:flex-start">
-              <div style="display:flex; flex-direction:column; gap:6px; flex:1">
-                <div class="setLabel">Discover Mods on Modrinth</div>
-                <div class="setHelp">Search and install directly into this instance.</div>
-                <div class="row" style="gap:8px; align-items:center">
-                  <input
-                    id="instanceModrinthSearchInput"
-                    class="setControl"
-                    placeholder="Search mods on Modrinth..."
-                    style="min-width:260px; flex:1; max-width:none"
-                  />
-                  <button id="instanceModrinthSearchBtn" class="btn">Search</button>
-                </div>
-                <div id="instanceModrinthResultsLabel" class="setHelp">Popular mods</div>
-              </div>
-            </div>
-
-            <div style="height:10px"></div>
-            <div id="instanceModrinthSearchResults" style="max-height:260px; overflow:auto"></div>
-          </div>
-
-          <div id="modalPanelPacks" style="display:none">
-            <div style="height:16px"></div>
-            <div class="setRow" style="align-items:flex-start">
-              <div style="display:flex; flex-direction:column; gap:6px; flex:1">
-                <div class="setLabel">Discover Packs on Modrinth</div>
-                <div class="setHelp">Search and install resource packs or shaderpacks directly into this instance.</div>
-                <div class="row" style="gap:8px; align-items:center">
-                  <select id="instanceContentSearchKind" class="setControl" style="max-width:200px">
-                    <option value="resourcepack">Resource Packs</option>
-                    <option value="shaderpack">Shaderpacks</option>
-                  </select>
-                  <input
-                    id="instanceContentSearchInput"
-                    class="setControl"
-                    placeholder="Search packs on Modrinth..."
-                    style="min-width:260px; flex:1; max-width:none"
-                  />
-                  <button id="instanceContentSearchBtn" class="btn">Search</button>
-                </div>
-                <div id="instanceContentResultsLabel" class="setHelp">Popular resource packs</div>
-              </div>
-            </div>
-
-            <div style="height:10px"></div>
-            <div id="instanceContentSearchResults" style="max-height:260px; overflow:auto"></div>
-
-            <div style="height:18px"></div>
             <div class="muted" style="font-size:12px; margin-bottom:10px">
               Upload shader packs (.zip) and resource packs (.zip) into this instance.
             </div>
@@ -530,6 +525,80 @@
             </div>
             <div style="height:10px"></div>
             <div id="shaderpacksList"></div>
+
+            <div style="height:18px"></div>
+            <div class="setRow" style="align-items:flex-start">
+              <div style="display:flex; flex-direction:column; gap:6px; flex:1">
+                <div class="setLabel">Import launcher export</div>
+                <div class="setHelp">Merge a Fishbattery instance export (.zip) into this instance and refresh the editor automatically.</div>
+              </div>
+              <button id="btnImportInstanceArchiveIntoCurrent" class="btn">Import .zip</button>
+            </div>
+
+            <div style="height:16px"></div>
+            <div class="setRow" style="align-items:flex-start">
+              <div style="display:flex; flex-direction:column; gap:6px; flex:1">
+                <div class="setLabel">Import custom modpack archive</div>
+                <div class="setHelp">Apply a local pack archive (.zip/.mrpack) into this instance. Useful for player-made/custom packs.</div>
+              </div>
+              <button id="btnImportPackArchiveIntoCurrent" class="btn">Import pack archive</button>
+            </div>
+
+            <div style="height:16px"></div>
+            <div class="muted" style="font-size:12px">
+              Imports keep this editor open and refresh the instance contents after completion so mods, packs, and settings update immediately.
+            </div>
+          </div>
+
+          <div id="modalPanelDiscover" style="display:none">
+            <div style="height:12px"></div>
+            <div id="modalCompatGuidance"></div>
+
+            <div style="height:16px"></div>
+            <div class="setRow" style="align-items:flex-start">
+              <div style="display:flex; flex-direction:column; gap:6px; flex:1">
+                <div class="setLabel">Discover Mods on Modrinth</div>
+                <div class="setHelp">Search and install directly into this instance.</div>
+                <div class="row" style="gap:8px; align-items:center">
+                  <input
+                    id="instanceModrinthSearchInput"
+                    class="setControl"
+                    placeholder="Search mods on Modrinth..."
+                    style="min-width:260px; flex:1; max-width:none"
+                  />
+                  <button id="instanceModrinthSearchBtn" class="btn">Search</button>
+                </div>
+                <div id="instanceModrinthResultsLabel" class="setHelp">Popular mods</div>
+              </div>
+            </div>
+
+            <div style="height:10px"></div>
+            <div id="instanceModrinthSearchResults" style="max-height:260px; overflow:auto"></div>
+
+            <div style="height:16px"></div>
+            <div class="setRow" style="align-items:flex-start">
+              <div style="display:flex; flex-direction:column; gap:6px; flex:1">
+                <div class="setLabel">Discover Packs on Modrinth</div>
+                <div class="setHelp">Search and install resource packs or shaderpacks directly into this instance.</div>
+                <div class="row" style="gap:8px; align-items:center">
+                  <select id="instanceContentSearchKind" class="setControl" style="max-width:200px">
+                    <option value="resourcepack">Resource Packs</option>
+                    <option value="shaderpack">Shaderpacks</option>
+                  </select>
+                  <input
+                    id="instanceContentSearchInput"
+                    class="setControl"
+                    placeholder="Search packs on Modrinth..."
+                    style="min-width:260px; flex:1; max-width:none"
+                  />
+                  <button id="instanceContentSearchBtn" class="btn">Search</button>
+                </div>
+                <div id="instanceContentResultsLabel" class="setHelp">Popular resource packs</div>
+              </div>
+            </div>
+
+            <div style="height:10px"></div>
+            <div id="instanceContentSearchResults" style="max-height:260px; overflow:auto"></div>
           </div>
         </div>
 

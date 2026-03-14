@@ -1,3 +1,4 @@
+import { invoke } from "@tauri-apps/api/core";
 import { requestLauncherAccountAuthed } from "./launcherAccount";
 
 type SyncConflictPolicy = "ask" | "newer-wins" | "prefer-local" | "prefer-cloud";
@@ -8,6 +9,7 @@ type CloudSyncSnapshot = {
   instances: unknown[];
   modsStateByInstance: Record<string, unknown>;
   packsStateByInstance: Record<string, unknown>;
+  rawUpdatedAt?: number;
   settingsUpdatedAt: number;
   instancesUpdatedAt: number;
   capturedAt: number;
@@ -157,6 +159,53 @@ function collectLocalSnapshot(settings: Record<string, unknown>): CloudSyncSnaps
   };
 }
 
+async function collectFullLocalSnapshot(settings: Record<string, unknown>): Promise<CloudSyncSnapshot> {
+  const settingsPatch = sanitizeSettings(settings || {});
+  const settingsUpdatedAt = numberOr(settingsPatch.settingsUpdatedAt, Date.now());
+  let instancesPayload: any = null;
+  try {
+    instancesPayload = await invoke("instances_sync_export");
+  } catch {
+    instancesPayload = null;
+  }
+
+  const instances = Array.isArray(instancesPayload?.instances) ? instancesPayload.instances : [];
+  const activeInstanceId =
+    instancesPayload?.activeInstanceId == null ? null : String(instancesPayload.activeInstanceId);
+  const modsStateByInstance =
+    instancesPayload?.modsStateByInstance && typeof instancesPayload.modsStateByInstance === "object"
+      ? (instancesPayload.modsStateByInstance as Record<string, unknown>)
+      : {};
+  const packsStateByInstance =
+    instancesPayload?.packsStateByInstance && typeof instancesPayload.packsStateByInstance === "object"
+      ? (instancesPayload.packsStateByInstance as Record<string, unknown>)
+      : {};
+  const rawUpdatedAt = numberOr(instancesPayload?.updatedAt, 0);
+
+  const inferredInstancesUpdatedAt = Math.max(
+    rawUpdatedAt,
+    ...instances.map((item: any) =>
+      Math.max(
+        numberOr(item?.updatedAt, 0),
+        numberOr(item?.createdAt, 0),
+        numberOr(item?.lastPlayedAt, 0)
+      )
+    )
+  );
+
+  return {
+    settings: settingsPatch,
+    activeInstanceId,
+    instances,
+    modsStateByInstance,
+    packsStateByInstance,
+    rawUpdatedAt,
+    settingsUpdatedAt,
+    instancesUpdatedAt: inferredInstancesUpdatedAt,
+    capturedAt: Date.now()
+  };
+}
+
 function hashSnapshot(snapshot: CloudSyncSnapshot): string {
   const str = JSON.stringify(snapshot);
   let hash = 2166136261;
@@ -223,7 +272,28 @@ async function pushRemoteSyncState(snapshot: CloudSyncSnapshot, baseRevision: nu
   };
 }
 
-function applyRemoteSnapshot(snapshot: CloudSyncSnapshot): { settingsPatch: Record<string, unknown> } {
+async function applyRemoteSnapshot(
+  snapshot: CloudSyncSnapshot
+): Promise<{ settingsPatch: Record<string, unknown> }> {
+  try {
+    await invoke("instances_sync_import", {
+      payload: {
+        activeInstanceId: snapshot.activeInstanceId,
+        instances: Array.isArray(snapshot.instances) ? snapshot.instances : [],
+        modsStateByInstance:
+          snapshot.modsStateByInstance && typeof snapshot.modsStateByInstance === "object"
+            ? snapshot.modsStateByInstance
+            : {},
+        packsStateByInstance:
+          snapshot.packsStateByInstance && typeof snapshot.packsStateByInstance === "object"
+            ? snapshot.packsStateByInstance
+            : {},
+        updatedAt: numberOr(snapshot.rawUpdatedAt, snapshot.instancesUpdatedAt || snapshot.capturedAt || Date.now())
+      }
+    });
+  } catch {
+    // Keep settings pull resilient even if instance import fails.
+  }
   return { settingsPatch: sanitizeSettings(snapshot.settings || {}) };
 }
 
@@ -249,7 +319,7 @@ export async function cloudSyncGetState() {
 export async function cloudSyncSyncNow(input: SyncNowInput): Promise<SyncNowResult> {
   const meta = readLocalSyncState();
   try {
-    const localSnapshot = collectLocalSnapshot(input?.settings || {});
+    const localSnapshot = await collectFullLocalSnapshot(input?.settings || {});
     const localHash = hashSnapshot(localSnapshot);
     const remote = await fetchRemoteSyncState();
     const remoteHash = hashSnapshot(remote.payload);
@@ -279,7 +349,7 @@ export async function cloudSyncSyncNow(input: SyncNowInput): Promise<SyncNowResu
       meta.lastSnapshotHash != null ? meta.lastSnapshotHash !== localHash : true;
 
     if (remoteChangedSinceLastSync && !localChangedSinceLastSync) {
-      const applied = applyRemoteSnapshot(remote.payload);
+      const applied = await applyRemoteSnapshot(remote.payload);
       const next: CloudSyncState = {
         ...meta,
         lastSyncedAt: Date.now(),
@@ -340,7 +410,7 @@ export async function cloudSyncSyncNow(input: SyncNowInput): Promise<SyncNowResu
       };
     }
     if (chosen === "remote") {
-      const applied = applyRemoteSnapshot(remote.payload);
+      const applied = await applyRemoteSnapshot(remote.payload);
       const next: CloudSyncState = {
         ...meta,
         lastSyncedAt: Date.now(),
