@@ -1282,18 +1282,20 @@ fn version_json_path(versions_root: &Path, version_id: &str) -> PathBuf {
   versions_root.join(version_id).join(format!("{version_id}.json"))
 }
 
-fn profile_id_matches_loader_version(id: &str, mc_version: &str, loader_version: &str) -> bool {
+fn profile_id_matches_loader_version(id: &str, mc_version: &str, loader: &str, loader_version: &str) -> bool {
   let id_lower = id.to_ascii_lowercase();
   let mc_lower = mc_version.trim().to_ascii_lowercase();
+  let loader_lower = loader.trim().to_ascii_lowercase();
   let lv_lower = loader_version.trim().to_ascii_lowercase();
-  if id_lower.is_empty() || mc_lower.is_empty() {
+  if id_lower.is_empty() {
     return false;
   }
-  if !id_lower.contains(&mc_lower) {
+  let id_mentions_mc = !mc_lower.is_empty() && id_lower.contains(&mc_lower);
+  if !id_mentions_mc && loader_lower != "neoforge" {
     return false;
   }
   if lv_lower.is_empty() {
-    return true;
+    return id_mentions_mc || loader_lower == "neoforge";
   }
   let mut candidates: Vec<String> = vec![lv_lower.clone()];
   if let Some(stripped) = lv_lower.strip_prefix(&(mc_lower.clone() + "-")) {
@@ -1326,7 +1328,7 @@ fn profile_id_matches_loader_version(id: &str, mc_version: &str, loader_version:
   }
   for token in candidates {
     if !token.is_empty() && id_lower.contains(&token) {
-      return true;
+      return id_mentions_mc || loader_lower == "neoforge";
     }
   }
   false
@@ -1357,7 +1359,7 @@ fn find_forge_like_profile_id(
     if loader == "neoforge" && !id_lower.contains("neoforge") {
       continue;
     }
-    if !profile_id_matches_loader_version(&id, mc_version, loader_version) {
+    if !profile_id_matches_loader_version(&id, mc_version, loader, loader_version) {
       continue;
     }
     let json_path = path.join(format!("{id}.json"));
