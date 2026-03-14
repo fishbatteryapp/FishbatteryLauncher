@@ -27,6 +27,14 @@ Environment name: `release`
 - `TAURI_SIGNING_PRIVATE_KEY`
 - `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`
 - `FISHBATTERY_CURSEFORGE_API_KEY` (required for CurseForge browse/install in distributed builds)
+- `DISCORD_WEBHOOK_URL` (optional if you want release notes/changelog posted to Discord after publish)
+- `APPLE_CERTIFICATE` (optional, for macOS code signing)
+- `APPLE_CERTIFICATE_PASSWORD` (optional, for macOS code signing)
+- `APPLE_ID` (optional, for notarization if you use Apple ID flow)
+- `APPLE_PASSWORD` (optional, app-specific password for notarization if you use Apple ID flow)
+- `APPLE_API_KEY` (optional, App Store Connect API key ID for notarization if you use API key flow)
+- `APPLE_API_ISSUER` (optional, App Store Connect API issuer for notarization if you use API key flow)
+- `APPLE_API_KEY_P8` (optional, private key contents for notarization if you use API key flow)
 
 #### Environment variables
 
@@ -38,6 +46,8 @@ Environment name: `release`
 - `FISHBATTERY_UPDATER_PUBKEY` (public key, not private key)
 - `FISHBATTERY_UPDATER_ENDPOINT_STABLE`
 - `FISHBATTERY_UPDATER_ENDPOINT_BETA` (optional)
+- `APPLE_SIGNING_IDENTITY` (optional, macOS signing identity common name)
+- `APPLE_TEAM_ID` (optional, team ID if you use Apple ID notarization flow)
 
 ## 2. Pre-release checklist
 
@@ -65,13 +75,15 @@ This triggers `.github/workflows/release.yml`.
 ## 4. Monitor GitHub Actions run
 
 1. Open Actions run for the tag.
-2. Ensure both jobs pass:
+2. Ensure all release jobs pass:
    - `Release (windows-latest)`
-   - `Release (macos-latest)`
+   - `Release (macos-15)`
+   - `Release (macos-15-intel)`
 3. On Windows job, verify these specific steps succeed:
    - `Azure login (Trusted Signing)`
    - `Sign Windows release artifacts (post-build)`
    - `Replace release assets with signed Windows artifacts`
+4. On macOS jobs, confirm `.dmg` and `.app.tar.gz` assets are uploaded for each architecture.
 
 ## 5. Validate release assets
 
@@ -80,6 +92,7 @@ On GitHub Release page for the tag:
 1. Confirm expected assets exist for Windows and macOS.
 2. Confirm `latest.json` / updater metadata assets are present.
 3. Confirm Windows assets were replaced by signed versions (same file names, uploaded in post-build step).
+4. Confirm macOS release assets include both Apple Silicon (`aarch64`) and Intel (`x86_64`) variants.
 
 ## 6. Validate code signing on Windows
 
@@ -120,6 +133,12 @@ Wait 5-15 minutes after role changes, then rerun workflow.
 
 - If file has no digital signature tab: signing failed or unsigned asset downloaded.
 - If file is signed but SmartScreen still warns: this is reputation-based and can persist temporarily.
+
+### macOS app will not open normally
+
+- If the release contains only updater archives and no `.dmg`, the macOS job did not publish a proper installer bundle.
+- If the app downloads but Gatekeeper blocks it, macOS signing/notarization secrets are likely missing or invalid.
+- Unsigned macOS builds can still be opened manually, but notarized signed builds are required for a normal install experience.
 
 ### Tauri updater panic about `plugins.updater`
 
