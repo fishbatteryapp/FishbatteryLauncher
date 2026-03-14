@@ -762,7 +762,13 @@ declare global {
       launchIsRunning: (instanceId: string) => Promise<boolean>;
       launchStop: (instanceId: string) => Promise<boolean>;
       launchDiagnose: (instanceId: string, lines: string[]) => Promise<{
-        code: "missing-fabric-loader" | "wrong-java-version" | "mod-mismatch" | "duplicate-mods" | "unknown";
+        code:
+          | "missing-fabric-loader"
+          | "wrong-java-version"
+          | "mod-mismatch"
+          | "duplicate-mods"
+          | "loader-profile-missing"
+          | "unknown";
         severity: "warning" | "critical";
         summary: string;
         details: string[];

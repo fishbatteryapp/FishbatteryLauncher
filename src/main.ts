@@ -2340,6 +2340,11 @@ function findDiagnosisEvidence(diag: any, lines: string[]) {
   const patterns: Record<string, string[]> = {
     "missing-fabric-loader": ["fabric", "no such file", "install incomplete"],
     "duplicate-mods": ["duplicate", "duplicatemodsfoundexception"],
+    "loader-profile-missing": [
+      "installer completed but no launch profile was generated",
+      "installer completed without profile",
+      "profile generation failed"
+    ],
     "wrong-java-version": ["unsupportedclassversionerror", "class file version", "requires java"],
     "mod-mismatch": ["modresolutionexception", "depends on", "requires minecraft", "incompatible"]
   };
@@ -9755,6 +9760,9 @@ backend.onLaunchLog((line) => {
   if (
     active &&
     (lower.includes("launch failed") ||
+      lower.includes("launch preparation failed") ||
+      lower.includes("installer failed") ||
+      lower.includes("completed without profile") ||
       lower.includes("modresolutionexception") ||
       lower.includes("duplicate") ||
       lower.includes("unsupportedclassversionerror"))

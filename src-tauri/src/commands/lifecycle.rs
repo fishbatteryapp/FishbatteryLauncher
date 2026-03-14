@@ -2866,6 +2866,34 @@ pub fn launch_diagnose(instance_id: String, lines: Vec<String>) -> AppResult<Val
   if has_any(
     &full,
     &[
+      "installer completed but no launch profile was generated",
+      "installer completed without profile",
+      "profile generation failed",
+      "neoforge installer failed",
+      "forge installer failed",
+    ],
+  ) {
+    return Ok(json!({
+      "code": "loader-profile-missing",
+      "severity": "critical",
+      "summary": "The loader installer finished, but no launch profile was created.",
+      "details": [
+        "Forge or NeoForge installer output did not produce a usable version profile for Minecraft.",
+        "This can happen when the installer writes incomplete metadata or generates the profile in a different Minecraft directory."
+      ],
+      "recommendedActions": [
+        "Retry the launch once to confirm the failure is reproducible.",
+        "If vanilla Minecraft is installed separately, launch it once and retry so any default .minecraft metadata exists.",
+        "Export diagnostics if the issue persists so the installer output can be inspected."
+      ],
+      "fixAction": "none",
+      "canAutoFix": false
+    }));
+  }
+
+  if has_any(
+    &full,
+    &[
       "unsupportedclassversionerror",
       "class file version",
       "java runtime only recognizes class file versions up to",
