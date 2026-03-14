@@ -416,6 +416,17 @@ declare global {
         accountId?: string | null;
         memoryMb?: number;
       }) => Promise<{ instance: any; version: { id: string; name: string; versionNumber: string } }>;
+      modrinthPacksApplyToInstance: (
+        instanceId: string,
+        payload: {
+          projectId: string;
+          versionId?: string;
+          mcVersion?: string;
+          loader?: "vanilla" | "fabric" | "quilt" | "forge" | "neoforge";
+          requireCompatibility?: boolean;
+          memoryMb?: number;
+        }
+      ) => Promise<{ instance: any; version: { id: string; name: string; versionNumber: string } }>;
       modrinthModsSearch: (
         instanceId: string,
         query: string,

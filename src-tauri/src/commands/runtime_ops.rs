@@ -5979,3 +5979,330 @@ pub async fn modrinth_packs_install(app: tauri::AppHandle, payload: Value) -> Ap
     }
   }))
 }
+
+#[command]
+pub async fn modrinth_packs_apply_to_instance(
+  app: tauri::AppHandle,
+  instance_id: String,
+  payload: Value,
+) -> AppResult<Value> {
+  let safe_id = validate_id(&instance_id)?;
+  let project_id = payload
+    .get("projectId")
+    .and_then(|v| v.as_str())
+    .map(str::trim)
+    .filter(|v| !v.is_empty())
+    .ok_or_else(|| "modrinthPacksApplyToInstance: projectId missing".to_string())?
+    .to_string();
+  let version_id = payload
+    .get("versionId")
+    .and_then(|v| v.as_str())
+    .map(str::trim)
+    .filter(|v| !v.is_empty())
+    .map(str::to_string);
+  let requested_mc_version = payload
+    .get("mcVersion")
+    .and_then(|v| v.as_str())
+    .map(str::trim)
+    .filter(|v| !v.is_empty())
+    .map(str::to_string);
+  let requested_loader = payload
+    .get("loader")
+    .and_then(|v| v.as_str())
+    .map(str::trim)
+    .filter(|v| !v.is_empty())
+    .map(|v| v.to_ascii_lowercase());
+  let require_compatibility = payload
+    .get("requireCompatibility")
+    .and_then(|v| v.as_bool())
+    .unwrap_or(false);
+  let memory_mb = payload
+    .get("memoryMb")
+    .and_then(|v| v.as_u64())
+    .unwrap_or(6144);
+
+  let db = read_db(&app)?;
+  let existing = instance_entry(&db, &safe_id)
+    .ok_or_else(|| "modrinthPacksApplyToInstance: instance not found".to_string())?;
+  let preserved_name = existing
+    .get("name")
+    .and_then(|v| v.as_str())
+    .unwrap_or("Instance")
+    .to_string();
+  let preserved_account = existing.get("accountId").cloned().unwrap_or(Value::Null);
+  drop(db);
+
+  let client = reqwest::Client::new();
+  let version: ModrinthVersion = if let Some(v_id) = version_id.clone() {
+    modrinth_get_json(
+      &client,
+      &format!(
+        "https://api.modrinth.com/v2/version/{}",
+        urlencoding::encode(&v_id)
+      ),
+    )
+    .await?
+  } else {
+    let versions_url = modrinth_versions_endpoint(
+      &project_id,
+      requested_mc_version.as_deref(),
+      requested_loader.as_deref(),
+    )?;
+    let mut versions: Vec<ModrinthVersion> = modrinth_get_json(&client, &versions_url).await?;
+    versions.retain(|v| !v.files.is_empty());
+    if let Some(mc) = requested_mc_version.as_deref() {
+      versions.retain(|v| v.game_versions.iter().any(|gv| gv == mc));
+    }
+    if let Some(loader_hint) = requested_loader.as_deref() {
+      if loader_hint != "vanilla" {
+        versions.retain(|v| {
+          if loader_hint == "quilt" {
+            v
+              .loaders
+              .iter()
+              .any(|l| matches!(l.as_str(), "quilt" | "fabric"))
+          } else {
+            v.loaders.iter().any(|l| l == loader_hint)
+          }
+        });
+      }
+    }
+    if versions.is_empty() && !require_compatibility {
+      let fallback_url = modrinth_versions_endpoint(&project_id, None, None)?;
+      versions = modrinth_get_json(&client, &fallback_url).await?;
+      versions.retain(|v| !v.files.is_empty());
+    }
+    versions
+      .into_iter()
+      .next()
+      .ok_or_else(|| {
+        if let (Some(mc), Some(loader_hint)) =
+          (requested_mc_version.as_deref(), requested_loader.as_deref())
+        {
+          format!(
+            "modrinthPacksApplyToInstance: no compatible version found for Minecraft {mc} ({loader_hint})"
+          )
+        } else if let Some(mc) = requested_mc_version.as_deref() {
+          format!(
+            "modrinthPacksApplyToInstance: no compatible version found for Minecraft {mc}"
+          )
+        } else {
+          "modrinthPacksApplyToInstance: no installable versions found".to_string()
+        }
+      })?
+  };
+
+  let pack_file = version
+    .files
+    .iter()
+    .find(|f| f.primary.unwrap_or(false))
+    .or_else(|| version.files.first())
+    .ok_or_else(|| "modrinthPacksApplyToInstance: no downloadable file found".to_string())?;
+
+  let pack_bytes = client
+    .get(&pack_file.url)
+    .header("user-agent", MODRINTH_USER_AGENT)
+    .send()
+    .await
+    .map_err(into_error)?
+    .error_for_status()
+    .map_err(into_error)?
+    .bytes()
+    .await
+    .map_err(into_error)?;
+
+  let mut idx_raw = String::new();
+  {
+    let cursor = std::io::Cursor::new(pack_bytes.to_vec());
+    let mut zip = ZipArchive::new(cursor).map_err(into_error)?;
+    let mut idx = zip
+      .by_name("modrinth.index.json")
+      .map_err(|_| "Invalid .mrpack: missing modrinth.index.json".to_string())?;
+    idx.read_to_string(&mut idx_raw).map_err(into_error)?;
+  }
+  let index: MrpackIndex = serde_json::from_str(&idx_raw).map_err(into_error)?;
+
+  let loader = loader_from_modrinth(&version);
+  let mc_version = index
+    .dependencies
+    .get("minecraft")
+    .map(|v| v.trim().to_string())
+    .filter(|v| !v.is_empty())
+    .or_else(|| {
+      version
+        .game_versions
+        .first()
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+    })
+    .unwrap_or_else(|| "latest".to_string());
+  let loader_version_from_pack = match loader.as_str() {
+    "forge" => index
+      .dependencies
+      .get("forge")
+      .map(|v| v.trim().to_string())
+      .filter(|v| !v.is_empty()),
+    "neoforge" => index
+      .dependencies
+      .get("neoforge")
+      .map(|v| v.trim().to_string())
+      .filter(|v| !v.is_empty()),
+    "fabric" => index
+      .dependencies
+      .get("fabric-loader")
+      .map(|v| v.trim().to_string())
+      .filter(|v| !v.is_empty()),
+    "quilt" => index
+      .dependencies
+      .get("quilt-loader")
+      .map(|v| v.trim().to_string())
+      .filter(|v| !v.is_empty()),
+    _ => None,
+  };
+
+  let mut patch = json!({
+    "name": preserved_name,
+    "accountId": preserved_account,
+    "mcVersion": mc_version,
+    "loader": loader,
+    "memoryMb": memory_mb,
+    "fabricLoaderVersion": Value::Null,
+    "quiltLoaderVersion": Value::Null,
+    "forgeVersion": Value::Null,
+    "neoforgeVersion": Value::Null,
+  });
+
+  if loader != "vanilla" {
+    let resolved = if let Some(v) = loader_version_from_pack.clone() {
+      Some(v)
+    } else {
+      loader_pick_version(loader.clone(), mc_version.clone()).await?
+    };
+    match loader.as_str() {
+      "fabric" => patch["fabricLoaderVersion"] = json!(resolved),
+      "quilt" => patch["quiltLoaderVersion"] = json!(resolved),
+      "forge" => patch["forgeVersion"] = json!(resolved),
+      "neoforge" => patch["neoforgeVersion"] = json!(resolved),
+      _ => {}
+    }
+  }
+
+  let mut updated = instances_update(app.clone(), safe_id.clone(), patch)?;
+
+  let install_loader_res = loader_install(
+    app.clone(),
+    safe_id.clone(),
+    mc_version.clone(),
+    loader.clone(),
+    if loader == "fabric" {
+      updated
+        .get("fabricLoaderVersion")
+        .and_then(|v| v.as_str())
+        .map(str::to_string)
+    } else if loader == "quilt" {
+      updated
+        .get("quiltLoaderVersion")
+        .and_then(|v| v.as_str())
+        .map(str::to_string)
+    } else if loader == "forge" {
+      updated
+        .get("forgeVersion")
+        .and_then(|v| v.as_str())
+        .map(str::to_string)
+    } else if loader == "neoforge" {
+      updated
+        .get("neoforgeVersion")
+        .and_then(|v| v.as_str())
+        .map(str::to_string)
+    } else {
+      None
+    },
+  )
+  .await?;
+
+  if loader == "forge" || loader == "neoforge" {
+    if let Some(resolved_after_install) = install_loader_res
+      .get("loaderVersion")
+      .and_then(|v| v.as_str())
+      .map(str::trim)
+      .filter(|v| !v.is_empty())
+      .map(str::to_string)
+    {
+      let mut loader_patch = json!({});
+      if loader == "forge" {
+        loader_patch["forgeVersion"] = json!(resolved_after_install);
+      } else {
+        loader_patch["neoforgeVersion"] = json!(resolved_after_install);
+      }
+      updated = instances_update(app.clone(), safe_id.clone(), loader_patch)?;
+    }
+  }
+
+  let cursor = std::io::Cursor::new(pack_bytes.to_vec());
+  let mut zip = ZipArchive::new(cursor).map_err(into_error)?;
+  let out_root = instance_dir(&app, &safe_id)?;
+  fs::create_dir_all(&out_root).map_err(into_error)?;
+
+  for f in index.files {
+    if f.path.trim().is_empty() || !is_safe_relative_archive_path(&f.path) {
+      continue;
+    }
+    let download = match f.downloads.first() {
+      Some(v) => v,
+      None => continue,
+    };
+    let bytes = client
+      .get(download)
+      .header("user-agent", MODRINTH_USER_AGENT)
+      .send()
+      .await
+      .map_err(into_error)?
+      .error_for_status()
+      .map_err(into_error)?
+      .bytes()
+      .await
+      .map_err(into_error)?;
+    let out = out_root.join(&f.path);
+    if let Some(parent) = out.parent() {
+      fs::create_dir_all(parent).map_err(into_error)?;
+    }
+    fs::write(out, &bytes).map_err(into_error)?;
+  }
+
+  for i in 0..zip.len() {
+    let mut entry = zip.by_index(i).map_err(into_error)?;
+    if !entry.is_file() {
+      continue;
+    }
+    let name = entry.name().replace('\\', "/");
+    let prefix = if name.starts_with("overrides/") {
+      "overrides/"
+    } else if name.starts_with("client-overrides/") {
+      "client-overrides/"
+    } else {
+      ""
+    };
+    if prefix.is_empty() {
+      continue;
+    }
+    let rel = &name[prefix.len()..];
+    if !is_safe_relative_archive_path(rel) {
+      continue;
+    }
+    let out = out_root.join(rel);
+    if let Some(parent) = out.parent() {
+      fs::create_dir_all(parent).map_err(into_error)?;
+    }
+    let mut writer = fs::File::create(out).map_err(into_error)?;
+    std::io::copy(&mut entry, &mut writer).map_err(into_error)?;
+  }
+
+  Ok(json!({
+    "instance": updated,
+    "version": {
+      "id": version.id,
+      "name": version.name,
+      "versionNumber": version.version_number
+    }
+  }))
+}

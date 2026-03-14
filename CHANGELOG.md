@@ -1,9 +1,13 @@
 # Changelog
 
-## v0.4.15-beta.1 - 2026-03-14
+## v0.4.15 - 2026-03-14
+
+### Changed
+- Moved `Join Server` from the global toolbar onto each instance card, using that instance's preferred server.
+- Pack-backed preset combo actions in the instance editor now apply the same Modrinth-backed preset source used during instance creation.
 
 ### Fixed
-- Fixed legacy Forge launches failing when `lzma:lzma:0.0.1` was resolved against Maven Central instead of Forge's Maven.
+- Fixed legacy Forge launches failing when `lzma:lzma:0.0.1` was resolved against dead Maven sources by adding working legacy fallback mirrors.
 - Fixed additional Windows command prompt flashes during launch-time Java runtime checks and legacy loader installer execution.
 
 ## v0.4.14 - 2026-03-14

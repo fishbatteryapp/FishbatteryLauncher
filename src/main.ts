@@ -74,7 +74,7 @@ const accountAvatarImg = $("accountAvatarImg") as HTMLImageElement;
 
 const btnCreate = $("btnCreate");
 const btnImport = $("btnImport");
-const btnJoinPreferred = $("btnJoinPreferred");
+const btnJoinPreferred = document.getElementById("btnJoinPreferred") as HTMLButtonElement | null;
 const btnClearLogs = $("btnClearLogs");
 const btnAnalyzeLogs = $("btnAnalyzeLogs");
 const btnApplyDiagnosisFix = $("btnApplyDiagnosisFix") as HTMLButtonElement;
@@ -85,7 +85,8 @@ const launchDiagnosis = $("launchDiagnosis");
 const launchDiagnosisDetails = $("launchDiagnosisDetails");
 
 // Apply icon-first button labels while keeping text readable.
-function setButtonIcon(btn: HTMLButtonElement, svgPath: string) {
+function setButtonIcon(btn: HTMLButtonElement | null, svgPath: string) {
+  if (!btn) return;
   const label = String(btn.textContent || "").trim();
   if (!label) return;
   btn.innerHTML = `
@@ -4387,15 +4388,42 @@ async function applyInstancePreset(instanceId: string, mcVersion: string, loader
   const preset = INSTANCE_PRESETS[presetId];
   if (!preset) return;
   const presetModrinthPackProject = PRESET_MODRINTH_PACK_PROJECTS[presetId as Exclude<InstancePresetId, "none">];
-  if (!presetModrinthPackProject) {
-    appendLog(`[preset] "${preset.name}" is coming soon and is currently unavailable.`);
-    return;
-  }
   if (presetModrinthPackProject) {
-    appendLog(
-      `[preset] "${preset.name}" is now pack-backed (${presetModrinthPackProject}) and is applied during instance creation.`
-    );
-    return;
+    const inst =
+      (state.instances?.instances ?? []).find((x: any) => String(x.id) === instanceId) ?? null;
+    setStatus(`Applying instance preset "${preset.name}"...`);
+    try {
+      appendLog(`[preset] Selecting "${preset.name}" for instance ${instanceId}.`);
+      appendLog(
+        `[preset] Applying pack-backed preset "${preset.name}" from Modrinth project "${presetModrinthPackProject}".`
+      );
+      try {
+        await backend.rollbackCreateSnapshot(
+          instanceId,
+          "instance-preset",
+          `Before applying preset ${preset.name}`
+        );
+      } catch (err: any) {
+        appendLog(`[rollback] Snapshot skipped: ${String(err?.message ?? err)}`);
+      }
+
+      const applied = await backend.modrinthPacksApplyToInstance(instanceId, {
+        projectId: presetModrinthPackProject,
+        mcVersion,
+        loader,
+        requireCompatibility: true,
+        memoryMb: Number(inst?.memoryMb ?? 4096)
+      });
+
+      await backend.instancesUpdate(instanceId, { instancePreset: presetId });
+      appendLog(
+        `[preset] Applied "${preset.name}" from Modrinth project "${presetModrinthPackProject}" (${applied.version?.versionNumber ?? "latest"}).`
+      );
+      state.instances = await backend.instancesList();
+      return;
+    } finally {
+      setStatus("");
+    }
   }
   const resolved = resolvePresetVariantForLoader(preset, loader, mcVersion);
   if (!resolved) {
@@ -5697,6 +5725,13 @@ async function findPreferredServerTarget() {
   }
 
   return null;
+}
+
+async function findPreferredServerForInstance(inst: any) {
+  const instanceId = String(inst?.id || "").trim();
+  if (!instanceId) return null;
+  const data = await backend.serversList(instanceId);
+  return (data?.servers ?? []).find((x: any) => x.id === data.preferredServerId) ?? null;
 }
 
 // Launch for instance.
@@ -7468,12 +7503,18 @@ async function renderInstances() {
   }
 
   const icons = new Map<string, string | null>();
+  const preferredServers = new Map<string, any | null>();
   await Promise.all(
     items.map(async (i: any) => {
       try {
         icons.set(i.id, await backend.instancesGetIcon(i.id));
       } catch {
         icons.set(i.id, null);
+      }
+      try {
+        preferredServers.set(String(i.id), await findPreferredServerForInstance(i));
+      } catch {
+        preferredServers.set(String(i.id), null);
       }
     })
   );
@@ -7575,6 +7616,25 @@ async function renderInstances() {
       await launchForInstance(i);
     };
 
+    const preferredServer = preferredServers.get(String(i.id || "")) ?? null;
+    const btnJoin = document.createElement("button");
+    btnJoin.className = "btn";
+    btnJoin.textContent = "Join Server";
+    btnJoin.disabled = !preferredServer;
+    btnJoin.title = preferredServer
+      ? `Join ${String(preferredServer.name || preferredServer.address || "preferred server")}`
+      : "No preferred server set for this instance";
+    btnJoin.onclick = async (ev) => {
+      ev.stopPropagation();
+      if (!preferredServer) return;
+      if (state.instances?.activeInstanceId !== i.id) {
+        await backend.instancesSetActive(i.id);
+        state.instances = await backend.instancesList();
+        await renderInstances();
+      }
+      await launchForInstance(i, String(preferredServer.address || "").trim());
+    };
+
     // Delete button
     const btnDelete = document.createElement("button");
     btnDelete.className = "btn btnDanger";
@@ -7600,6 +7660,7 @@ async function renderInstances() {
     };
 
     actions.appendChild(btnPlay);
+    actions.appendChild(btnJoin);
     actions.appendChild(btnExport);
     actions.appendChild(btnDelete);
 
@@ -8979,7 +9040,7 @@ modalCreate.onclick = () =>
     }
   });
 
-btnJoinPreferred.onclick = () =>
+btnJoinPreferred?.addEventListener("click", () =>
   guarded(async () => {
     const target = await findPreferredServerTarget();
     if (!target) {
@@ -8994,7 +9055,8 @@ btnJoinPreferred.onclick = () =>
     }
 
     await launchForInstance(target.instance, String(target.server.address || "").trim());
-  });
+  })
+);
 
 btnClearLogs.onclick = () => {
   logsEl.textContent = "";

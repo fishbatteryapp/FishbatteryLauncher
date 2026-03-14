@@ -1583,19 +1583,37 @@ async fn download_file_if_missing(client: &reqwest::Client, url: &str, target: &
   if let Some(parent) = target.parent() {
     fs::create_dir_all(parent).map_err(into_error)?;
   }
-  let bytes = client
-    .get(url)
-    .header("user-agent", "FishbatteryLauncher/0.2.1")
-    .send()
-    .await
-    .map_err(into_error)?
-    .error_for_status()
-    .map_err(into_error)?
-    .bytes()
-    .await
-    .map_err(into_error)?;
-  fs::write(target, &bytes).map_err(into_error)?;
-  Ok(())
+  let mut candidates = vec![url.to_string()];
+  if url.ends_with("/lzma/lzma/0.0.1/lzma-0.0.1.jar") {
+    candidates.push("https://libraries.minecraft.net/lzma/lzma/0.0.1/lzma-0.0.1.jar".to_string());
+    candidates.push("https://maven.mohistmc.com/libraries/lzma/lzma/0.0.1/lzma-0.0.1.jar".to_string());
+  }
+
+  let mut last_err: Option<String> = None;
+  for candidate in candidates {
+    match client
+      .get(&candidate)
+      .header("user-agent", "FishbatteryLauncher/0.2.1")
+      .send()
+      .await
+    {
+      Ok(resp) => match resp.error_for_status() {
+        Ok(ok) => {
+          let bytes = ok.bytes().await.map_err(into_error)?;
+          fs::write(target, &bytes).map_err(into_error)?;
+          return Ok(());
+        }
+        Err(err) => {
+          last_err = Some(into_error(err));
+        }
+      },
+      Err(err) => {
+        last_err = Some(into_error(err));
+      }
+    }
+  }
+
+  Err(last_err.unwrap_or_else(|| "download failed".to_string()))
 }
 
 fn classifier_key_for_os(lib: &Value) -> Option<String> {

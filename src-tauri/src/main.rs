@@ -89,6 +89,7 @@ fn main() {
       commands::runtime_ops::servers_export_profile,
       commands::runtime_ops::servers_import_profile,
       commands::runtime_ops::modrinth_packs_install,
+      commands::runtime_ops::modrinth_packs_apply_to_instance,
       commands::runtime_ops::modrinth_mods_search,
       commands::runtime_ops::modrinth_mods_install,
       commands::runtime_ops::modrinth_content_search,
