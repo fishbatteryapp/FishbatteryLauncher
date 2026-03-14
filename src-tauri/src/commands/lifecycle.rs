@@ -1486,7 +1486,7 @@ fn import_forge_profile_from_default_minecraft(
   None
 }
 
-fn install_legacy_forge_profile_from_installer(
+fn install_forge_like_profile_from_installer(
   app: &tauri::AppHandle,
   installer_path: &Path,
   versions_root: &Path,
@@ -1506,32 +1506,66 @@ fn install_legacy_forge_profile_from_installer(
   }
   let profile: Value = serde_json::from_str(&profile_raw).map_err(into_error)?;
   let install = profile.get("install").and_then(|v| v.as_object()).cloned().unwrap_or_default();
-  let mut version_info = match profile.get("versionInfo").cloned() {
-    Some(v) => v,
-    None => return Ok(None),
-  };
-  let target_id = install
-    .get("target")
+
+  let mut embedded_version = if let Some(json_path) = profile
+    .get("json")
     .and_then(|v| v.as_str())
     .map(str::trim)
     .filter(|v| !v.is_empty())
-    .ok_or_else(|| "legacy forge installer missing install.target".to_string())?
-    .to_string();
-  version_info["id"] = json!(target_id.clone());
-  if version_info
+  {
+    let normalized = json_path.trim_start_matches('/').to_string();
+    let mut version_raw = String::new();
+    let mut entry = zip.by_name(&normalized).map_err(into_error)?;
+    entry.read_to_string(&mut version_raw).map_err(into_error)?;
+    serde_json::from_str::<Value>(&version_raw).map_err(into_error)?
+  } else if let Some(version_info) = profile.get("versionInfo").cloned() {
+    version_info
+  } else {
+    return Ok(None);
+  };
+
+  let target_id = embedded_version
+    .get("id")
+    .and_then(|v| v.as_str())
+    .map(str::trim)
+    .filter(|v| !v.is_empty())
+    .map(str::to_string)
+    .or_else(|| {
+      profile
+        .get("version")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .map(str::to_string)
+    })
+    .or_else(|| {
+      install
+        .get("target")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .map(str::to_string)
+    })
+    .ok_or_else(|| "forge-like installer missing version id".to_string())?;
+  embedded_version["id"] = json!(target_id.clone());
+  if embedded_version
     .get("type")
     .and_then(|v| v.as_str())
     .map(str::trim)
     .filter(|v| !v.is_empty())
     .is_none()
   {
-    version_info["type"] = json!("release");
+    embedded_version["type"] = json!("release");
   }
 
   let vdir = versions_root.join(&target_id);
   fs::create_dir_all(&vdir).map_err(into_error)?;
   let out_json = vdir.join(format!("{target_id}.json"));
-  fs::write(out_json, serde_json::to_string_pretty(&version_info).map_err(into_error)?).map_err(into_error)?;
+  fs::write(
+    out_json,
+    serde_json::to_string_pretty(&embedded_version).map_err(into_error)?,
+  )
+  .map_err(into_error)?;
 
   let maybe_file_path = install.get("filePath").and_then(|v| v.as_str()).map(str::trim).filter(|v| !v.is_empty());
   let maybe_maven_name = install.get("path").and_then(|v| v.as_str()).map(str::trim).filter(|v| !v.is_empty());
@@ -2035,11 +2069,11 @@ async fn resolve_launch_profile_id(
           break;
         }
         if let Ok(Some(generated)) =
-          install_legacy_forge_profile_from_installer(&app, Path::new(&installer_path), &versions)
+          install_forge_like_profile_from_installer(&app, Path::new(&installer_path), &versions)
         {
           let _ = emit_launch_log_app(
             &app,
-            format!("[launcher] Generated legacy {loader} profile from installer metadata: {generated}"),
+            format!("[launcher] Generated {loader} profile from installer metadata: {generated}"),
           );
           install_ok = true;
           break;
