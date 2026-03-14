@@ -59,6 +59,17 @@ jobs:
           mkdir -p src-tauri/resources/secrets
           printf '%s' "${FISHBATTERY_CURSEFORGE_API_KEY}" > src-tauri/resources/secrets/curseforge-api-key.txt
 
+      - name: Stage bundled launcher runtimes
+        run: npm run prepare:tauri-resources
+
+      - name: Verify bundled launcher runtimes
+        shell: bash
+        run: |
+          test -f src-tauri/resources/runtime/java8/bin/java.exe
+          test -f src-tauri/resources/runtime/java17/bin/java.exe
+          test -f src-tauri/resources/runtime/java21/bin/java.exe
+          test -f src-tauri/resources/msmc-runtime/bin/node.exe
+
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 

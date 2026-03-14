@@ -6,6 +6,7 @@ src-tauri/target/
 src-tauri/gen/
 src-tauri/resources/msmc-runtime/
 src-tauri/resources/secrets/
+src-tauri/resources/runtime/
 src-tauri/.cargo/
 target/
 *.log

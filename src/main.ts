@@ -2775,7 +2775,9 @@ async function refreshSidebarCharacterPreview(forceRefreshOfficial = false) {
 }
 
 // Render capes view.
-async function renderCapesView(forceRefresh = false) {
+async function renderCapesView(forceRefresh = false, officialStateOverride: any | null = null) {
+  const previousScrollTop =
+    window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0;
   capesPanelRoot.innerHTML = "";
   const accounts = state.accounts?.accounts ?? [];
   const activeId = state.accounts?.activeId ?? null;
@@ -2867,20 +2869,25 @@ async function renderCapesView(forceRefresh = false) {
     | null = null;
   let officialLoadError: string | null = null;
   if (activeMcId) {
-    try {
-      capeState = await backend.capesListOfficial(activeMcId, forceRefresh);
+    if (officialStateOverride) {
+      capeState = officialStateOverride;
       setOfficialCapeStateCache(activeMcId, capeState);
-    } catch (err: any) {
-      // One quick retry helps with transient Minecraft API hiccups.
+    } else {
       try {
-        await new Promise((resolve) => setTimeout(resolve, 250));
-        capeState = await backend.capesListOfficial(activeMcId, true);
+        capeState = await backend.capesListOfficial(activeMcId, forceRefresh);
         setOfficialCapeStateCache(activeMcId, capeState);
-      } catch (retryErr: any) {
-        officialLoadError = String(retryErr?.message || retryErr || err?.message || err || "Unknown error");
-        const cached = getOfficialCapeStateCache(activeMcId);
-        if (cached) {
-          capeState = cached;
+      } catch (err: any) {
+        // One quick retry helps with transient Minecraft API hiccups.
+        try {
+          await new Promise((resolve) => setTimeout(resolve, 250));
+          capeState = await backend.capesListOfficial(activeMcId, true);
+          setOfficialCapeStateCache(activeMcId, capeState);
+        } catch (retryErr: any) {
+          officialLoadError = String(retryErr?.message || retryErr || err?.message || err || "Unknown error");
+          const cached = getOfficialCapeStateCache(activeMcId);
+          if (cached) {
+            capeState = cached;
+          }
         }
       }
     }
@@ -2992,8 +2999,9 @@ async function renderCapesView(forceRefresh = false) {
         imageUrl: null,
         active: !capeState.activeCapeId,
         onSelect: async () => {
-          await backend.capesSetOfficialActive(activeMcId, null);
-          await renderCapesView(true);
+          const nextState = await backend.capesSetOfficialActive(activeMcId, null);
+          setOfficialCapeStateCache(activeMcId, nextState);
+          await renderCapesView(false, nextState);
         }
       })
     );
@@ -3005,8 +3013,9 @@ async function renderCapesView(forceRefresh = false) {
           imageUrl: item.previewDataUrl || null,
           active: !!item.active,
           onSelect: async () => {
-            await backend.capesSetOfficialActive(activeMcId, item.id);
-            await renderCapesView(true);
+            const nextState = await backend.capesSetOfficialActive(activeMcId, item.id);
+            setOfficialCapeStateCache(activeMcId, nextState);
+            await renderCapesView(false, nextState);
           }
         })
       );
@@ -3054,7 +3063,7 @@ async function renderCapesView(forceRefresh = false) {
         onSelect: async () => {
           if (activeMcId) await backend.capesSetLocalSelection(activeMcId, null);
           setStatus("Launcher cape selection cleared.");
-          await renderCapesView(false);
+          await renderCapesView(false, capeState);
         }
       })
     );
@@ -3068,7 +3077,7 @@ async function renderCapesView(forceRefresh = false) {
           onSelect: async () => {
             if (activeMcId) await backend.capesSetLocalSelection(activeMcId, localItem.id);
             setStatus(`Selected launcher ${localItem.tier} cape: ${localItem.name}`);
-            await renderCapesView(false);
+            await renderCapesView(false, capeState);
           }
         })
       );
@@ -3167,7 +3176,7 @@ async function renderCapesView(forceRefresh = false) {
         }
         setSavedSkins(activeMcId, saved);
         setStatus(uploaded === 1 ? "Saved 1 skin to launcher library." : `Saved ${uploaded} skins to launcher library.`);
-        await renderCapesView(true);
+        await renderCapesView(false, capeState);
       });
     skinSection.appendChild(skinUploadInput);
 
@@ -3201,10 +3210,11 @@ async function renderCapesView(forceRefresh = false) {
       };
       tile.onclick = async () => {
         try {
-          await backend.skinsUploadOfficial(activeMcId, skin.dataUrl, skin.variant);
+          const nextState = await backend.skinsUploadOfficial(activeMcId, skin.dataUrl, skin.variant);
+          setOfficialCapeStateCache(activeMcId, nextState);
           setSkinUiSelection(activeMcId, { mode: "saved", defaultKey: undefined, activeSavedId: skin.id });
           setStatus(`Selected skin: ${skin.name || `Skin ${idx + 1}`}`);
-          await renderCapesView(true);
+          await renderCapesView(false, nextState);
         } catch (err: any) {
           await showLauncherAlert(String(err?.message ?? err ?? "Could not select skin"));
         }
@@ -3288,11 +3298,12 @@ async function renderCapesView(forceRefresh = false) {
         try {
           const currentMap = getSkinUiSelection(activeMcId);
           const knownSkinId = currentMap.defaultSkinIds?.[def.key];
+          let nextState: any = null;
           if (knownSkinId && officialSkins.some((s) => s.id === knownSkinId)) {
-            await backend.skinsSetOfficialActive(activeMcId, knownSkinId);
+            nextState = await backend.skinsSetOfficialActive(activeMcId, knownSkinId);
           } else {
             const dataUrl = await fetchImageAsDataUrl(def.sourceUrl);
-            const nextState = await backend.skinsUploadOfficial(activeMcId, dataUrl, def.variant);
+            nextState = await backend.skinsUploadOfficial(activeMcId, dataUrl, def.variant);
             const activeSkinId = String(nextState?.activeSkinId || "").trim();
             if (activeSkinId) {
               setSkinUiSelection(activeMcId, {
@@ -3300,9 +3311,12 @@ async function renderCapesView(forceRefresh = false) {
               });
             }
           }
+          if (nextState) {
+            setOfficialCapeStateCache(activeMcId, nextState);
+          }
           setSkinUiSelection(activeMcId, { mode: "default", defaultKey: def.key, activeSavedId: undefined });
           setStatus(`Selected default skin: ${def.name}`);
-          await renderCapesView(true);
+          await renderCapesView(false, nextState);
         } catch (err: any) {
           await showLauncherAlert(String(err?.message ?? err ?? "Could not select default skin"));
         }
@@ -3333,6 +3347,10 @@ async function renderCapesView(forceRefresh = false) {
       defaultSkinGrid.appendChild(tile);
     });
   }
+
+  requestAnimationFrame(() => {
+    window.scrollTo({ top: previousScrollTop });
+  });
 
 }
 

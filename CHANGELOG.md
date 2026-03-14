@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.5.1 - 2026-03-14
+
+### Changed
+- Tauri release builds now stage bundled Java runtimes into release resources and verify they are present before packaging.
+
+### Fixed
+- Fixed NeoForge installer recovery for profiles like `neoforge-21.1.219` that do not include the Minecraft version in the profile id string.
+- Fixed launcher releases missing bundled runtime payloads required for bundled Java discovery.
+- Fixed skin and cape selection in the Capes view feeling like a full page refresh by reusing returned profile state and preserving scroll position.
+
 ## v0.5.0 - 2026-03-14
 
 ### Added
