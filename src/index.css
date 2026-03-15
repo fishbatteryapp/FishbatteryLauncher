@@ -106,10 +106,7 @@ body{
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 28px;
-  background:
-    radial-gradient(520px 320px at 50% 18%, rgba(var(--accent-rgb), .12), transparent 72%),
-    linear-gradient(180deg, rgba(5, 10, 16, .95), rgba(7, 13, 20, .9));
+  background: rgba(10, 15, 22, .96);
   opacity: 1;
   visibility: visible;
   transition: opacity .26s ease, visibility .26s ease;
@@ -122,14 +119,8 @@ body{
 }
 
 .startupSplashCard{
-  width: min(360px, calc(100vw - 56px));
+  width: min(360px, calc(100vw - 40px));
   padding: 34px 28px 28px;
-  border-radius: 28px;
-  border: 1px solid rgba(132, 188, 228, .16);
-  background:
-    linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.015)),
-    rgba(10, 15, 22, .94);
-  box-shadow: 0 28px 80px rgba(0, 0, 0, .42);
   text-align: center;
 }
 
