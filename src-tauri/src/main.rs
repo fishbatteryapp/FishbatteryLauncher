@@ -27,7 +27,7 @@ fn main() {
       .closable(false)
       .decorations(false)
       .shadow(true)
-      .transparent(true)
+      .transparent(false)
       .center()
       .build();
       if let Err(err) = splash {
