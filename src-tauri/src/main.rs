@@ -14,6 +14,25 @@ fn main() {
       if let Err(err) = logs::init(&app.handle()) {
         eprintln!("failed to initialize launcher logs: {err}");
       }
+      let splash = tauri::WebviewWindowBuilder::new(
+        app,
+        "startup-splash",
+        tauri::WebviewUrl::App("splash.html".into()),
+      )
+      .title("Starting Fishbattery Launcher")
+      .inner_size(360.0, 420.0)
+      .resizable(false)
+      .maximizable(false)
+      .minimizable(false)
+      .closable(false)
+      .decorations(false)
+      .shadow(true)
+      .transparent(true)
+      .center()
+      .build();
+      if let Err(err) = splash {
+        eprintln!("failed to create startup splash window: {err}");
+      }
       Ok(())
     })
     .invoke_handler(tauri::generate_handler![
@@ -27,6 +46,7 @@ fn main() {
       commands::window_shell::window_drag_end,
       commands::window_shell::window_toggle_fullscreen,
       commands::window_shell::window_close,
+      commands::window_shell::window_show,
       commands::window_shell::window_set_title_bar_theme,
       commands::window_shell::external_open,
       commands::window_shell::versions_list,
@@ -132,4 +152,3 @@ fn main() {
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
 }
-

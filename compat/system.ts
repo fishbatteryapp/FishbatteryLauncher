@@ -41,6 +41,7 @@ const phase1Commands: Record<string, (...args: unknown[]) => Promise<unknown>> =
   windowDragEnd: (cursorY: number) => invoke("window_drag_end", { cursorY }),
   windowToggleFullscreen: () => invoke("window_toggle_fullscreen"),
   windowClose: () => invoke("window_close"),
+  windowShow: () => invoke("window_show"),
   windowSetTitleBarTheme: (color: string, symbolColor: string) =>
     invoke("window_set_title_bar_theme", { color, symbolColor }),
   externalOpen: (url: string) => invoke("external_open", { url })

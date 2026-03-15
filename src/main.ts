@@ -34,6 +34,10 @@ const winBtnMax = $("winBtnMax") as HTMLButtonElement;
 const winBtnClose = $("winBtnClose") as HTMLButtonElement;
 const windowTopbar = $("windowTopbar");
 const windowTopbarPill = $("windowTopbarPill");
+const startupSplash = $("startupSplash");
+const startupSplashTitle = $("startupSplashTitle");
+const startupSplashDetail = $("startupSplashDetail");
+const appShell = $("appShell");
 
 const instancesGrid = $("instancesGrid") as HTMLDivElement;
 const searchInstances = $("searchInstances") as HTMLInputElement;
@@ -325,6 +329,8 @@ let modalMode: "create" | "edit" = "create";
 let editInstanceId: string | null = null;
 let editServerId: string | null = null;
 let launchLogBuffer: string[] = [];
+let startupReady = false;
+let startupRevealStarted = false;
 let latestDiagnosis: any = null;
 let diagnosisDetailsOpen = false;
 let debugLogsVisible = false;
@@ -2088,9 +2094,42 @@ function appendLog(line: string) {
   if (status) setStatus(status);
 }
 
+function setStartupProgress(detail: string, title = "Launching launcher") {
+  if (startupSplashTitle) startupSplashTitle.textContent = title;
+  if (startupSplashDetail) startupSplashDetail.textContent = detail;
+}
+
 // Set status.
 function setStatus(text: string) {
   statusText.textContent = text || "";
+  if (!startupReady && text) {
+    const detail = text === "Loading..." ? "Preparing your library and services..." : text;
+    setStartupProgress(detail);
+  }
+}
+
+async function revealStartupShell() {
+  if (startupRevealStarted) return;
+  startupRevealStarted = true;
+  startupReady = true;
+  setStartupProgress("Your launcher is ready.");
+  windowTopbar.classList.remove("appStartupHidden");
+  windowTopbar.classList.add("appStartupReady");
+  windowTopbar.setAttribute("aria-hidden", "false");
+  appShell.classList.remove("appStartupHidden");
+  appShell.classList.add("appStartupReady");
+  appShell.setAttribute("aria-hidden", "false");
+  startupSplash.classList.add("is-hidden");
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  try {
+    await backend.windowShow();
+  } catch (err: any) {
+    appendLog(`[startup] windowShow failed: ${String(err?.message ?? err)}`);
+  }
+  window.setTimeout(() => {
+    startupSplash.style.display = "none";
+  }, 320);
 }
 
 function setGlobalActionBusy(visible: boolean, title = "Working...", detail = "Please wait while Fishbattery finishes this action.") {
@@ -8490,6 +8529,7 @@ async function runProviderSearch() {
 // ---------------- Data refresh ----------------
 async function refreshAll() {
   setStatus("Loading...");
+  setStartupProgress("Checking versions, accounts, and services...");
 
   // 1) Pull immutable/version metadata first (used by create modal and compatibility UI).
   try {
@@ -8563,6 +8603,7 @@ async function refreshAll() {
   }
 
   // 3) Render all visible top-level sections from freshly loaded state.
+  setStartupProgress("Rendering your library...");
   await renderAccounts();
   try {
     await refreshSidebarCharacterPreview(false);
@@ -8626,6 +8667,14 @@ async function refreshAll() {
   syncTitleBar();
   // Re-sync after style recalculation so native caption area always matches active theme.
   requestAnimationFrame(syncTitleBar);
+}
+
+async function bootLauncher() {
+  try {
+    await refreshAll();
+  } finally {
+    await revealStartupShell();
+  }
 }
 
 sidebarSponsoredCta.onclick = () => {
@@ -10003,7 +10052,7 @@ renderModalInstanceSyncToggle();
 renderIconTransformUi();
 setIconPreviewSource(null);
 renderDebugLogsVisibility();
-refreshAll();
+void bootLauncher();
 ensureRunningStatusPoll();
 
 if (window.matchMedia) {

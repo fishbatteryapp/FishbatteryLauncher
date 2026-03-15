@@ -1,6 +1,6 @@
 use serde::Serialize;
 use tauri::command;
-use tauri::{PhysicalPosition, Position, Window};
+use tauri::{AppHandle, Manager, PhysicalPosition, Position, Window};
 
 use crate::error::{into_error, AppResult};
 
@@ -144,6 +144,16 @@ pub fn window_toggle_fullscreen(window: Window) -> AppResult<bool> {
 #[command]
 pub fn window_close(window: Window) -> AppResult<bool> {
   window.close().map_err(into_error)?;
+  Ok(true)
+}
+
+#[command]
+pub fn window_show(app: AppHandle, window: Window) -> AppResult<bool> {
+  if let Some(splash) = app.get_webview_window("startup-splash") {
+    let _ = splash.close();
+  }
+  window.show().map_err(into_error)?;
+  let _ = window.set_focus();
   Ok(true)
 }
 

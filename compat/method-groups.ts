@@ -36,6 +36,7 @@ export const SYSTEM_METHODS = new Set([
   "windowDragEnd",
   "windowToggleFullscreen",
   "windowClose",
+  "windowShow",
   "externalOpen",
   "capesListLocal",
   "capesGetLocalSelection",

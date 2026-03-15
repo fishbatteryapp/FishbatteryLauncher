@@ -16,6 +16,12 @@ export default defineConfig({
   },
   build: {
     outDir: resolve(__dirname, "dist"),
-    emptyOutDir: true
+    emptyOutDir: true,
+    rollupOptions: {
+      input: {
+        main: resolve(__dirname, "src/index.html"),
+        splash: resolve(__dirname, "src/splash.html")
+      }
+    }
   }
 });

@@ -15,6 +15,7 @@
         "title": "Fishbattery Launcher",
         "width": 1280,
         "height": 800,
+        "visible": false,
         "resizable": true,
         "decorations": false,
         "transparent": true
