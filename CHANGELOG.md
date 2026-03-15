@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.5.2 - 2026-03-15
+
+### Added
+- Added a startup splash screen that stays visible until the launcher is ready.
+
+### Changed
+- Simplified the startup splash so it uses a single clean surface.
+- Removed rounded window treatment so the launcher matches Windows' actual square native frame.
+
+### Fixed
+- Fixed updater confirmation flow so it shows active loading/progress state while the update is downloading or applying.
+- Fixed ad impression tracking so impressions only count while the ad is actively visible in the launcher UI.
+
 ## v0.5.1 - 2026-03-14
 
 ### Changed
