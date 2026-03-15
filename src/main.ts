@@ -2586,6 +2586,29 @@ async function postLauncherAdEvent(eventType: "impression" | "click", campaignId
   }
 }
 
+function isSponsoredBannerActivelyRenderable() {
+  if (!sidebarSponsored) return false;
+  if (document.visibilityState !== "visible") return false;
+  const style = window.getComputedStyle(sidebarSponsored);
+  if (style.display === "none" || style.visibility === "hidden" || Number(style.opacity || "1") <= 0) {
+    return false;
+  }
+  const rect = sidebarSponsored.getBoundingClientRect();
+  if (rect.width <= 0 || rect.height <= 0) return false;
+  if (rect.bottom <= 0 || rect.right <= 0) return false;
+  if (rect.top >= window.innerHeight || rect.left >= window.innerWidth) return false;
+  return true;
+}
+
+function maybeTrackSponsoredImpression(entry: SponsoredBanner | null) {
+  if (!hasAdMeasurementConsent() || !entry?.id) return;
+  if (!isSponsoredBannerActivelyRenderable()) return;
+  if (sponsoredLastImpressionId === entry.id) return;
+  sponsoredLastImpressionId = entry.id;
+  appendLog(`[sponsored] Impression: ${entry.id}`);
+  void postLauncherAdEvent("impression", entry.id);
+}
+
 // Render sponsored banner state.
 async function renderSponsoredBannerState(advance = false) {
   if (!sidebarSponsored) return;
@@ -2672,11 +2695,7 @@ async function renderSponsoredBannerState(advance = false) {
   sidebarSponsoredCta.style.display = ctaTarget ? "" : "none";
   sidebarSponsoredCta.textContent = ctaText;
   sponsoredCurrentLink = ctaTarget;
-  if (hasAdMeasurementConsent() && entry.id && sponsoredLastImpressionId !== entry.id) {
-    sponsoredLastImpressionId = entry.id;
-    appendLog(`[sponsored] Impression: ${entry.id}`);
-    void postLauncherAdEvent("impression", entry.id);
-  }
+  maybeTrackSponsoredImpression(entry);
 }
 
 function renderConsentBannerState() {
@@ -9970,6 +9989,10 @@ window.addEventListener("resize", () => {
 });
 window.addEventListener("focus", () => {
   void syncWindowMaxButtonState();
+  maybeTrackSponsoredImpression(sponsoredCurrentEntry);
+});
+document.addEventListener("visibilitychange", () => {
+  maybeTrackSponsoredImpression(sponsoredCurrentEntry);
 });
 void syncWindowMaxButtonState();
 
