@@ -375,6 +375,7 @@ let hasAutoCheckedUpdates = false;
 let promptedUpdateVersion: string | null = null;
 let promptedInstallVersion: string | null = null;
 let accountAvatarWarmupInFlight = false;
+let updaterBusyIntent: "download" | "install" | null = null;
 let createSource: "custom" | "import" | "modrinth" | "curseforge" | "technic" | "atlauncher" | "ftb" = "custom";
 let createIncludeReleases = true;
 let createIncludeSnapshots = false;
@@ -2145,6 +2146,37 @@ function setModalBusy(visible: boolean, title = "Working...", detail = "Please w
   modalClose.toggleAttribute("disabled", visible);
   modalCancel.toggleAttribute("disabled", visible);
   modalCreate.toggleAttribute("disabled", visible);
+}
+
+function syncUpdaterBusyBanner() {
+  if (!updaterBusyIntent) return;
+
+  if (updaterBusyIntent === "download") {
+    if (updaterState.status === "downloading") {
+      const pct = Number(updaterState.progressPercent ?? 0);
+      setGlobalActionBusy(true, "Downloading update", `Downloading update... ${pct.toFixed(1)}%`);
+      return;
+    }
+    if (updaterState.status === "downloaded") {
+      updaterBusyIntent = null;
+      setGlobalActionBusy(false);
+      return;
+    }
+    if (updaterState.status === "error") {
+      updaterBusyIntent = null;
+      setGlobalActionBusy(false);
+      return;
+    }
+    setGlobalActionBusy(true, "Downloading update", "Preparing update download...");
+    return;
+  }
+
+  if (updaterState.status === "error") {
+    updaterBusyIntent = null;
+    setGlobalActionBusy(false);
+    return;
+  }
+  setGlobalActionBusy(true, "Installing update", "Restarting launcher to apply the update...");
 }
 
 async function withGlobalActionProgress<T>(
@@ -5314,6 +5346,12 @@ function renderSettingsPanels() {
     btnDownload.disabled = updaterState.status !== "update-available";
     btnDownload.onclick = () =>
       guarded(async () => {
+        updaterBusyIntent = "download";
+        setGlobalActionBusy(
+          true,
+          "Downloading update",
+          `Preparing update v${updaterState.latestVersion ?? "unknown"}...`
+        );
         await backend.updaterDownload();
       });
 
@@ -5322,6 +5360,12 @@ function renderSettingsPanels() {
     btnInstall.textContent = "Restart and install";
     btnInstall.disabled = updaterState.status !== "downloaded";
     btnInstall.onclick = () => {
+      updaterBusyIntent = "install";
+      setGlobalActionBusy(
+        true,
+        "Installing update",
+        `Restarting to install v${updaterState.latestVersion ?? "unknown"}...`
+      );
       void backend.updaterInstall();
     };
 
@@ -9859,6 +9903,7 @@ backend.onLaunchLog((line) => {
 });
 backend.onUpdaterEvent(async (evt) => {
   updaterState = evt;
+  syncUpdaterBusyBanner();
   if (settingsTabInstall.classList.contains("active")) {
     renderSettingsPanels();
   }
@@ -9875,6 +9920,8 @@ backend.onUpdaterEvent(async (evt) => {
       promptedUpdateVersion = v;
       const yes = await showLauncherConfirm(`Update v${v} is available. Download now?`);
       if (yes) {
+        updaterBusyIntent = "download";
+        setGlobalActionBusy(true, "Downloading update", `Preparing update v${v}...`);
         void backend.updaterDownload();
       }
     }
@@ -9886,6 +9933,8 @@ backend.onUpdaterEvent(async (evt) => {
       promptedInstallVersion = v;
       const yes = await showLauncherConfirm(`Update v${v} downloaded. Restart now to install?`);
       if (yes) {
+        updaterBusyIntent = "install";
+        setGlobalActionBusy(true, "Installing update", `Restarting to install v${v}...`);
         void backend.updaterInstall();
       }
     }

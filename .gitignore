@@ -51,3 +51,4 @@ capes/
 .vscode/
 scripts/generate_cape_keys.js
 RELEASE_STEPS.md
+PLAYIT_INTEGRATION_PLAN.md
