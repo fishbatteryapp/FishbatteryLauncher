@@ -77,6 +77,7 @@ fn main() {
       commands::accounts_capes::capes_set_official_active,
       commands::accounts_capes::skins_set_official_active,
       commands::accounts_capes::skins_upload_official,
+      commands::playit::playit_exchange_setup_code,
       commands::playit::playit_get_state,
       commands::playit::playit_link_begin,
       commands::playit::playit_link_complete,

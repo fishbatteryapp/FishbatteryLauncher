@@ -5,6 +5,7 @@ use std::str::FromStr;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use reqwest::header::{AUTHORIZATION, CONTENT_TYPE};
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tauri::{command, Manager};
 
@@ -13,6 +14,17 @@ use crate::logs;
 
 const PLAYIT_API_BASE: &str = "https://api.playit.gg";
 const PLAYIT_AGENT_TYPE: &str = "self-managed";
+const FISHBATTERY_API_BASE: &str = "https://api.fishbattery.app";
+const FISHBATTERY_PLAYIT_EXCHANGE_PATH: &str = "/v1/playit/setup/exchange";
+
+#[derive(Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct LauncherSessionDb {
+    access_token: Option<String>,
+    refresh_token: Option<String>,
+    account_id: Option<String>,
+    updated_at: Option<u64>,
+}
 
 fn now_ms() -> u64 {
     SystemTime::now()
@@ -27,6 +39,12 @@ fn app_data_root(app: &tauri::AppHandle) -> AppResult<PathBuf> {
 
 fn playit_state_path(app: &tauri::AppHandle) -> AppResult<PathBuf> {
     Ok(app_data_root(app)?.join("data").join("playit.json"))
+}
+
+fn launcher_session_db_path(app: &tauri::AppHandle) -> AppResult<PathBuf> {
+    Ok(app_data_root(app)?
+        .join("data")
+        .join("launcher-session.json"))
 }
 
 fn read_json_file(path: &Path, fallback: Value) -> Value {
@@ -110,6 +128,14 @@ fn read_state(app: &tauri::AppHandle) -> AppResult<Value> {
         &playit_state_path(app)?,
         default_state(),
     )))
+}
+
+fn read_launcher_session(app: &tauri::AppHandle) -> AppResult<LauncherSessionDb> {
+    let path = launcher_session_db_path(app)?;
+    match fs::read_to_string(path) {
+        Ok(raw) => serde_json::from_str::<LauncherSessionDb>(&raw).map_err(into_error),
+        Err(_) => Ok(LauncherSessionDb::default()),
+    }
 }
 
 fn write_state(app: &tauri::AppHandle, state: &Value) -> AppResult<()> {
@@ -266,6 +292,53 @@ async fn playit_post(secret_key: Option<&str>, path: &str, payload: &Value) -> A
     Err(format!("playit: {message}"))
 }
 
+async fn fishbattery_playit_exchange_setup_code(
+    app: &tauri::AppHandle,
+    code: &str,
+) -> AppResult<Value> {
+    let session = read_launcher_session(app)?;
+    let access_token = session
+        .access_token
+        .unwrap_or_default()
+        .trim()
+        .to_string();
+    if access_token.is_empty() {
+        return Err("Not signed in to Fishbattery.".to_string());
+    }
+
+    let client = reqwest::Client::new();
+    let response = client
+        .post(format!(
+            "{FISHBATTERY_API_BASE}{FISHBATTERY_PLAYIT_EXCHANGE_PATH}"
+        ))
+        .header(AUTHORIZATION, format!("Bearer {access_token}"))
+        .header(reqwest::header::ACCEPT, "application/json")
+        .header("User-Agent", concat!("FishbatteryLauncher/", env!("CARGO_PKG_VERSION")))
+        .json(&json!({ "code": code }))
+        .send()
+        .await
+        .map_err(|err| {
+            format!(
+                "Could not reach Fishbattery API ({FISHBATTERY_API_BASE}{FISHBATTERY_PLAYIT_EXCHANGE_PATH}). Details: {}",
+                err
+            )
+        })?;
+
+    let status = response.status();
+    let body: Value = response.json().await.map_err(into_error)?;
+    if status.is_success() {
+        return Ok(body);
+    }
+
+    let message = body
+        .get("error")
+        .and_then(|v| v.get("message").or_else(|| v.get("msg")))
+        .and_then(|v| v.as_str())
+        .or_else(|| body.get("message").and_then(|v| v.as_str()))
+        .unwrap_or("Fishbattery Playit exchange failed");
+    Err(format!("Fishbattery API returned {}: {message}", status.as_u16()))
+}
+
 fn parse_local_ip(payload: &Value) -> AppResult<String> {
     let raw = payload
         .get("localIp")
@@ -297,6 +370,28 @@ fn parse_local_port(payload: &Value) -> AppResult<Option<u16>> {
 #[command]
 pub fn playit_get_state(app: tauri::AppHandle) -> AppResult<Value> {
     Ok(sanitized_state(&read_state(&app)?))
+}
+
+#[command]
+pub async fn playit_exchange_setup_code(app: tauri::AppHandle, code: String) -> AppResult<Value> {
+    let normalized_code = code.trim();
+    if normalized_code.is_empty() {
+        return Err("Playit setup code is required.".to_string());
+    }
+
+    let payload = fishbattery_playit_exchange_setup_code(&app, normalized_code).await?;
+    let secret_key = payload
+        .get("secretKey")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .ok_or_else(|| "Fishbattery Playit exchange did not return a secret key.".to_string())?;
+
+    Ok(json!({
+      "ok": true,
+      "linked": true,
+      "secretKey": secret_key
+    }))
 }
 
 #[command]
