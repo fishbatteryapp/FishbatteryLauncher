@@ -6140,6 +6140,8 @@ function renderPlayitPanel() {
   statusCard.appendChild(codeRow.row);
   shell.appendChild(statusCard);
 
+  const activeInstanceId = state.instances?.activeInstanceId ?? null;
+  const activeInstance = (state.instances?.instances ?? []).find((x: any) => x.id === activeInstanceId) ?? null;
   const suggestedTunnelName = playitTunnelNameDraft.trim() || `${activeInstance?.name || "Minecraft"} LAN`;
 
   const tunnelCard = document.createElement("div");
