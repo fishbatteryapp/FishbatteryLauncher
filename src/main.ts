@@ -104,6 +104,7 @@ function setButtonIcon(btn: HTMLButtonElement | null, svgPath: string) {
 
 const TRASH_ICON_PATH =
   "M9.5 3.5c0-.83.67-1.5 1.5-1.5h2c.83 0 1.5.67 1.5 1.5V4h3.75C19.77 4 21 5.23 21 6.75S19.77 9.5 18.25 9.5H18l-1.02 9.2A4 4 0 0 1 13 22H11a4 4 0 0 1-3.98-3.3L6 9.5h-.25A2.75 2.75 0 0 1 3 6.75C3 5.23 4.23 4 5.75 4H9.5z";
+const STARTUP_REVEAL_TIMEOUT_MS = 2500;
 
 function applyActionButtonIcons() {
   setButtonIcon(btnCreate, "M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6z");
@@ -332,6 +333,7 @@ let editServerId: string | null = null;
 let launchLogBuffer: string[] = [];
 let startupReady = false;
 let startupRevealStarted = false;
+let startupEmergencyRevealTimer: number | null = null;
 let latestDiagnosis: any = null;
 let diagnosisDetailsOpen = false;
 let debugLogsVisible = false;
@@ -2144,6 +2146,23 @@ function setStartupProgress(detail: string, title = "Launching launcher") {
   if (startupSplashDetail) startupSplashDetail.textContent = detail;
 }
 
+function forceRevealStartupShell(reason?: string) {
+  if (startupRevealStarted) return;
+  startupRevealStarted = true;
+  startupReady = true;
+  if (reason) {
+    appendLog(`[startup] ${reason}`);
+  }
+  windowTopbar.classList.remove("appStartupHidden");
+  windowTopbar.classList.add("appStartupReady");
+  windowTopbar.setAttribute("aria-hidden", "false");
+  appShell.classList.remove("appStartupHidden");
+  appShell.classList.add("appStartupReady");
+  appShell.setAttribute("aria-hidden", "false");
+  startupSplash.classList.add("is-hidden");
+  startupSplash.style.display = "none";
+}
+
 // Set status.
 function setStatus(text: string) {
   statusText.textContent = text || "";
@@ -2157,6 +2176,10 @@ async function revealStartupShell() {
   if (startupRevealStarted) return;
   startupRevealStarted = true;
   startupReady = true;
+  if (startupEmergencyRevealTimer != null) {
+    window.clearTimeout(startupEmergencyRevealTimer);
+    startupEmergencyRevealTimer = null;
+  }
   setStartupProgress("Your launcher is ready.");
   windowTopbar.classList.remove("appStartupHidden");
   windowTopbar.classList.add("appStartupReady");
@@ -4987,6 +5010,8 @@ async function runActiveModalBenchmark() {
 function renderSettingsPanels() {
   const s = getSettings();
   const premium = hasPremium();
+  const activeInstanceId = state.instances?.activeInstanceId ?? null;
+  const activeInstance = (state.instances?.instances ?? []).find((x: any) => x.id === activeInstanceId) ?? null;
 
   if (!premium && PREMIUM_THEMES.has(s.theme)) {
     setSettings({ theme: defaultSettings.theme });
@@ -8957,7 +8982,6 @@ async function refreshAll() {
   } catch (err: any) {
     appendLog(`[startup] sidebar preview failed: ${String(err?.message ?? err)}`);
   }
-  await promptLauncherSignInOnStartup();
   await renderInstances();
   try {
     await renderCapesView(false);
@@ -9017,11 +9041,28 @@ async function refreshAll() {
 }
 
 async function bootLauncher() {
+  let timedOut = false;
+  const refreshPromise = refreshAll().catch((err: any) => {
+    appendLog(`[startup] refreshAll failed: ${String(err?.message ?? err)}`);
+  });
   try {
-    await refreshAll();
+    await Promise.race([
+      refreshPromise,
+      new Promise<void>((resolve) => {
+        window.setTimeout(() => {
+          timedOut = true;
+          resolve();
+        }, STARTUP_REVEAL_TIMEOUT_MS);
+      })
+    ]);
   } finally {
+    if (timedOut) {
+      appendLog(`[startup] Revealing shell after ${STARTUP_REVEAL_TIMEOUT_MS}ms timeout`);
+    }
     await revealStartupShell();
   }
+  await refreshPromise;
+  void promptLauncherSignInOnStartup();
 }
 
 sidebarSponsoredCta.onclick = () => {
@@ -10398,6 +10439,26 @@ document.addEventListener("visibilitychange", () => {
 void syncWindowMaxButtonState();
 
 // Initial
+startupEmergencyRevealTimer = window.setTimeout(() => {
+  forceRevealStartupShell("Emergency startup fallback triggered before normal reveal.");
+}, 3500);
+
+window.addEventListener("error", (event) => {
+  const message = String(event.error?.message || event.message || "Unknown startup error");
+  setStartupProgress(message, "Startup error");
+  forceRevealStartupShell(`Renderer error: ${message}`);
+});
+
+window.addEventListener("unhandledrejection", (event) => {
+  const reason = event.reason;
+  const message =
+    typeof reason === "string"
+      ? reason
+      : String(reason?.message || reason || "Unhandled startup rejection");
+  setStartupProgress(message, "Startup error");
+  forceRevealStartupShell(`Unhandled rejection: ${message}`);
+});
+
 applySettingsToDom(getSettings());
 setSettingsTab("general");
 renderModalInstanceSyncToggle();

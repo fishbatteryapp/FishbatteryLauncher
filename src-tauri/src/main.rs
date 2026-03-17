@@ -6,11 +6,14 @@ mod events;
 mod logs;
 mod state;
 
+use tauri::Manager;
+
 fn main() {
   tauri::Builder::default()
     .plugin(tauri_plugin_updater::Builder::new().build())
     .manage(state::AppState::default())
     .setup(|app| {
+      let app_handle = app.handle().clone();
       if let Err(err) = logs::init(&app.handle()) {
         eprintln!("failed to initialize launcher logs: {err}");
       }
@@ -33,6 +36,16 @@ fn main() {
       if let Err(err) = splash {
         eprintln!("failed to create startup splash window: {err}");
       }
+      tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_millis(4000)).await;
+        if let Some(window) = app_handle.get_webview_window("main") {
+          let _ = window.show();
+          let _ = window.set_focus();
+        }
+        if let Some(splash) = app_handle.get_webview_window("startup-splash") {
+          let _ = splash.close();
+        }
+      });
       Ok(())
     })
     .invoke_handler(tauri::generate_handler![
