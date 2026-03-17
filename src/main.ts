@@ -44,6 +44,7 @@ const searchInstances = $("searchInstances") as HTMLInputElement;
 
 const navLibrary = $("navLibrary");
 const navCapes = $("navCapes");
+const navPlayit = $("navPlayit");
 const navSettings = $("navSettings");
 const sidebarCapesPreview = $("sidebarCapesPreview");
 const sidebarCapesPreviewHost = $("sidebarCapesPreviewHost");
@@ -65,8 +66,10 @@ const consentSettings = $("consentSettings") as HTMLButtonElement;
 
 const viewLibrary = $("viewLibrary");
 const viewCapes = $("viewCapes");
+const viewPlayit = $("viewPlayit");
 const viewSettings = $("viewSettings");
 const capesPanelRoot = $("capesPanelRoot");
+const playitPanelRoot = $("playitPanelRoot");
 
 const accountBtn = $("accountBtn");
 const accountDropdown = $("accountDropdown");
@@ -411,6 +414,7 @@ let playitState: PlayitUiState = {
 let playitSetupCodeDraft = "";
 let playitTunnelNameDraft = "";
 let playitTunnelPortDraft = "25565";
+let playitTunnelModeDraft: "custom-udp" | "minecraft-java" | "custom-tcp" = "custom-udp";
 let cloudSyncIntervalId: number | null = null;
 let runningStatusPollId: number | null = null;
 let lastRunningSignature = "";
@@ -2853,15 +2857,20 @@ function ensureSponsoredRotation() {
 }
 
 // Set view.
-function setView(which: "library" | "capes" | "settings") {
+function setView(which: "library" | "capes" | "playit" | "settings") {
   viewLibrary.style.display = which === "library" ? "" : "none";
   viewCapes.style.display = which === "capes" ? "" : "none";
+  viewPlayit.style.display = which === "playit" ? "" : "none";
   viewSettings.style.display = which === "settings" ? "" : "none";
   navLibrary.classList.toggle("active", which === "library");
   navCapes.classList.toggle("active", which === "capes");
+  navPlayit.classList.toggle("active", which === "playit");
   navSettings.classList.toggle("active", which === "settings");
   if (sidebarCapesPreview) sidebarCapesPreview.style.display = "";
   if (which === "capes") void renderCapesView();
+  if (which === "playit") {
+    void refreshPlayitState(true).then(() => renderPlayitPanel());
+  }
 }
 
 async function renderSidebarCharacterPreview(
@@ -5423,224 +5432,6 @@ function renderSettingsPanels() {
       : "Cloud sync priority: Standard (Premium includes priority syncing)";
     settingsPanelInstall.appendChild(syncPriorityMeta);
 
-    const playitCard = document.createElement("div");
-    playitCard.className = "setRow";
-    playitCard.style.marginTop = "10px";
-    playitCard.style.flexDirection = "column";
-    playitCard.style.alignItems = "stretch";
-    playitCard.style.gap = "10px";
-
-    const playitTitle = document.createElement("div");
-    playitTitle.className = "setLabel";
-    playitTitle.textContent = "Playit.gg";
-    playitCard.appendChild(playitTitle);
-
-    const playitHelp = document.createElement("div");
-    playitHelp.className = "setHelp";
-    playitHelp.textContent =
-      "Fishbattery stores only your user Playit secret locally. Setup-code exchange is routed through the Fishbattery backend.";
-    playitCard.appendChild(playitHelp);
-
-    const playitStatus = document.createElement("div");
-    playitStatus.className = "muted";
-    playitStatus.style.fontSize = "12px";
-    playitStatus.textContent = playitStatusText(playitState);
-    playitCard.appendChild(playitStatus);
-
-    const playitAccountHint = document.createElement("div");
-    playitAccountHint.className = "setHelp";
-    if (!state.launcherAccount?.activeAccountId) {
-      playitAccountHint.textContent =
-        "Sign in to your Fishbattery account first. The launcher uses your signed-in session to exchange Playit setup codes safely.";
-      playitCard.appendChild(playitAccountHint);
-    } else if (playitState.linked && playitState.linkedAt) {
-      playitAccountHint.textContent = `Linked on ${new Date(playitState.linkedAt).toLocaleString()}.`;
-      playitCard.appendChild(playitAccountHint);
-    }
-
-    const playitCodeRow = makeRow(
-      "Setup code",
-      "Get a setup code from playit.gg, then click Exchange and link. The code is sent to Fishbattery backend, not stored locally."
-    );
-    playitCodeRow.row.style.flexDirection = "column";
-    playitCodeRow.row.style.alignItems = "stretch";
-    const playitCodeInput = makeInput(playitSetupCodeDraft, "Paste Playit setup code", (v) => {
-      playitSetupCodeDraft = v;
-    });
-    playitCodeInput.autocomplete = "off";
-    playitCodeInput.spellcheck = false;
-    playitCodeRow.row.appendChild(playitCodeInput);
-    const playitCodeActions = document.createElement("div");
-    playitCodeActions.className = "row";
-    playitCodeActions.style.justifyContent = "flex-start";
-    playitCodeActions.style.gap = "8px";
-    playitCodeActions.style.marginTop = "8px";
-
-    const btnPlayitExchange = document.createElement("button");
-    btnPlayitExchange.className = "btn";
-    btnPlayitExchange.textContent = playitState.linked ? "Relink account" : "Exchange and link";
-    btnPlayitExchange.disabled = !state.launcherAccount?.activeAccountId || !playitSetupCodeDraft.trim();
-    btnPlayitExchange.onclick = () =>
-      guarded(async () => {
-        const exchanged = await backend.playitExchangeSetupCode(playitSetupCodeDraft.trim());
-        await backend.playitLinkSecret(exchanged.secretKey);
-        playitSetupCodeDraft = "";
-        await refreshPlayitState();
-        appendLog("[playit] Account linked through Fishbattery backend.");
-        renderSettingsPanels();
-      });
-
-    const btnPlayitUnlink = document.createElement("button");
-    btnPlayitUnlink.className = "btn";
-    btnPlayitUnlink.textContent = "Unlink";
-    btnPlayitUnlink.disabled = !playitState.linked;
-    btnPlayitUnlink.onclick = () =>
-      guarded(async () => {
-        await backend.playitUnlink();
-        await refreshPlayitState(true);
-        appendLog("[playit] Account unlinked.");
-        renderSettingsPanels();
-      });
-    playitCodeInput.oninput = () => {
-      playitSetupCodeDraft = playitCodeInput.value;
-      btnPlayitExchange.disabled = !state.launcherAccount?.activeAccountId || !playitSetupCodeDraft.trim();
-    };
-
-    playitCodeActions.appendChild(btnPlayitExchange);
-    playitCodeActions.appendChild(btnPlayitUnlink);
-    playitCodeRow.row.appendChild(playitCodeActions);
-    playitCard.appendChild(playitCodeRow.row);
-
-    const activeInstanceId = state.instances?.activeInstanceId ?? null;
-    const activeInstance = (state.instances?.instances ?? []).find((x: any) => x.id === activeInstanceId) ?? null;
-    const suggestedTunnelName = playitTunnelNameDraft.trim() || `${activeInstance?.name || "Minecraft"} LAN`;
-
-    const playitCreateRow = makeRow(
-      "Manual tunnel",
-      "Create a Playit tunnel to a local TCP port. For Minecraft, 25565 is a good default if your server is listening there."
-    );
-    playitCreateRow.row.style.flexDirection = "column";
-    playitCreateRow.row.style.alignItems = "stretch";
-    const playitCreateControls = document.createElement("div");
-    playitCreateControls.className = "row";
-    playitCreateControls.style.justifyContent = "flex-start";
-    playitCreateControls.style.gap = "8px";
-    playitCreateControls.style.flexWrap = "wrap";
-    playitCreateControls.style.marginTop = "8px";
-
-    const tunnelNameInput = makeInput(playitTunnelNameDraft, "Tunnel name", (v) => {
-      playitTunnelNameDraft = v;
-    });
-    tunnelNameInput.style.maxWidth = "240px";
-    const tunnelPortInput = makeInput(playitTunnelPortDraft, "Local port", (v) => {
-      playitTunnelPortDraft = v.replace(/[^\d]/g, "");
-    });
-    tunnelPortInput.style.maxWidth = "120px";
-
-    const btnCreateTunnel = document.createElement("button");
-    btnCreateTunnel.className = "btn";
-    btnCreateTunnel.textContent = "Create tunnel";
-    btnCreateTunnel.disabled = !playitState.linked || !String(playitTunnelPortDraft || "").trim();
-    btnCreateTunnel.onclick = () =>
-      guarded(async () => {
-        const created = await backend.playitCreateTunnel({
-          name: suggestedTunnelName,
-          tunnelType: "minecraft-java",
-          portType: "tcp",
-          portCount: 1,
-          localIp: "127.0.0.1",
-          localPort: Number(playitTunnelPortDraft || 25565),
-          enabled: true
-        });
-        playitTunnelNameDraft = "";
-        await refreshPlayitState(true);
-        const joinAddress = String(created?.created?.joinAddress || "").trim();
-        appendLog(joinAddress ? `[playit] Tunnel ready: ${joinAddress}` : "[playit] Tunnel created.");
-        renderSettingsPanels();
-      });
-    tunnelPortInput.oninput = () => {
-      playitTunnelPortDraft = tunnelPortInput.value.replace(/[^\d]/g, "");
-      tunnelPortInput.value = playitTunnelPortDraft;
-      btnCreateTunnel.disabled = !playitState.linked || !String(playitTunnelPortDraft || "").trim();
-    };
-
-    playitCreateControls.appendChild(tunnelNameInput);
-    playitCreateControls.appendChild(tunnelPortInput);
-    playitCreateControls.appendChild(btnCreateTunnel);
-    playitCreateRow.row.appendChild(playitCreateControls);
-    playitCard.appendChild(playitCreateRow.row);
-
-    const playitTunnelsWrap = document.createElement("div");
-    playitTunnelsWrap.style.display = "flex";
-    playitTunnelsWrap.style.flexDirection = "column";
-    playitTunnelsWrap.style.gap = "8px";
-    if (!playitState.activeTunnels.length) {
-      const empty = document.createElement("div");
-      empty.className = "setHelp";
-      empty.textContent = playitState.linked
-        ? "No tunnels yet. Create one above to get a shareable join address."
-        : "No linked Playit account yet.";
-      playitTunnelsWrap.appendChild(empty);
-    } else {
-      for (const tunnel of playitState.activeTunnels) {
-        const row = document.createElement("div");
-        row.className = "setRow";
-        const left = document.createElement("div");
-        left.style.display = "flex";
-        left.style.flexDirection = "column";
-
-        const title = document.createElement("div");
-        title.className = "setLabel";
-        title.textContent = tunnel.name || tunnel.joinAddress || tunnel.assignedDomain || tunnel.id;
-        const meta = document.createElement("div");
-        meta.className = "setHelp";
-        meta.textContent = tunnel.joinAddress
-          ? `Join: ${tunnel.joinAddress}`
-          : `Allocation: ${tunnel.allocationStatus || "pending"}`;
-        const sub = document.createElement("div");
-        sub.className = "setHelp";
-        sub.textContent = `Local ${tunnel.localIp || "127.0.0.1"}:${tunnel.localPort || "?"} • ${tunnel.active ? "Active" : "Inactive"}`;
-
-        left.appendChild(title);
-        left.appendChild(meta);
-        left.appendChild(sub);
-        row.appendChild(left);
-
-        const actionsWrap = document.createElement("div");
-        actionsWrap.className = "row";
-        actionsWrap.style.justifyContent = "flex-end";
-        actionsWrap.style.gap = "8px";
-
-        const btnCopyJoin = document.createElement("button");
-        btnCopyJoin.className = "btn";
-        btnCopyJoin.textContent = "Copy";
-        btnCopyJoin.disabled = !tunnel.joinAddress;
-        btnCopyJoin.onclick = () =>
-          guarded(async () => {
-            await navigator.clipboard.writeText(String(tunnel.joinAddress || ""));
-            appendLog(`[playit] Copied join address: ${tunnel.joinAddress}`);
-          });
-
-        const btnDeleteTunnel = document.createElement("button");
-        btnDeleteTunnel.className = "btn";
-        btnDeleteTunnel.textContent = "Delete";
-        btnDeleteTunnel.onclick = () =>
-          guarded(async () => {
-            await backend.playitDeleteTunnel(tunnel.id);
-            await refreshPlayitState(true);
-            appendLog(`[playit] Deleted tunnel ${tunnel.id}.`);
-            renderSettingsPanels();
-          });
-
-        actionsWrap.appendChild(btnCopyJoin);
-        actionsWrap.appendChild(btnDeleteTunnel);
-        row.appendChild(actionsWrap);
-        playitTunnelsWrap.appendChild(row);
-      }
-    }
-    playitCard.appendChild(playitTunnelsWrap);
-    settingsPanelInstall.appendChild(playitCard);
-
     const actions = document.createElement("div");
     actions.className = "row";
     actions.style.justifyContent = "flex-start";
@@ -6208,6 +5999,278 @@ function setSettingsTab(tab: "general" | "theme" | "install" | "window" | "java"
   if (tab === "profile") {
     void renderProfileSettingsPanel();
   }
+}
+
+function renderPlayitPanel() {
+  clearPanel(playitPanelRoot);
+
+  const shell = document.createElement("div");
+  shell.className = "settingsPanel";
+  shell.style.maxHeight = "none";
+
+  const title = makeH3("Playit Account");
+  shell.appendChild(title);
+
+  const statusCard = document.createElement("div");
+  statusCard.className = "setRow";
+  statusCard.style.flexDirection = "column";
+  statusCard.style.alignItems = "stretch";
+  statusCard.style.gap = "10px";
+
+  const help = document.createElement("div");
+  help.className = "setHelp";
+  help.textContent =
+    "Fishbattery stores only your user Playit secret locally. Setup-code exchange is routed through the Fishbattery backend.";
+  statusCard.appendChild(help);
+
+  const status = document.createElement("div");
+  status.className = "muted";
+  status.style.fontSize = "12px";
+  status.textContent = playitStatusText(playitState);
+  statusCard.appendChild(status);
+
+  if (!state.launcherAccount?.activeAccountId) {
+    const hint = document.createElement("div");
+    hint.className = "setHelp";
+    hint.textContent =
+      "Sign in to your Fishbattery account first. The launcher uses your signed-in session to exchange Playit setup codes safely.";
+    statusCard.appendChild(hint);
+  } else if (playitState.linked && playitState.linkedAt) {
+    const linkedAt = document.createElement("div");
+    linkedAt.className = "setHelp";
+    linkedAt.textContent = `Linked on ${new Date(playitState.linkedAt).toLocaleString()}.`;
+    statusCard.appendChild(linkedAt);
+  }
+
+  const codeRow = makeRow(
+    "Setup code",
+    "Get a setup code from playit.gg, then click Exchange and link. The code is sent to Fishbattery backend, not stored locally."
+  );
+  codeRow.row.style.flexDirection = "column";
+  codeRow.row.style.alignItems = "stretch";
+  const codeInput = makeInput(playitSetupCodeDraft, "Paste Playit setup code", (v) => {
+    playitSetupCodeDraft = v;
+  });
+  codeInput.autocomplete = "off";
+  codeInput.spellcheck = false;
+  codeRow.row.appendChild(codeInput);
+  const codeActions = document.createElement("div");
+  codeActions.className = "row";
+  codeActions.style.justifyContent = "flex-start";
+  codeActions.style.gap = "8px";
+  codeActions.style.marginTop = "8px";
+
+  const btnExchange = document.createElement("button");
+  btnExchange.className = "btn";
+  btnExchange.textContent = playitState.linked ? "Relink account" : "Exchange and link";
+  btnExchange.disabled = !state.launcherAccount?.activeAccountId || !playitSetupCodeDraft.trim();
+  btnExchange.onclick = () =>
+    guarded(async () => {
+      try {
+        setStatus("Exchanging Playit setup code...");
+        const exchanged = await backend.playitExchangeSetupCode(playitSetupCodeDraft.trim());
+        setStatus("Validating Playit secret...");
+        await backend.playitLinkSecret(exchanged.secretKey);
+        playitSetupCodeDraft = "";
+        await refreshPlayitState();
+        appendLog("[playit] Account linked through Fishbattery backend.");
+        setStatus("Playit account linked.");
+        renderPlayitPanel();
+      } catch (err: any) {
+        const message = String(err?.message ?? err ?? "Could not link Playit account.");
+        appendLog(`[playit] Link failed: ${message}`);
+        setStatus(message);
+        await showLauncherAlert(message, "Playit link failed");
+      }
+    });
+
+  const btnUnlink = document.createElement("button");
+  btnUnlink.className = "btn";
+  btnUnlink.textContent = "Unlink";
+  btnUnlink.disabled = !playitState.linked;
+  btnUnlink.onclick = () =>
+    guarded(async () => {
+      await backend.playitUnlink();
+      await refreshPlayitState(true);
+      appendLog("[playit] Account unlinked.");
+      renderPlayitPanel();
+    });
+
+  codeInput.oninput = () => {
+    playitSetupCodeDraft = codeInput.value;
+    btnExchange.disabled = !state.launcherAccount?.activeAccountId || !playitSetupCodeDraft.trim();
+  };
+
+  codeActions.appendChild(btnExchange);
+  codeActions.appendChild(btnUnlink);
+  codeRow.row.appendChild(codeActions);
+  statusCard.appendChild(codeRow.row);
+  shell.appendChild(statusCard);
+
+  const suggestedTunnelName = playitTunnelNameDraft.trim() || `${activeInstance?.name || "Minecraft"} LAN`;
+
+  const tunnelCard = document.createElement("div");
+  tunnelCard.className = "setRow";
+  tunnelCard.style.flexDirection = "column";
+  tunnelCard.style.alignItems = "stretch";
+  tunnelCard.style.gap = "10px";
+
+  const tunnelIntro = document.createElement("div");
+  tunnelIntro.className = "setHelp";
+  tunnelIntro.textContent =
+    "Free Playit accounts support custom UDP tunnels. Minecraft Java has its own preset. Custom TCP requires Playit Premium.";
+  tunnelCard.appendChild(tunnelIntro);
+
+  const tunnelControls = document.createElement("div");
+  tunnelControls.className = "row";
+  tunnelControls.style.justifyContent = "flex-start";
+  tunnelControls.style.gap = "8px";
+  tunnelControls.style.flexWrap = "wrap";
+
+  const tunnelNameInput = makeInput(playitTunnelNameDraft, "Tunnel name", (v) => {
+    playitTunnelNameDraft = v;
+  });
+  tunnelNameInput.style.maxWidth = "260px";
+  const tunnelModeSelect = makeSelect(
+    [
+      { value: "custom-udp", label: "Custom UDP (Free)" },
+      { value: "minecraft-java", label: "Minecraft Java" },
+      { value: "custom-tcp", label: "Custom TCP (Premium)" }
+    ],
+    playitTunnelModeDraft,
+    (v) => {
+      if (v === "minecraft-java" || v === "custom-tcp" || v === "custom-udp") {
+        playitTunnelModeDraft = v;
+      }
+    }
+  );
+  tunnelModeSelect.style.maxWidth = "220px";
+  const tunnelPortInput = makeInput(playitTunnelPortDraft, "Local port", (v) => {
+    playitTunnelPortDraft = v.replace(/[^\d]/g, "");
+  });
+  tunnelPortInput.style.maxWidth = "140px";
+  const btnCreateTunnel = document.createElement("button");
+  btnCreateTunnel.className = "btn btnPrimary";
+  btnCreateTunnel.textContent = "Create tunnel";
+  btnCreateTunnel.disabled = !playitState.linked || !String(playitTunnelPortDraft || "").trim();
+  btnCreateTunnel.onclick = () =>
+    guarded(async () => {
+      const mode = playitTunnelModeDraft;
+      const payload =
+        mode === "minecraft-java"
+          ? {
+              name: suggestedTunnelName,
+              tunnelType: "minecraft-java",
+              portType: "tcp" as const,
+              portCount: 1,
+              localIp: "127.0.0.1",
+              localPort: Number(playitTunnelPortDraft || 25565),
+              enabled: true
+            }
+          : {
+              name: suggestedTunnelName,
+              portType: mode === "custom-tcp" ? ("tcp" as const) : ("udp" as const),
+              portCount: 1,
+              localIp: "127.0.0.1",
+              localPort: Number(playitTunnelPortDraft || 25565),
+              enabled: true
+            };
+      const created = await backend.playitCreateTunnel({
+        ...payload
+      });
+      playitTunnelNameDraft = "";
+      await refreshPlayitState(true);
+      const joinAddress = String(created?.created?.joinAddress || "").trim();
+      appendLog(joinAddress ? `[playit] Tunnel ready: ${joinAddress}` : "[playit] Tunnel created.");
+      renderPlayitPanel();
+    });
+
+  tunnelPortInput.oninput = () => {
+    playitTunnelPortDraft = tunnelPortInput.value.replace(/[^\d]/g, "");
+    tunnelPortInput.value = playitTunnelPortDraft;
+    btnCreateTunnel.disabled = !playitState.linked || !String(playitTunnelPortDraft || "").trim();
+  };
+
+  tunnelControls.appendChild(tunnelModeSelect);
+  tunnelControls.appendChild(tunnelNameInput);
+  tunnelControls.appendChild(tunnelPortInput);
+  tunnelControls.appendChild(btnCreateTunnel);
+  tunnelCard.appendChild(tunnelControls);
+  shell.appendChild(tunnelCard);
+
+  const tunnelsTitle = makeH3("Tunnels");
+  shell.appendChild(tunnelsTitle);
+
+  if (!playitState.activeTunnels.length) {
+    const empty = document.createElement("div");
+    empty.className = "setRow";
+    const emptyText = document.createElement("div");
+    emptyText.className = "setHelp";
+    emptyText.textContent = playitState.linked
+      ? "No tunnels yet. Create one above to get a shareable join address."
+      : "No linked Playit account yet.";
+    empty.appendChild(emptyText);
+    shell.appendChild(empty);
+  } else {
+    for (const tunnel of playitState.activeTunnels) {
+      const row = document.createElement("div");
+      row.className = "setRow";
+
+      const left = document.createElement("div");
+      left.style.display = "flex";
+      left.style.flexDirection = "column";
+
+      const tunnelTitle = document.createElement("div");
+      tunnelTitle.className = "setLabel";
+      tunnelTitle.textContent = tunnel.name || tunnel.joinAddress || tunnel.assignedDomain || tunnel.id;
+      const meta = document.createElement("div");
+      meta.className = "setHelp";
+      meta.textContent = tunnel.joinAddress
+        ? `Join: ${tunnel.joinAddress}`
+        : `Allocation: ${tunnel.allocationStatus || "pending"}`;
+      const sub = document.createElement("div");
+      sub.className = "setHelp";
+      sub.textContent = `Local ${tunnel.localIp || "127.0.0.1"}:${tunnel.localPort || "?"} • ${tunnel.active ? "Active" : "Inactive"}`;
+
+      left.appendChild(tunnelTitle);
+      left.appendChild(meta);
+      left.appendChild(sub);
+      row.appendChild(left);
+
+      const actions = document.createElement("div");
+      actions.className = "row";
+      actions.style.justifyContent = "flex-end";
+      actions.style.gap = "8px";
+
+      const btnCopy = document.createElement("button");
+      btnCopy.className = "btn";
+      btnCopy.textContent = "Copy";
+      btnCopy.disabled = !tunnel.joinAddress;
+      btnCopy.onclick = () =>
+        guarded(async () => {
+          await navigator.clipboard.writeText(String(tunnel.joinAddress || ""));
+          appendLog(`[playit] Copied join address: ${tunnel.joinAddress}`);
+        });
+
+      const btnDelete = document.createElement("button");
+      btnDelete.className = "btn";
+      btnDelete.textContent = "Delete";
+      btnDelete.onclick = () =>
+        guarded(async () => {
+          await backend.playitDeleteTunnel(tunnel.id);
+          await refreshPlayitState(true);
+          appendLog(`[playit] Deleted tunnel ${tunnel.id}.`);
+          renderPlayitPanel();
+        });
+
+      actions.appendChild(btnCopy);
+      actions.appendChild(btnDelete);
+      row.appendChild(actions);
+      shell.appendChild(row);
+    }
+  }
+
+  playitPanelRoot.appendChild(shell);
 }
 
 settingsTabGeneral.onclick = () => setSettingsTab("general");
@@ -9122,6 +9185,7 @@ consentSettings.onclick = () => {
 // Primary nav and account interactions.
 navLibrary.onclick = () => setView("library");
 navCapes.onclick = () => setView("capes");
+navPlayit.onclick = () => setView("playit");
 navSettings.onclick = () => setView("settings");
 
 accountBtn.onclick = () => accountDropdown.classList.toggle("open");
