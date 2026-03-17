@@ -60,6 +60,15 @@ const phase2Commands: Record<string, (...args: unknown[]) => Promise<unknown>> =
 };
 
 const phase4Commands: Record<string, (...args: unknown[]) => Promise<unknown>> = {
+  playitGetState: () => invoke("playit_get_state"),
+  playitLinkBegin: (code: string) => invoke("playit_link_begin", { code }),
+  playitLinkComplete: (code: string) => invoke("playit_link_complete", { code }),
+  playitLinkSecret: (secretKey: string) => invoke("playit_link_secret", { secretKey }),
+  playitUnlink: () => invoke("playit_unlink"),
+  playitListTunnels: () => invoke("playit_list_tunnels"),
+  playitCreateTunnel: (payload: unknown) => invoke("playit_create_tunnel", { payload }),
+  playitUpdateTunnel: (payload: unknown) => invoke("playit_update_tunnel", { payload }),
+  playitDeleteTunnel: (tunnelId: string) => invoke("playit_delete_tunnel", { tunnelId }),
   loaderPickVersion: (loader: "vanilla" | "fabric" | "quilt" | "forge" | "neoforge", mcVersion: string) =>
     invoke("loader_pick_version", { loader, mcVersion }),
   loaderInstall: (
