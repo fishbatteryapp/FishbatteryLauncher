@@ -263,6 +263,7 @@ let state: any = {
   launcherSubscription: null,
   instances: null
 };
+let renderInstancesGeneration = 0;
 
 type ModalTabId = "general" | "installed" | "discover";
 let activeModalTab: ModalTabId = "general";
@@ -7807,15 +7808,18 @@ async function openInstanceWorkspace(
 
 // Render instances.
 async function renderInstances() {
+  const generation = ++renderInstancesGeneration;
   const items = filteredInstances();
   const active = state.instances?.activeInstanceId ?? null;
   const allInstances = state.instances?.instances ?? [];
   const runningSnapshot = await getRunningSnapshot(allInstances);
+  if (generation !== renderInstancesGeneration) return;
   lastRunningSignature = buildRunningSignature(allInstances, runningSnapshot);
   updateTopbarRunningPill(runningSnapshot.count);
-  instancesGrid.innerHTML = "";
 
   if (!items.length) {
+    if (generation !== renderInstancesGeneration) return;
+    instancesGrid.innerHTML = "";
     const empty = document.createElement("div");
     empty.className = "emptyInstances";
     empty.innerHTML = `
@@ -7850,6 +7854,7 @@ async function renderInstances() {
       }
     })
   );
+  if (generation !== renderInstancesGeneration) return;
 
   const createInstanceCard = (i: any) => {
     const card = document.createElement("div");
@@ -8012,6 +8017,7 @@ async function renderInstances() {
 
   const vanillaInstances = items.filter((i: any) => getInstanceDisplayLoader(i) === "vanilla");
   const moddedInstances = items.filter((i: any) => getInstanceDisplayLoader(i) !== "vanilla");
+  const nextContent = document.createDocumentFragment();
 
   const appendGroup = (label: string, groupItems: any[]) => {
     const group = document.createElement("section");
@@ -8039,11 +8045,14 @@ async function renderInstances() {
     }
 
     group.append(header, grid);
-    instancesGrid.appendChild(group);
+    nextContent.appendChild(group);
   };
 
   appendGroup("Default instances", vanillaInstances);
   appendGroup("Modded instances", moddedInstances);
+  if (generation !== renderInstancesGeneration) return;
+  instancesGrid.innerHTML = "";
+  instancesGrid.appendChild(nextContent);
 }
 
 // Fill instance account dropdown.
