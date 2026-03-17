@@ -285,6 +285,11 @@ declare global {
           remoteInstancesUpdatedAt: number;
         };
       }>;
+      playitExchangeSetupCode: (code: string) => Promise<{
+        ok: true;
+        linked: boolean;
+        secretKey: string;
+      }>;
       profileGetSummary: () => Promise<{
         generatedAt: string;
         activeInstanceId: string | null;
@@ -348,6 +353,125 @@ declare global {
       }>;
 
       instancesList: () => Promise<any>;
+      playitGetState: () => Promise<{
+        linked: boolean;
+        agentType: string;
+        linkedAt: number | null;
+        preferredRegion: string | null;
+        autoTunnelEnabled: boolean;
+        activeTunnels: Array<{
+          id: string;
+          name: string | null;
+          tunnelType: string | null;
+          portType: "tcp" | "udp" | string | null;
+          portCount: number;
+          active: boolean;
+          createdAt: string | null;
+          localIp: string | null;
+          localPort: string | number | null;
+          assignedDomain: string | null;
+          publicPort: number | null;
+          joinAddress: string | null;
+          allocationStatus: string | null;
+          allocated: boolean;
+          region: string | null;
+          disabledReason: string | null;
+        }>;
+        hasSecretKey: boolean;
+      }>;
+      playitLinkBegin: (code: string) => Promise<{
+        ok: true;
+        code: string;
+        status: unknown;
+        claimUrl: string;
+      }>;
+      playitLinkComplete: (code: string) => Promise<{
+        linked: boolean;
+        agentType: string;
+        linkedAt: number | null;
+        preferredRegion: string | null;
+        autoTunnelEnabled: boolean;
+        activeTunnels: Array<{
+          id: string;
+          name: string | null;
+          tunnelType: string | null;
+          portType: "tcp" | "udp" | string | null;
+          portCount: number;
+          active: boolean;
+          createdAt: string | null;
+          localIp: string | null;
+          localPort: string | number | null;
+          assignedDomain: string | null;
+          publicPort: number | null;
+          joinAddress: string | null;
+          allocationStatus: string | null;
+          allocated: boolean;
+          region: string | null;
+          disabledReason: string | null;
+        }>;
+        hasSecretKey: boolean;
+      }>;
+      playitLinkSecret: (secretKey: string) => Promise<{
+        linked: boolean;
+        agentType: string;
+        linkedAt: number | null;
+        preferredRegion: string | null;
+        autoTunnelEnabled: boolean;
+        activeTunnels: any[];
+        hasSecretKey: boolean;
+      }>;
+      playitUnlink: () => Promise<{
+        linked: boolean;
+        agentType: string;
+        linkedAt: number | null;
+        preferredRegion: string | null;
+        autoTunnelEnabled: boolean;
+        activeTunnels: any[];
+        hasSecretKey: boolean;
+      }>;
+      playitListTunnels: () => Promise<{
+        tunnels: Array<{
+          id: string;
+          name: string | null;
+          tunnelType: string | null;
+          portType: "tcp" | "udp" | string | null;
+          portCount: number;
+          active: boolean;
+          createdAt: string | null;
+          localIp: string | null;
+          localPort: string | number | null;
+          assignedDomain: string | null;
+          publicPort: number | null;
+          joinAddress: string | null;
+          allocationStatus: string | null;
+          allocated: boolean;
+          region: string | null;
+          disabledReason: string | null;
+        }>;
+      }>;
+      playitCreateTunnel: (payload: {
+        name?: string;
+        tunnelType?: string;
+        portType?: "tcp" | "udp";
+        portCount?: number;
+        localIp?: string;
+        localPort?: number | string;
+        enabled?: boolean;
+      }) => Promise<{
+        created: any;
+        tunnels: any[];
+      }>;
+      playitUpdateTunnel: (payload: {
+        tunnelId: string;
+        localIp?: string;
+        localPort?: number | string | null;
+        enabled?: boolean;
+      }) => Promise<{
+        tunnels: any[];
+      }>;
+      playitDeleteTunnel: (tunnelId: string) => Promise<{
+        tunnels: any[];
+      }>;
       instancesCreate: (cfg: any) => Promise<any>;
       instancesSetActive: (id: string | null) => Promise<any>;
       instancesUpdate: (id: string, patch: any) => Promise<any>;
