@@ -2942,8 +2942,7 @@ async function refreshSidebarCharacterPreview(forceRefreshOfficial = false) {
 
 // Render capes view.
 async function renderCapesView(forceRefresh = false, officialStateOverride: any | null = null) {
-  const previousScrollTop =
-    window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0;
+  const previousScrollTop = viewCapes.scrollTop || 0;
   capesPanelRoot.innerHTML = "";
   const accounts = state.accounts?.accounts ?? [];
   const activeId = state.accounts?.activeId ?? null;
@@ -3090,6 +3089,10 @@ async function renderCapesView(forceRefresh = false, officialStateOverride: any 
   const mannequinSkinSource = capeState?.skinDataUrl || capeState?.skinUrl || null;
   await renderSidebarCharacterPreview(mannequinSkinSource, mannequinCapeSource);
 
+  const syncSidebarCapePreview = async () => {
+    await refreshSidebarCharacterPreview(false);
+  };
+
   const buildTile = (cfg: {
     label: string;
     imageUrl: string | null;
@@ -3151,7 +3154,13 @@ async function renderCapesView(forceRefresh = false, officialStateOverride: any 
 
     tile.appendChild(preview);
     tile.appendChild(footer);
-    return tile;
+    return {
+      tile,
+      setActive(active: boolean) {
+        tile.classList.toggle("active", active);
+        dot.classList.toggle("on", active);
+      }
+    };
   };
 
   if (capeState) {
@@ -3159,32 +3168,41 @@ async function renderCapesView(forceRefresh = false, officialStateOverride: any 
     grid.className = "capeGrid";
     section.appendChild(grid);
 
-    grid.appendChild(
-      buildTile({
+    const officialTiles: Array<{ capeId: string | null; setActive: (active: boolean) => void }> = [];
+    const setOfficialSelection = (activeCapeId: string | null) => {
+      for (const entry of officialTiles) entry.setActive(entry.capeId === activeCapeId);
+    };
+
+    const noneTile = buildTile({
         label: "No Cape",
         imageUrl: null,
         active: !capeState.activeCapeId,
         onSelect: async () => {
           const nextState = await backend.capesSetOfficialActive(activeMcId, null);
           setOfficialCapeStateCache(activeMcId, nextState);
-          await renderCapesView(false, nextState);
+          capeState = nextState;
+          setOfficialSelection(nextState.activeCapeId ?? null);
+          await syncSidebarCapePreview();
         }
-      })
-    );
+      });
+    officialTiles.push({ capeId: null, setActive: noneTile.setActive });
+    grid.appendChild(noneTile.tile);
 
     for (const item of capeState.capes) {
-      grid.appendChild(
-        buildTile({
+      const tile = buildTile({
           label: item.name,
           imageUrl: item.previewDataUrl || null,
           active: !!item.active,
           onSelect: async () => {
             const nextState = await backend.capesSetOfficialActive(activeMcId, item.id);
             setOfficialCapeStateCache(activeMcId, nextState);
-            await renderCapesView(false, nextState);
+            capeState = nextState;
+            setOfficialSelection(nextState.activeCapeId ?? null);
+            await syncSidebarCapePreview();
           }
-        })
-      );
+        });
+      officialTiles.push({ capeId: item.id, setActive: tile.setActive });
+      grid.appendChild(tile.tile);
     }
   }
 
@@ -3221,32 +3239,40 @@ async function renderCapesView(forceRefresh = false, officialStateOverride: any 
     localEmpty.textContent = "No launcher capes are available for your account right now.";
     localSection.appendChild(localEmpty);
   } else {
-    localGrid.appendChild(
-      buildTile({
+    const localTiles: Array<{ capeId: string | null; setActive: (active: boolean) => void }> = [];
+    const setLocalSelection = (activeCapeId: string | null) => {
+      selectedLocalCapeId = activeCapeId ?? "";
+      for (const entry of localTiles) entry.setActive(entry.capeId === activeCapeId);
+    };
+
+    const noLocalTile = buildTile({
         label: "No Fishbattery Cape",
         imageUrl: null,
         active: !selectedLocalCapeId,
         onSelect: async () => {
           if (activeMcId) await backend.capesSetLocalSelection(activeMcId, null);
+          setLocalSelection(null);
           setStatus("Launcher cape selection cleared.");
-          await renderCapesView(false, capeState);
+          await syncSidebarCapePreview();
         }
-      })
-    );
+      });
+    localTiles.push({ capeId: null, setActive: noLocalTile.setActive });
+    localGrid.appendChild(noLocalTile.tile);
     for (const localItem of sortedLocalItems) {
-      localGrid.appendChild(
-        buildTile({
+      const tile = buildTile({
           label: localItem.name,
           imageUrl: localItem.previewDataUrl || null,
           active: selectedLocalCapeId === localItem.id,
           subLabel: localCapeTierLabel(localItem.tier),
           onSelect: async () => {
             if (activeMcId) await backend.capesSetLocalSelection(activeMcId, localItem.id);
+            setLocalSelection(localItem.id);
             setStatus(`Selected launcher ${localItem.tier} cape: ${localItem.name}`);
-            await renderCapesView(false, capeState);
+            await syncSidebarCapePreview();
           }
-        })
-      );
+        });
+      localTiles.push({ capeId: localItem.id, setActive: tile.setActive });
+      localGrid.appendChild(tile.tile);
     }
   }
 
@@ -3515,7 +3541,7 @@ async function renderCapesView(forceRefresh = false, officialStateOverride: any 
   }
 
   requestAnimationFrame(() => {
-    window.scrollTo({ top: previousScrollTop });
+    viewCapes.scrollTo({ top: previousScrollTop });
   });
 
 }
