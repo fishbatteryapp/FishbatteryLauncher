@@ -7998,6 +7998,21 @@ async function renderAccounts() {
     });
   };
 
+  const btnOpenFishbatteryWeb = document.createElement("button");
+  btnOpenFishbatteryWeb.className = "btn";
+  btnOpenFishbatteryWeb.textContent = "Open Fishbattery web";
+  btnOpenFishbatteryWeb.onclick = () => {
+    void runLauncherAccountAction(async () => {
+      const target = "https://fishbattery.app";
+      const ok = await backend.externalOpen(target);
+      if (!ok) {
+        throw new Error("Could not open Fishbattery website.");
+      }
+      appendLog(`[account] Opened website: ${target}`);
+      accountDropdown.classList.remove("open");
+    });
+  };
+
   if (launcherState?.configured === false) {
     const warn = document.createElement("div");
     warn.style.padding = "2px 12px 10px";
@@ -8011,6 +8026,7 @@ async function renderAccounts() {
     accountItems.appendChild(launcherActionRow);
   } else {
     launcherActionRow.appendChild(btnLauncherSettings);
+    launcherActionRow.appendChild(btnOpenFishbatteryWeb);
     launcherActionRow.appendChild(btnLauncherLogout);
     accountItems.appendChild(launcherActionRow);
 
@@ -8068,7 +8084,9 @@ async function renderAccounts() {
 
       accountItems.appendChild(item);
     }
-    launcherActionRow.appendChild(btnUpgradePremium);
+    if (launcherPlanTier !== "premium" && launcherPlanTier !== "founder") {
+      launcherActionRow.appendChild(btnUpgradePremium);
+    }
     accountItems.appendChild(launcherActionRow);
 
     const planHint = document.createElement("div");
