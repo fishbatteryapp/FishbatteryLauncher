@@ -22,6 +22,8 @@ import defaultSkinNoor from "./default-skins/noor.png";
 import defaultSkinSunny from "./default-skins/sunny.png";
 import defaultSkinZuri from "./default-skins/zuri.png";
 
+const OCEAN_THEME_DEFAULT_BG = "/ocean-theme-default.jpg";
+
 // Small DOM helper (keeps your current style)
 const $ = (id: string) => document.getElementById(id) as HTMLElement;
 const pickEl = (...ids: string[]) => ids.map((id) => document.getElementById(id)).find(Boolean) as HTMLElement | null;
@@ -2108,7 +2110,10 @@ function applySettingsToDom(s: AppSettings) {
   document.documentElement.dataset.themeSource = s.theme;
   document.documentElement.dataset.font = s.pixelFont ? "pixel" : "default";
   document.documentElement.dataset.glass = s.blur ? "1" : "0";
-  document.documentElement.dataset.customBg = s.customBackgroundDataUrl ? "1" : "0";
+  const hasCustomBackground = !!s.customBackgroundDataUrl;
+  const hasOceanThemeBackground = !hasCustomBackground && effectiveTheme === "ocean";
+  document.documentElement.dataset.customBg = hasCustomBackground ? "1" : "0";
+  document.documentElement.dataset.themeBg = hasOceanThemeBackground ? "1" : "0";
   document.documentElement.style.setProperty("--r12", `${Math.max(8, Math.min(22, s.cornerRadius || 12))}px`);
   document.documentElement.style.setProperty("--r16", `${Math.max(12, Math.min(28, (s.cornerRadius || 12) + 4))}px`);
   document.documentElement.style.setProperty("--stroke-w", `${Math.max(1, Math.min(3, s.borderThickness || 1))}px`);
@@ -2123,8 +2128,10 @@ function applySettingsToDom(s: AppSettings) {
   document.documentElement.style.setProperty("--accent", accent);
   document.documentElement.style.setProperty("--accent-rgb", hexToRgbTriplet(accent));
 
-  if (s.customBackgroundDataUrl) {
-    customBgImageLayer.src = s.customBackgroundDataUrl;
+  const backgroundImage = hasCustomBackground ? s.customBackgroundDataUrl : hasOceanThemeBackground ? OCEAN_THEME_DEFAULT_BG : "";
+
+  if (backgroundImage) {
+    customBgImageLayer.src = backgroundImage;
     customBgImageLayer.style.display = "block";
   } else {
     customBgImageLayer.removeAttribute("src");

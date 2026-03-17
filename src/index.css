@@ -10,6 +10,7 @@
   --bg: #0b0d10;
   --custom-bg-image: none;
   --custom-bg-overlay: none;
+  --theme-bg-overlay: none;
   --panel-rgb: 15, 20, 27;
   --surface-alpha: .88;
   --panel: rgba(var(--panel-rgb), var(--surface-alpha));
@@ -55,6 +56,10 @@ body{
   --custom-bg-overlay: linear-gradient(rgba(7, 12, 18, .62), rgba(7, 12, 18, .62));
 }
 
+:root[data-theme-bg="1"]{
+  --theme-bg-overlay: linear-gradient(rgba(6, 16, 24, .74), rgba(6, 16, 24, .74));
+}
+
 .windowShell{
   position: relative;
   width: 100%;
@@ -87,10 +92,11 @@ body{
     var(--bg-layer-1),
     var(--bg-layer-2),
     var(--bg-layer-3),
+    var(--theme-bg-overlay),
     var(--custom-bg-overlay);
-  background-size: auto, auto, auto, auto;
-  background-position: center, center, center, center;
-  background-repeat: no-repeat, no-repeat, no-repeat, no-repeat;
+  background-size: auto, auto, auto, auto, auto;
+  background-position: center, center, center, center, center;
+  background-repeat: no-repeat, no-repeat, no-repeat, no-repeat, no-repeat;
 }
 
 .windowTopbar,
