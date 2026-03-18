@@ -421,7 +421,9 @@ fn created_tunnel_matches(
 
 #[cfg(target_os = "windows")]
 fn pid_is_running(pid: u32) -> bool {
-    let output = Command::new("tasklist")
+    let mut cmd = Command::new("tasklist");
+    hide_console_window(&mut cmd);
+    let output = cmd
         .args(["/FI", &format!("PID eq {pid}"), "/FO", "CSV", "/NH"])
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
