@@ -3088,6 +3088,34 @@ pub fn servers_upsert(
         .unwrap_or("")
         .trim()
         .to_string();
+    let source = entry
+        .get("source")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .map(str::to_string);
+    let playit_tunnel_id = entry
+        .get("playitTunnelId")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .map(str::to_string);
+    let playit_hostname = entry
+        .get("playitHostname")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .map(str::to_string);
+    let playit_local_port = entry
+        .get("playitLocalPort")
+        .and_then(|v| match v {
+            Value::Number(n) => n.as_u64(),
+            Value::String(s) => s.trim().parse::<u64>().ok(),
+            _ => None,
+        })
+        .filter(|v| *v > 0 && *v <= u16::MAX as u64)
+        .map(|v| v as u16);
+    let playit_active = entry.get("playitActive").and_then(|v| v.as_bool());
     let now = now_ms();
     let incoming_id = entry
         .get("id")
@@ -3112,6 +3140,17 @@ pub fn servers_upsert(
             } else {
                 json!(notes)
             };
+            existing["source"] = source.clone().map(Value::String).unwrap_or(Value::Null);
+            existing["playitTunnelId"] = playit_tunnel_id
+                .clone()
+                .map(Value::String)
+                .unwrap_or(Value::Null);
+            existing["playitHostname"] = playit_hostname
+                .clone()
+                .map(Value::String)
+                .unwrap_or(Value::Null);
+            existing["playitLocalPort"] = playit_local_port.map(|v| json!(v)).unwrap_or(Value::Null);
+            existing["playitActive"] = playit_active.map(|v| json!(v)).unwrap_or(Value::Null);
             existing["updatedAt"] = json!(now);
             out = existing.clone();
         }
@@ -3124,6 +3163,11 @@ pub fn servers_upsert(
           "address": address,
           "notes": if notes.is_empty() { Value::Null } else { json!(notes) },
           "linkedProfile": Value::Null,
+          "source": source,
+          "playitTunnelId": playit_tunnel_id,
+          "playitHostname": playit_hostname,
+          "playitLocalPort": playit_local_port,
+          "playitActive": playit_active,
           "createdAt": now,
           "updatedAt": now
         });
@@ -3312,7 +3356,12 @@ pub fn servers_export_profile(
       "server": {
         "name": server.get("name").cloned().unwrap_or(json!("Server")),
         "address": server.get("address").cloned().unwrap_or(json!("")),
-        "notes": server.get("notes").cloned().unwrap_or(Value::Null)
+        "notes": server.get("notes").cloned().unwrap_or(Value::Null),
+        "source": server.get("source").cloned().unwrap_or(Value::Null),
+        "playitTunnelId": server.get("playitTunnelId").cloned().unwrap_or(Value::Null),
+        "playitHostname": server.get("playitHostname").cloned().unwrap_or(Value::Null),
+        "playitLocalPort": server.get("playitLocalPort").cloned().unwrap_or(Value::Null),
+        "playitActive": server.get("playitActive").cloned().unwrap_or(Value::Null)
       },
       "instance": {
         "mcVersion": inst.get("mcVersion").cloned().unwrap_or(json!("1.21.1")),
@@ -3496,7 +3545,12 @@ pub fn servers_import_profile(app: tauri::AppHandle, instance_id: String) -> App
         json!({
           "name": server.get("name").cloned().unwrap_or(json!("Imported Server")),
           "address": server.get("address").cloned().unwrap_or(json!("")),
-          "notes": server.get("notes").cloned().unwrap_or(Value::Null)
+          "notes": server.get("notes").cloned().unwrap_or(Value::Null),
+          "source": server.get("source").cloned().unwrap_or(Value::Null),
+          "playitTunnelId": server.get("playitTunnelId").cloned().unwrap_or(Value::Null),
+          "playitHostname": server.get("playitHostname").cloned().unwrap_or(Value::Null),
+          "playitLocalPort": server.get("playitLocalPort").cloned().unwrap_or(Value::Null),
+          "playitActive": server.get("playitActive").cloned().unwrap_or(Value::Null)
         }),
     )?;
     if let Some(server_id) = created_server.get("id").and_then(|v| v.as_str()) {

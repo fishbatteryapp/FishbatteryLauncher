@@ -764,13 +764,28 @@ declare global {
           address: string;
           notes?: string;
           linkedProfile?: string | null;
+          source?: string | null;
+          playitTunnelId?: string | null;
+          playitHostname?: string | null;
+          playitLocalPort?: number | null;
+          playitActive?: boolean | null;
           createdAt: number;
           updatedAt: number;
         }>;
       }>;
       serversUpsert: (
         instanceId: string,
-        entry: { id?: string; name: string; address: string; notes?: string }
+        entry: {
+          id?: string;
+          name: string;
+          address: string;
+          notes?: string;
+          source?: string | null;
+          playitTunnelId?: string | null;
+          playitHostname?: string | null;
+          playitLocalPort?: number | null;
+          playitActive?: boolean | null;
+        }
       ) => Promise<any>;
       serversRemove: (instanceId: string, serverId: string) => Promise<any>;
       serversSetPreferred: (instanceId: string, serverId: string | null) => Promise<any>;

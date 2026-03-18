@@ -418,7 +418,12 @@ let playitTunnelNameDraft = "";
 let playitTunnelPortDraft = "25565";
 let playitTunnelModeDraft: "custom-udp" | "minecraft-java" | "custom-tcp" = "custom-udp";
 const PLAYIT_SERVER_NOTE_PREFIX = "[playit]";
-const PLAYIT_LAN_PORT_RE = /local game hosted on port (\d+)/i;
+const PLAYIT_LAN_PORT_PATTERNS = [
+  /local game hosted on port (\d+)/i,
+  /started serving on (?:(?:[\w.\-]+|\*):)?(\d+)/i,
+  /hosting game on (?:(?:[\w.\-]+|\*):)?(\d+)/i,
+  /lan server.*port (\d+)/i
+] as const;
 let playitAutoTunnelBusy = false;
 let playitAutoTunnelAttemptKey = "";
 let cloudSyncIntervalId: number | null = null;
@@ -4537,7 +4542,14 @@ function buildPlayitServerNotes(tunnel: { id?: string | null; localPort?: number
 
 async function upsertPlayitServerEntry(
   instanceId: string,
-  tunnel: { id?: string | null; name?: string | null; joinAddress?: string | null; localPort?: number | string | null }
+  tunnel: {
+    id?: string | null;
+    name?: string | null;
+    joinAddress?: string | null;
+    assignedDomain?: string | null;
+    localPort?: number | string | null;
+    active?: boolean | null;
+  }
 ) {
   const safeInstanceId = String(instanceId || "").trim();
   const joinAddress = String(tunnel.joinAddress || "").trim();
@@ -4545,15 +4557,26 @@ async function upsertPlayitServerEntry(
   const listed = await backend.serversList(safeInstanceId);
   const tunnelId = String(tunnel.id || "").trim();
   const existing = (listed?.servers ?? []).find((entry: any) => {
-    const notes = String(entry?.notes || "");
-    return (tunnelId && notes.includes(`tunnel=${tunnelId}`)) || String(entry?.address || "").trim() === joinAddress;
+    return (
+      (tunnelId && String(entry?.playitTunnelId || "").trim() === tunnelId) ||
+      String(entry?.address || "").trim() === joinAddress
+    );
   });
-  return backend.serversUpsert(safeInstanceId, {
+  const saved = await backend.serversUpsert(safeInstanceId, {
     id: existing?.id,
     name: String(tunnel.name || "").trim() || "Playit Tunnel",
     address: joinAddress,
-    notes: buildPlayitServerNotes(tunnel)
+    notes: buildPlayitServerNotes(tunnel),
+    source: "playit",
+    playitTunnelId: tunnelId || null,
+    playitHostname: String(tunnel.assignedDomain || "").trim() || null,
+    playitLocalPort: Number(tunnel.localPort || 0) || null,
+    playitActive: tunnel.active == null ? null : Boolean(tunnel.active)
   });
+  if (saved?.id) {
+    await backend.serversSetPreferred(safeInstanceId, saved.id);
+  }
+  return saved;
 }
 
 async function removePlayitServerEntry(instanceId: string, tunnelId: string) {
@@ -4562,6 +4585,7 @@ async function removePlayitServerEntry(instanceId: string, tunnelId: string) {
   if (!safeInstanceId || !safeTunnelId) return false;
   const listed = await backend.serversList(safeInstanceId);
   const existing = (listed?.servers ?? []).find((entry: any) =>
+    String(entry?.playitTunnelId || "").trim() === safeTunnelId ||
     String(entry?.notes || "").includes(`tunnel=${safeTunnelId}`)
   );
   if (!existing?.id) return false;
@@ -4602,6 +4626,17 @@ async function finalizePlayitTunnelReady(
 
 function findPlayitTunnelByLocalPort(localPort: number) {
   return playitState.activeTunnels.find((tunnel) => Number(tunnel?.localPort || 0) === Number(localPort)) ?? null;
+}
+
+function parsePlayitLanPortFromLog(line: string) {
+  const text = String(line || "");
+  for (const pattern of PLAYIT_LAN_PORT_PATTERNS) {
+    const match = text.match(pattern);
+    if (!match) continue;
+    const port = Number(match[1] || 0);
+    if (Number.isFinite(port) && port > 0) return port;
+  }
+  return 0;
 }
 
 async function createPlayitMinecraftLanTunnel(localPort: number, reason: "manual" | "auto-lan") {
@@ -10623,12 +10658,9 @@ backend.onLaunchLog((line) => {
   appendLog(line);
   const active = state.instances?.activeInstanceId ?? null;
   const lower = String(line || "").toLowerCase();
-  const lanPortMatch = String(line || "").match(PLAYIT_LAN_PORT_RE);
-  if (lanPortMatch) {
-    const detectedPort = Number(lanPortMatch[1] || 0);
-    if (detectedPort > 0) {
-      void handleDetectedLanPort(detectedPort);
-    }
+  const detectedPort = parsePlayitLanPortFromLog(line);
+  if (detectedPort > 0) {
+    void handleDetectedLanPort(detectedPort);
   }
   if (lower.includes("[launcher] launch command:") || lower.includes("[launcher] launching")) {
     resetPlayitAutoTunnelState();
