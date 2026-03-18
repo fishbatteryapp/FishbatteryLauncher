@@ -13,6 +13,14 @@ use crate::logs;
 
 const PLAYIT_API_BASE: &str = "https://api.playit.gg";
 const PLAYIT_AGENT_TYPE: &str = "self-managed";
+const FISHBATTERY_ACCOUNT_API_BASE: &str = "https://api.fishbattery.app";
+const FISHBATTERY_PLAYIT_EXCHANGE_PATH: &str = "/v1/playit/setup/exchange";
+
+#[derive(Debug, Clone, serde::Deserialize)]
+struct LauncherSessionDb {
+    #[serde(rename = "accessToken")]
+    access_token: Option<String>,
+}
 
 fn now_ms() -> u64 {
     SystemTime::now()
@@ -27,6 +35,12 @@ fn app_data_root(app: &tauri::AppHandle) -> AppResult<PathBuf> {
 
 fn playit_state_path(app: &tauri::AppHandle) -> AppResult<PathBuf> {
     Ok(app_data_root(app)?.join("data").join("playit.json"))
+}
+
+fn launcher_session_db_path(app: &tauri::AppHandle) -> AppResult<PathBuf> {
+    Ok(app_data_root(app)?
+        .join("data")
+        .join("launcher-session.json"))
 }
 
 fn read_json_file(path: &Path, fallback: Value) -> Value {
@@ -138,6 +152,25 @@ fn stored_secret_key(state: &Value) -> AppResult<String> {
         .filter(|v| !v.is_empty())
         .map(str::to_string)
         .ok_or_else(|| "playit: account not linked".to_string())
+}
+
+fn read_launcher_access_token(app: &tauri::AppHandle) -> AppResult<String> {
+    let raw = fs::read_to_string(launcher_session_db_path(app)?).map_err(into_error)?;
+    let parsed: LauncherSessionDb = serde_json::from_str(&raw).map_err(into_error)?;
+    parsed
+        .access_token
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+        .ok_or_else(|| "playit: launcher account session missing. Sign in again and retry.".to_string())
+}
+
+fn fishbattery_account_api_base() -> String {
+    std::env::var("FISHBATTERY_ACCOUNT_API")
+        .ok()
+        .or_else(|| std::env::var("FISHBATTERY_ACCOUNT_API_URL").ok())
+        .map(|v| v.trim().trim_end_matches('/').to_string())
+        .filter(|v| !v.is_empty())
+        .unwrap_or_else(|| FISHBATTERY_ACCOUNT_API_BASE.to_string())
 }
 
 fn summarize_tunnel(item: &Value) -> Value {
@@ -382,6 +415,58 @@ async fn playit_post(secret_key: Option<&str>, path: &str, payload: &Value) -> A
     Err(format!("playit: {message}"))
 }
 
+async fn fishbattery_playit_exchange(
+    app: &tauri::AppHandle,
+    code: &str,
+) -> AppResult<String> {
+    let access_token = read_launcher_access_token(app)?;
+    let url = format!(
+        "{}{}",
+        fishbattery_account_api_base(),
+        FISHBATTERY_PLAYIT_EXCHANGE_PATH
+    );
+    let response = reqwest::Client::new()
+        .post(url)
+        .header(AUTHORIZATION, format!("Bearer {access_token}"))
+        .header(CONTENT_TYPE, "application/json")
+        .json(&json!({ "code": code }))
+        .send()
+        .await
+        .map_err(into_error)?;
+    let status = response.status();
+    let body_text = response.text().await.map_err(into_error)?;
+    let body_json = serde_json::from_str::<Value>(&body_text).ok();
+    if !status.is_success() {
+        let message = body_json
+            .as_ref()
+            .and_then(|body| body.get("message").and_then(|v| v.as_str()))
+            .map(str::trim)
+            .filter(|v| !v.is_empty())
+            .map(str::to_string)
+            .unwrap_or_else(|| {
+                if body_text.trim().is_empty() {
+                    format!("Fishbattery API returned HTTP {}", status.as_u16())
+                } else {
+                    format!(
+                        "Fishbattery API returned HTTP {}: {}",
+                        status.as_u16(),
+                        body_text.trim().chars().take(240).collect::<String>()
+                    )
+                }
+            });
+        return Err(format!("playit: {message}"));
+    }
+
+    let secret_key = body_json
+        .as_ref()
+        .and_then(|body| body.get("secretKey").and_then(|v| v.as_str()))
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .map(str::to_string)
+        .ok_or_else(|| "playit: Fishbattery API did not return a secret key".to_string())?;
+    Ok(secret_key)
+}
+
 async fn playit_agent_rundata(secret_key: &str) -> AppResult<Value> {
     playit_post(Some(secret_key), "/agents/rundata", &json!({})).await
 }
@@ -432,6 +517,8 @@ pub fn playit_set_auto_tunnel_enabled(app: tauri::AppHandle, enabled: bool) -> A
     );
     Ok(sanitized_state(&state))
 }
+
+#[command]
 pub async fn playit_link_begin(code: String) -> AppResult<Value> {
     let code = code.trim();
     if code.is_empty() {
@@ -452,6 +539,22 @@ pub async fn playit_link_begin(code: String) -> AppResult<Value> {
       "code": code,
       "status": result,
       "claimUrl": format!("https://playit.gg/claim/{code}")
+    }))
+}
+
+#[command]
+pub async fn playit_exchange_setup_code(app: tauri::AppHandle, code: String) -> AppResult<Value> {
+    let normalized_code = code.trim();
+    if normalized_code.is_empty() {
+        return Err("playit: setup code is required".to_string());
+    }
+
+    logs::append_line(&app, "[playit] Exchanging setup code via Fishbattery backend");
+    let secret_key = fishbattery_playit_exchange(&app, normalized_code).await?;
+    Ok(json!({
+      "ok": true,
+      "linked": true,
+      "secretKey": secret_key
     }))
 }
 
@@ -527,6 +630,12 @@ pub async fn playit_create_tunnel(app: tauri::AppHandle, payload: Value) -> AppR
         .map(str::trim)
         .filter(|v| !v.is_empty())
         .map(str::to_string);
+    let tunnel_description = payload
+        .get("tunnelDescription")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .map(str::to_string);
     let port_type = payload
         .get("portType")
         .and_then(|v| v.as_str())
@@ -573,6 +682,7 @@ pub async fn playit_create_tunnel(app: tauri::AppHandle, payload: Value) -> AppR
     let create_payload = json!({
       "name": name,
       "tunnel_type": tunnel_type,
+      "tunnel_description": tunnel_description,
       "port_type": port_type,
       "port_count": port_count,
       "origin": {

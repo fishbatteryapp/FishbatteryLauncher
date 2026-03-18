@@ -478,6 +478,7 @@ declare global {
       playitCreateTunnel: (payload: {
         name?: string;
         tunnelType?: string;
+        tunnelDescription?: string;
         portType?: "tcp" | "udp";
         portCount?: number;
         localIp?: string;

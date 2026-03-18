@@ -21,7 +21,6 @@ import {
   profilePublishPublic
 } from "@/api/profile";
 import { modrinthPacksSearch, providerPacksSearch } from "@/api/packsSearch";
-import { playitExchangeSetupCode } from "@/api/playit";
 
 const explicitApiMethods: Record<string, (...args: any[]) => Promise<unknown>> = {
   launcherAccountGetState: () => launcherAccountGetState(),
@@ -48,7 +47,7 @@ const explicitApiMethods: Record<string, (...args: any[]) => Promise<unknown>> =
   profileGetVisibility: () => profileGetVisibility(),
   profileSetVisibility: (publicEnabled: boolean) => profileSetVisibility(publicEnabled),
   profilePublishPublic: (payload: unknown) => profilePublishPublic(payload),
-  playitExchangeSetupCode: (code: string) => playitExchangeSetupCode(code),
+  playitExchangeSetupCode: (code: string) => invoke("playit_exchange_setup_code", { code }),
   modrinthPacksSearch: (query: string, limit?: number) => modrinthPacksSearch(query, limit),
   providerPacksSearch: (provider: "curseforge" | "technic" | "atlauncher" | "ftb", query: string, limit?: number) =>
     providerPacksSearch(provider, query, limit),

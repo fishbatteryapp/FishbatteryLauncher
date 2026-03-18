@@ -4613,6 +4613,7 @@ async function createPlayitMinecraftLanTunnel(localPort: number, reason: "manual
   const created = await backend.playitCreateTunnel({
     name: tunnelName,
     tunnelType: "minecraft-java",
+    tunnelDescription: "Minecraft Java server tunnel",
     portType: "tcp",
     portCount: 1,
     localIp: "127.0.0.1",
@@ -6296,7 +6297,7 @@ function renderPlayitPanel() {
 
   const codeRow = makeRow(
     "Setup code",
-    "Get a setup code from playit.gg, then click Exchange and link. The code is sent to Fishbattery backend, not stored locally."
+    "Get a setup code from playit.gg, then click Exchange and link. The code is sent to Fishbattery backend, not stored locally. Playit may keep the setup page open after linking; you can close it and use Manage Playit account."
   );
   codeRow.row.style.flexDirection = "column";
   codeRow.row.style.alignItems = "stretch";
@@ -6326,7 +6327,7 @@ function renderPlayitPanel() {
         playitSetupCodeDraft = "";
         await refreshPlayitState();
         appendLog("[playit] Account linked through Fishbattery backend.");
-        setStatus("Playit account linked.");
+        setStatus("Playit account linked. You can close the Playit setup page.");
         renderPlayitPanel();
       } catch (err: any) {
         const message = String(err?.message ?? err ?? "Could not link Playit account.");
@@ -6447,6 +6448,7 @@ function renderPlayitPanel() {
         }
         const created = await backend.playitCreateTunnel({
           name: suggestedTunnelName,
+          tunnelDescription: mode === "custom-tcp" ? "Custom TCP tunnel" : "Custom UDP tunnel",
           portType: mode === "custom-tcp" ? ("tcp" as const) : ("udp" as const),
           portCount: 1,
           localIp: "127.0.0.1",
