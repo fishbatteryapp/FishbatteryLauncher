@@ -384,6 +384,32 @@ declare global {
         }>;
         hasSecretKey: boolean;
       }>;
+      playitSetAutoTunnelEnabled: (enabled: boolean) => Promise<{
+        linked: boolean;
+        agentType: string;
+        linkedAt: number | null;
+        preferredRegion: string | null;
+        autoTunnelEnabled: boolean;
+        activeTunnels: Array<{
+          id: string;
+          name: string | null;
+          tunnelType: string | null;
+          portType: "tcp" | "udp" | string | null;
+          portCount: number;
+          active: boolean;
+          createdAt: string | null;
+          localIp: string | null;
+          localPort: string | number | null;
+          assignedDomain: string | null;
+          publicPort: number | null;
+          joinAddress: string | null;
+          allocationStatus: string | null;
+          allocated: boolean;
+          region: string | null;
+          disabledReason: string | null;
+        }>;
+        hasSecretKey: boolean;
+      }>;
       playitLinkBegin: (code: string) => Promise<{
         ok: true;
         code: string;

@@ -50,6 +50,7 @@ export const SYSTEM_METHODS = new Set([
   "instancesList",
   "playitExchangeSetupCode",
   "playitGetState",
+  "playitSetAutoTunnelEnabled",
   "playitLinkBegin",
   "playitLinkComplete",
   "playitLinkSecret",

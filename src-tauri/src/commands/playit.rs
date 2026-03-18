@@ -242,6 +242,80 @@ fn refresh_state_tunnels(state: &mut Value, tunnels: &[Value]) {
         .unwrap_or(false));
 }
 
+fn created_tunnel_matches(
+    item: &Value,
+    tunnel_id: Option<&str>,
+    name: Option<&str>,
+    tunnel_type: Option<&str>,
+    port_type: &str,
+    local_port: Option<u16>,
+) -> bool {
+    if let Some(expected_id) = tunnel_id {
+        if item.get("id").and_then(|v| v.as_str()) == Some(expected_id) {
+            return true;
+        }
+    }
+
+    let item_port_type = item
+        .get("port_type")
+        .and_then(|v| v.as_str())
+        .map(|v| v.trim().to_ascii_lowercase())
+        .unwrap_or_default();
+    if item_port_type != port_type {
+        return false;
+    }
+
+    let item_tunnel_type = item
+        .get("tunnel_type")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|v| !v.is_empty());
+    if item_tunnel_type != tunnel_type {
+        return false;
+    }
+
+    let item_local_port = item
+        .get("origin")
+        .and_then(|v| v.get("data"))
+        .and_then(|v| v.get("config_data"))
+        .and_then(|v| v.get("fields"))
+        .and_then(|v| v.as_array())
+        .and_then(|fields| {
+            fields.iter().find_map(|field| {
+                let field_name = field.get("name").and_then(|v| v.as_str())?;
+                if field_name.eq_ignore_ascii_case("local_port")
+                    || field_name.eq_ignore_ascii_case("port")
+                {
+                    field.get("value").and_then(|v| match v {
+                        Value::Number(n) => n.as_u64(),
+                        Value::String(s) => s.trim().parse::<u64>().ok(),
+                        _ => None,
+                    })
+                } else {
+                    None
+                }
+            })
+        });
+    if let Some(expected_local_port) = local_port {
+        if item_local_port != Some(expected_local_port as u64) {
+            return false;
+        }
+    }
+
+    let expected_name = name.map(str::trim).filter(|v| !v.is_empty());
+    let item_name = item
+        .get("name")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|v| !v.is_empty());
+
+    match (expected_name, item_name) {
+        (Some(expected_name), Some(item_name)) => item_name == expected_name,
+        (Some(_), None) => false,
+        _ => true,
+    }
+}
+
 fn playit_http_client(secret_key: Option<&str>) -> reqwest::Client {
     let mut headers = reqwest::header::HeaderMap::new();
     headers.insert(
@@ -269,27 +343,73 @@ async fn playit_post(secret_key: Option<&str>, path: &str, payload: &Value) -> A
         .await
         .map_err(into_error)?;
     let status = response.status();
-    let body: Value = response.json().await.map_err(into_error)?;
+    let body_text = response.text().await.map_err(into_error)?;
+    let body_json = serde_json::from_str::<Value>(&body_text).ok();
 
-    if let Some(value) = body.get("data") {
-        return Ok(value.clone());
-    }
+    if let Some(body) = body_json.as_ref() {
+        let playit_status = body
+            .get("status")
+            .and_then(|v| v.as_str())
+            .map(|v| v.trim().to_ascii_lowercase());
+        if playit_status.as_deref() == Some("fail") {
+            let message = body
+                .get("error")
+                .and_then(|v| v.get("message").or_else(|| v.get("msg")))
+                .and_then(|v| v.as_str())
+                .or_else(|| body.get("message").and_then(|v| v.as_str()))
+                .or_else(|| body.get("data").and_then(|v| v.as_str()))
+                .unwrap_or("Playit request failed");
+            return Err(format!("playit: {message}"));
+        }
 
-    if let Some(value) = body.get("value") {
-        return Ok(value.clone());
+        if let Some(value) = body.get("data") {
+            return Ok(value.clone());
+        }
+
+        if let Some(value) = body.get("value") {
+            return Ok(value.clone());
+        }
+
+        if status.is_success() {
+            return Ok(body.clone());
+        }
+
+        let message = body
+            .get("error")
+            .and_then(|v| v.get("message").or_else(|| v.get("msg")))
+            .and_then(|v| v.as_str())
+            .or_else(|| body.get("message").and_then(|v| v.as_str()))
+            .or_else(|| body.get("data").and_then(|v| v.as_str()))
+            .unwrap_or("Playit request failed");
+        return Err(format!("playit: {message}"));
     }
 
     if status.is_success() {
-        return Ok(body);
+        let trimmed = body_text.trim();
+        if trimmed.is_empty() {
+            return Ok(Value::Null);
+        }
+        return Err(format!(
+            "playit: received non-JSON success body: {}",
+            trimmed.chars().take(240).collect::<String>()
+        ));
     }
 
-    let message = body
-        .get("error")
-        .and_then(|v| v.get("message").or_else(|| v.get("msg")))
-        .and_then(|v| v.as_str())
-        .or_else(|| body.get("message").and_then(|v| v.as_str()))
-        .unwrap_or("Playit request failed");
+    let trimmed = body_text.trim();
+    let message = if trimmed.is_empty() {
+        format!("HTTP {}", status.as_u16())
+    } else {
+        format!(
+            "HTTP {}: {}",
+            status.as_u16(),
+            trimmed.chars().take(240).collect::<String>()
+        )
+    };
     Err(format!("playit: {message}"))
+}
+
+async fn playit_agent_rundata(secret_key: &str) -> AppResult<Value> {
+    playit_post(Some(secret_key), "/agents/rundata", &json!({})).await
 }
 
 async fn fishbattery_playit_exchange_setup_code(
@@ -325,18 +445,40 @@ async fn fishbattery_playit_exchange_setup_code(
         })?;
 
     let status = response.status();
-    let body: Value = response.json().await.map_err(into_error)?;
+    let body_text = response.text().await.map_err(into_error)?;
+    let body_json = serde_json::from_str::<Value>(&body_text).ok();
+
     if status.is_success() {
-        return Ok(body);
+        if let Some(body) = body_json {
+            return Ok(body);
+        }
+        return Err(format!(
+            "Fishbattery API returned {} with a non-JSON success body: {}",
+            status.as_u16(),
+            body_text.trim()
+        ));
     }
 
-    let message = body
-        .get("error")
-        .and_then(|v| v.get("message").or_else(|| v.get("msg")))
-        .and_then(|v| v.as_str())
-        .or_else(|| body.get("message").and_then(|v| v.as_str()))
-        .unwrap_or("Fishbattery Playit exchange failed");
-    Err(format!("Fishbattery API returned {}: {message}", status.as_u16()))
+    let message = body_json
+        .as_ref()
+        .and_then(|body| {
+            body.get("error")
+                .and_then(|v| v.get("message").or_else(|| v.get("msg")))
+                .and_then(|v| v.as_str())
+                .or_else(|| body.get("message").and_then(|v| v.as_str()))
+        })
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .map(str::to_string)
+        .unwrap_or_else(|| {
+            let trimmed = body_text.trim();
+            if trimmed.is_empty() {
+                "Empty response body".to_string()
+            } else {
+                trimmed.chars().take(240).collect()
+            }
+        });
+    Err(format!("Fishbattery API returned {}: {}", status.as_u16(), message))
 }
 
 fn parse_local_ip(payload: &Value) -> AppResult<String> {
@@ -370,6 +512,21 @@ fn parse_local_port(payload: &Value) -> AppResult<Option<u16>> {
 #[command]
 pub fn playit_get_state(app: tauri::AppHandle) -> AppResult<Value> {
     Ok(sanitized_state(&read_state(&app)?))
+}
+
+#[command]
+pub fn playit_set_auto_tunnel_enabled(app: tauri::AppHandle, enabled: bool) -> AppResult<Value> {
+    let mut state = read_state(&app)?;
+    state["autoTunnelEnabled"] = json!(enabled);
+    write_state(&app, &state)?;
+    logs::append_line(
+        &app,
+        &format!(
+            "[playit] Auto-LAN tunnel {}",
+            if enabled { "enabled" } else { "disabled" }
+        ),
+    );
+    Ok(sanitized_state(&state))
 }
 
 #[command]
@@ -513,6 +670,25 @@ pub async fn playit_create_tunnel(app: tauri::AppHandle, payload: Value) -> AppR
         .map(str::trim)
         .filter(|v| !v.is_empty())
         .map(str::to_string);
+    let rundata = playit_agent_rundata(&secret_key).await?;
+    let agent_id = rundata
+        .get("agent_id")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .ok_or_else(|| "playit: missing agent id in rundata".to_string())?
+        .to_string();
+    let account_status = rundata
+        .get("account_status")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .unwrap_or("unknown");
+    if account_status.contains("over-limit") {
+        return Err(format!(
+            "playit: account status is {account_status}. Remove old Fishbattery/Playit agents on playit.gg, then relink."
+        ));
+    }
 
     let create_payload = json!({
       "name": name,
@@ -520,8 +696,9 @@ pub async fn playit_create_tunnel(app: tauri::AppHandle, payload: Value) -> AppR
       "port_type": port_type,
       "port_count": port_count,
       "origin": {
-        "type": "default",
+        "type": "agent",
         "data": {
+          "agent_id": agent_id,
           "local_ip": local_ip,
           "local_port": local_port
         }
@@ -533,11 +710,18 @@ pub async fn playit_create_tunnel(app: tauri::AppHandle, payload: Value) -> AppR
     });
 
     let created = playit_post(Some(&secret_key), "/tunnels/create", &create_payload).await?;
-    let tunnel_id = created
+    let created_tunnel_id = created
         .get("id")
         .and_then(|v| v.as_str())
-        .ok_or_else(|| "playit: missing tunnel id in create response".to_string())?;
-    logs::append_line(&app, &format!("[playit] Tunnel created: {tunnel_id}"));
+        .map(str::to_string);
+    if let Some(tunnel_id) = created_tunnel_id.as_deref() {
+        logs::append_line(&app, &format!("[playit] Tunnel created: {tunnel_id}"));
+    } else {
+        logs::append_line(
+            &app,
+            "[playit] Tunnel create response omitted id; resolving created tunnel from refreshed list",
+        );
+    }
 
     let listed = playit_post(Some(&secret_key), "/tunnels/list", &json!({})).await?;
     let tunnels = listed
@@ -548,16 +732,55 @@ pub async fn playit_create_tunnel(app: tauri::AppHandle, payload: Value) -> AppR
     refresh_state_tunnels(&mut state, &tunnels);
     write_state(&app, &state)?;
 
-    let created_summary = state
-        .get("activeTunnels")
-        .and_then(|v| v.as_array())
-        .and_then(|items| {
-            items
-                .iter()
-                .find(|item| item.get("id").and_then(|v| v.as_str()) == Some(tunnel_id))
-                .cloned()
+    let created_summary = tunnels
+        .iter()
+        .find(|item| {
+            created_tunnel_matches(
+                item,
+                created_tunnel_id.as_deref(),
+                name.as_deref(),
+                tunnel_type.as_deref(),
+                &port_type,
+                local_port,
+            )
         })
-        .unwrap_or_else(|| json!({ "id": tunnel_id }));
+        .map(summarize_tunnel)
+        .or_else(|| {
+            state
+                .get("activeTunnels")
+                .and_then(|v| v.as_array())
+                .and_then(|items| {
+                    items
+                        .iter()
+                        .find(|item| {
+                            let item_id = item.get("id").and_then(|v| v.as_str());
+                            if let Some(expected_id) = created_tunnel_id.as_deref() {
+                                item_id == Some(expected_id)
+                            } else {
+                                item.get("localPort").and_then(|v| match v {
+                                    Value::Number(n) => n.as_u64(),
+                                    Value::String(s) => s.trim().parse::<u64>().ok(),
+                                    _ => None,
+                                }) == local_port.map(|port| port as u64)
+                                    && item.get("portType").and_then(|v| v.as_str())
+                                        == Some(port_type.as_str())
+                                    && item.get("tunnelType").and_then(|v| v.as_str())
+                                        == tunnel_type.as_deref()
+                            }
+                        })
+                        .cloned()
+                })
+        })
+        .unwrap_or_else(|| {
+            json!({
+              "id": created_tunnel_id,
+              "name": name,
+              "tunnelType": tunnel_type,
+              "portType": port_type,
+              "localPort": local_port,
+              "joinAddress": Value::Null
+            })
+        });
 
     Ok(json!({
       "created": created_summary,
