@@ -255,22 +255,17 @@ async function requestAuth(
     );
   }
 
-  const rawText = await res.text().catch(() => "");
   let payload: unknown = null;
   try {
-    payload = rawText ? JSON.parse(rawText) : null;
+    payload = await res.json();
   } catch {
     payload = null;
   }
 
   if (!res.ok) {
-    const fallbackText = String(rawText || "").trim();
-    const msg = (
+    const msg =
       (payload && typeof payload === "object" && "message" in payload && String((payload as any).message)) ||
-      (payload && typeof payload === "object" && "error" in payload && String((payload as any).error)) ||
-      (fallbackText ? fallbackText.slice(0, 240) : "") ||
-      `Account API returned ${res.status}`
-    ).trim();
+      `Account API returned ${res.status}`;
     const err: any = new Error(msg);
     err.statusCode = Number(res.status || 0);
     throw err;
