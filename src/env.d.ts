@@ -15,11 +15,6 @@ declare global {
       windowClose: () => Promise<boolean>;
       windowShow: () => Promise<boolean>;
       externalOpen: (url: string) => Promise<boolean>;
-      playitExchangeSetupCode: (code: string) => Promise<{
-        ok: true;
-        linked: boolean;
-        secretKey: string;
-      }>;
       capesListOfficial: (accountId: string, forceRefresh?: boolean) => Promise<{
         accountId: string;
         username: string;

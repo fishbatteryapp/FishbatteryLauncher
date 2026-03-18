@@ -60,7 +60,6 @@ const phase2Commands: Record<string, (...args: unknown[]) => Promise<unknown>> =
 };
 
 const phase4Commands: Record<string, (...args: unknown[]) => Promise<unknown>> = {
-  playitExchangeSetupCode: (code: string) => invoke("playit_exchange_setup_code", { code }),
   playitGetState: () => invoke("playit_get_state"),
   playitSetAutoTunnelEnabled: (enabled: boolean) => invoke("playit_set_auto_tunnel_enabled", { enabled }),
   playitLinkBegin: (code: string) => invoke("playit_link_begin", { code }),
