@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.6.0 - 2026-03-18
+
+### Added
+- Added built-in Playit agent download and runtime management so Fishbattery can bring linked Playit tunnels online without a separate Playit install.
+- Added a dedicated `Multiplayer` Playit flow for setup-code exchange, tunnel management, and auto-LAN hosting.
+
+### Changed
+- Auto-LAN hosting now reuses the same Playit tunnel per instance, disables it when the LAN world closes, and rebinds it to the next LAN port when that instance is opened to LAN again.
+
+### Fixed
+- Fixed Playit setup-code exchange in the launcher by routing it through Fishbattery's backend instead of the renderer network layer.
+- Fixed Playit custom tunnel creation by sending the required tunnel description field.
+- Fixed Playit agent startup by launching the official binary with its required `start` mode and secret-file flow.
+- Fixed Playit tunnel summaries so local IP and local port display correctly in the launcher UI.
+- Fixed Playit auto-LAN tunnel updates by using Playit's tunnel-config endpoint for local port rebinding instead of relying on the generic update call.
+
 ## v0.5.2 - 2026-03-15
 
 ### Added

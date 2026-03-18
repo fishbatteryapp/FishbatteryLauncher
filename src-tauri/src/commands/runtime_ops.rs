@@ -3116,6 +3116,7 @@ pub fn servers_upsert(
         .filter(|v| *v > 0 && *v <= u16::MAX as u64)
         .map(|v| v as u16);
     let playit_active = entry.get("playitActive").and_then(|v| v.as_bool());
+    let playit_auto_lan = entry.get("playitAutoLan").and_then(|v| v.as_bool());
     let now = now_ms();
     let incoming_id = entry
         .get("id")
@@ -3151,6 +3152,7 @@ pub fn servers_upsert(
                 .unwrap_or(Value::Null);
             existing["playitLocalPort"] = playit_local_port.map(|v| json!(v)).unwrap_or(Value::Null);
             existing["playitActive"] = playit_active.map(|v| json!(v)).unwrap_or(Value::Null);
+            existing["playitAutoLan"] = playit_auto_lan.map(|v| json!(v)).unwrap_or(Value::Null);
             existing["updatedAt"] = json!(now);
             out = existing.clone();
         }
@@ -3168,6 +3170,7 @@ pub fn servers_upsert(
           "playitHostname": playit_hostname,
           "playitLocalPort": playit_local_port,
           "playitActive": playit_active,
+          "playitAutoLan": playit_auto_lan,
           "createdAt": now,
           "updatedAt": now
         });
@@ -3361,7 +3364,8 @@ pub fn servers_export_profile(
         "playitTunnelId": server.get("playitTunnelId").cloned().unwrap_or(Value::Null),
         "playitHostname": server.get("playitHostname").cloned().unwrap_or(Value::Null),
         "playitLocalPort": server.get("playitLocalPort").cloned().unwrap_or(Value::Null),
-        "playitActive": server.get("playitActive").cloned().unwrap_or(Value::Null)
+        "playitActive": server.get("playitActive").cloned().unwrap_or(Value::Null),
+        "playitAutoLan": server.get("playitAutoLan").cloned().unwrap_or(Value::Null)
       },
       "instance": {
         "mcVersion": inst.get("mcVersion").cloned().unwrap_or(json!("1.21.1")),
@@ -3550,7 +3554,8 @@ pub fn servers_import_profile(app: tauri::AppHandle, instance_id: String) -> App
           "playitTunnelId": server.get("playitTunnelId").cloned().unwrap_or(Value::Null),
           "playitHostname": server.get("playitHostname").cloned().unwrap_or(Value::Null),
           "playitLocalPort": server.get("playitLocalPort").cloned().unwrap_or(Value::Null),
-          "playitActive": server.get("playitActive").cloned().unwrap_or(Value::Null)
+          "playitActive": server.get("playitActive").cloned().unwrap_or(Value::Null),
+          "playitAutoLan": server.get("playitAutoLan").cloned().unwrap_or(Value::Null)
         }),
     )?;
     if let Some(server_id) = created_server.get("id").and_then(|v| v.as_str()) {

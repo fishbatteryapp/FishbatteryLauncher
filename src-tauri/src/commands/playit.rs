@@ -1,20 +1,54 @@
 use std::fs;
 use std::net::IpAddr;
 use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
 use std::str::FromStr;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use reqwest::header::{AUTHORIZATION, CONTENT_TYPE};
 use serde_json::{json, Value};
 use tauri::{command, Manager};
+use tokio::time::{sleep, Duration};
 
 use crate::error::{into_error, AppResult};
 use crate::logs;
+use crate::state::AppState;
 
 const PLAYIT_API_BASE: &str = "https://api.playit.gg";
 const PLAYIT_AGENT_TYPE: &str = "self-managed";
 const FISHBATTERY_ACCOUNT_API_BASE: &str = "https://api.fishbattery.app";
 const FISHBATTERY_PLAYIT_EXCHANGE_PATH: &str = "/v1/playit/setup/exchange";
+const PLAYIT_AGENT_START_WAIT_MS: u64 = 1_200;
+const PLAYIT_ALLOC_WAIT_ATTEMPTS: usize = 10;
+const PLAYIT_ALLOC_WAIT_MS: u64 = 1_500;
+
+#[cfg(all(target_os = "windows", target_arch = "x86_64"))]
+const PLAYIT_AGENT_DOWNLOAD_URL: &str =
+    "https://github.com/playit-cloud/playit-agent/releases/latest/download/playit-windows-x86_64-signed.exe";
+#[cfg(all(target_os = "windows", target_arch = "x86"))]
+const PLAYIT_AGENT_DOWNLOAD_URL: &str =
+    "https://github.com/playit-cloud/playit-agent/releases/latest/download/playit-windows-x86-signed.exe";
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+const PLAYIT_AGENT_DOWNLOAD_URL: &str =
+    "https://github.com/playit-cloud/playit-agent/releases/latest/download/playit-linux-amd64";
+#[cfg(all(target_os = "linux", target_arch = "aarch64"))]
+const PLAYIT_AGENT_DOWNLOAD_URL: &str =
+    "https://github.com/playit-cloud/playit-agent/releases/latest/download/playit-linux-aarch64";
+#[cfg(all(target_os = "linux", target_arch = "arm"))]
+const PLAYIT_AGENT_DOWNLOAD_URL: &str =
+    "https://github.com/playit-cloud/playit-agent/releases/latest/download/playit-linux-armv7";
+
+#[cfg(target_os = "windows")]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+#[cfg(target_os = "windows")]
+fn hide_console_window(cmd: &mut Command) {
+    use std::os::windows::process::CommandExt;
+    cmd.creation_flags(CREATE_NO_WINDOW);
+}
+
+#[cfg(not(target_os = "windows"))]
+fn hide_console_window(_cmd: &mut Command) {}
 
 #[derive(Debug, Clone, serde::Deserialize)]
 struct LauncherSessionDb {
@@ -35,6 +69,27 @@ fn app_data_root(app: &tauri::AppHandle) -> AppResult<PathBuf> {
 
 fn playit_state_path(app: &tauri::AppHandle) -> AppResult<PathBuf> {
     Ok(app_data_root(app)?.join("data").join("playit.json"))
+}
+
+fn playit_runtime_dir(app: &tauri::AppHandle) -> AppResult<PathBuf> {
+    Ok(app_data_root(app)?.join("data").join("playit-agent"))
+}
+
+fn playit_agent_binary_path(app: &tauri::AppHandle) -> AppResult<PathBuf> {
+    let file_name = if cfg!(target_os = "windows") {
+        "playit.exe"
+    } else {
+        "playit"
+    };
+    Ok(playit_runtime_dir(app)?.join(file_name))
+}
+
+fn playit_agent_log_path(app: &tauri::AppHandle) -> AppResult<PathBuf> {
+    Ok(playit_runtime_dir(app)?.join("playit-agent.log"))
+}
+
+fn playit_agent_secret_path(app: &tauri::AppHandle) -> AppResult<PathBuf> {
+    Ok(playit_runtime_dir(app)?.join("secret.txt"))
 }
 
 fn launcher_session_db_path(app: &tauri::AppHandle) -> AppResult<PathBuf> {
@@ -144,6 +199,27 @@ fn sanitized_state(state: &Value) -> Value {
     out
 }
 
+fn is_playit_agent_running(app: &tauri::AppHandle) -> bool {
+    let app_state = app.state::<AppState>();
+    let Ok(mut guard) = app_state.playit_agent_pid.lock() else {
+        return false;
+    };
+    match *guard {
+        Some(pid) if pid_is_running(pid) => true,
+        Some(_) => {
+            *guard = None;
+            false
+        }
+        None => false,
+    }
+}
+
+fn sanitized_state_with_runtime(app: &tauri::AppHandle, state: &Value) -> Value {
+    let mut out = sanitized_state(state);
+    out["agentRunning"] = json!(is_playit_agent_running(app));
+    out
+}
+
 fn stored_secret_key(state: &Value) -> AppResult<String> {
     state
         .get("secretKey")
@@ -197,6 +273,47 @@ fn summarize_tunnel(item: &Value) -> Value {
             format!("{domain}:{port}")
         }
     });
+    let origin_data = item
+        .get("origin")
+        .and_then(|v| v.get("data"))
+        .cloned()
+        .unwrap_or(Value::Null);
+    let local_ip = origin_data
+        .get("local_ip")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .map(str::to_string)
+        .or_else(|| {
+            origin_data
+                .get("name")
+                .and_then(|v| v.as_str())
+                .map(str::trim)
+                .filter(|v| !v.is_empty())
+                .map(str::to_string)
+        });
+    let local_port = origin_data
+        .get("local_port")
+        .cloned()
+        .or_else(|| {
+            origin_data
+                .get("config_data")
+                .and_then(|v| v.get("fields"))
+                .and_then(|v| v.as_array())
+                .and_then(|fields| {
+                    fields.iter().find_map(|field| {
+                        let name = field.get("name").and_then(|v| v.as_str())?;
+                        if name.eq_ignore_ascii_case("local_port")
+                            || name.eq_ignore_ascii_case("port")
+                        {
+                            field.get("value").cloned()
+                        } else {
+                            None
+                        }
+                    })
+                })
+        })
+        .unwrap_or(Value::Null);
 
     json!({
       "id": item.get("id").cloned().unwrap_or(Value::Null),
@@ -206,29 +323,8 @@ fn summarize_tunnel(item: &Value) -> Value {
       "portCount": item.get("port_count").cloned().unwrap_or(json!(1)),
       "active": item.get("active").cloned().unwrap_or(json!(false)),
       "createdAt": item.get("created_at").cloned().unwrap_or(Value::Null),
-      "localIp": item
-        .get("origin")
-        .and_then(|v| v.get("data"))
-        .and_then(|v| v.get("name"))
-        .cloned()
-        .unwrap_or(Value::Null),
-      "localPort": item
-        .get("origin")
-        .and_then(|v| v.get("data"))
-        .and_then(|v| v.get("config_data"))
-        .and_then(|v| v.get("fields"))
-        .and_then(|v| v.as_array())
-        .and_then(|fields| {
-          fields.iter().find_map(|field| {
-            let name = field.get("name").and_then(|v| v.as_str())?;
-            if name.eq_ignore_ascii_case("local_port") || name.eq_ignore_ascii_case("port") {
-              field.get("value").cloned()
-            } else {
-              None
-            }
-          })
-        })
-        .unwrap_or(Value::Null),
+      "localIp": local_ip,
+      "localPort": local_port,
       "assignedDomain": assigned_domain,
       "publicPort": port_start,
       "joinAddress": join_address,
@@ -321,6 +417,68 @@ fn created_tunnel_matches(
         (Some(_), None) => false,
         _ => true,
     }
+}
+
+#[cfg(target_os = "windows")]
+fn pid_is_running(pid: u32) -> bool {
+    let output = Command::new("tasklist")
+        .args(["/FI", &format!("PID eq {pid}"), "/FO", "CSV", "/NH"])
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .output();
+    let Ok(output) = output else {
+        return false;
+    };
+    if !output.status.success() {
+        return false;
+    }
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    if stdout.contains("No tasks are running") {
+        return false;
+    }
+    stdout
+        .split(',')
+        .nth(1)
+        .map(|part| part.trim_matches('"').trim() == pid.to_string())
+        .unwrap_or(false)
+}
+
+#[cfg(not(target_os = "windows"))]
+fn pid_is_running(pid: u32) -> bool {
+    Command::new("kill")
+        .args(["-0", &pid.to_string()])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map(|status| status.success())
+        .unwrap_or(false)
+}
+
+#[cfg(target_os = "windows")]
+fn kill_pid(pid: u32) -> bool {
+    let mut cmd = Command::new("taskkill");
+    hide_console_window(&mut cmd);
+    cmd.args(["/PID", &pid.to_string(), "/T", "/F"])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map(|status| status.success())
+        .unwrap_or(false)
+}
+
+#[cfg(not(target_os = "windows"))]
+fn kill_pid(pid: u32) -> bool {
+    Command::new("kill")
+        .args(["-TERM", &pid.to_string()])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map(|status| status.success())
+        .unwrap_or(false)
 }
 
 fn playit_http_client(secret_key: Option<&str>) -> reqwest::Client {
@@ -467,8 +625,197 @@ async fn fishbattery_playit_exchange(
     Ok(secret_key)
 }
 
+async fn ensure_playit_agent_binary(app: &tauri::AppHandle) -> AppResult<PathBuf> {
+    let path = playit_agent_binary_path(app)?;
+    if path.is_file() {
+        return Ok(path);
+    }
+
+    let runtime_dir = playit_runtime_dir(app)?;
+    fs::create_dir_all(&runtime_dir).map_err(into_error)?;
+    logs::append_line(app, "[playit] Downloading managed Playit agent runtime");
+
+    let bytes = reqwest::Client::builder()
+        .build()
+        .unwrap_or_else(|_| reqwest::Client::new())
+        .get(PLAYIT_AGENT_DOWNLOAD_URL)
+        .send()
+        .await
+        .map_err(into_error)?
+        .error_for_status()
+        .map_err(into_error)?
+        .bytes()
+        .await
+        .map_err(into_error)?;
+    if bytes.is_empty() {
+        return Err("playit: downloaded Playit agent binary was empty".to_string());
+    }
+
+    let tmp_path = path.with_extension("download");
+    fs::write(&tmp_path, &bytes).map_err(into_error)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = fs::metadata(&tmp_path).map_err(into_error)?.permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&tmp_path, perms).map_err(into_error)?;
+    }
+    fs::rename(&tmp_path, &path).map_err(into_error)?;
+    logs::append_line(app, "[playit] Playit agent runtime downloaded");
+    Ok(path)
+}
+
+fn stop_playit_agent(app: &tauri::AppHandle) {
+    let app_state = app.state::<AppState>();
+    let Ok(mut guard) = app_state.playit_agent_pid.lock() else {
+        return;
+    };
+    let Some(pid) = *guard else {
+        return;
+    };
+    let _ = kill_pid(pid);
+    *guard = None;
+    if let Ok(secret_path) = playit_agent_secret_path(app) {
+        let _ = fs::remove_file(secret_path);
+    }
+    logs::append_line(app, "[playit] Playit agent runtime stopped");
+}
+
+async fn ensure_playit_agent_running(app: &tauri::AppHandle, secret_key: &str) -> AppResult<bool> {
+    if is_playit_agent_running(app) {
+        return Ok(false);
+    }
+
+    let binary_path = ensure_playit_agent_binary(app).await?;
+    let runtime_dir = playit_runtime_dir(app)?;
+    fs::create_dir_all(&runtime_dir).map_err(into_error)?;
+
+    logs::append_line(app, "[playit] Starting Playit agent runtime");
+    let mut cmd = Command::new(&binary_path);
+    hide_console_window(&mut cmd);
+    let log_path = playit_agent_log_path(app)?;
+    let secret_path = playit_agent_secret_path(app)?;
+    fs::write(&secret_path, format!("{}\n", secret_key.trim())).map_err(into_error)?;
+    cmd.current_dir(&runtime_dir)
+        .args([
+            "--secret_path",
+            &secret_path.to_string_lossy(),
+            "--log_path",
+            &log_path.to_string_lossy(),
+            "start",
+        ])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    let child = cmd.spawn().map_err(into_error)?;
+    let pid = child.id();
+    drop(child);
+
+    if let Ok(mut guard) = app.state::<AppState>().playit_agent_pid.lock() {
+        *guard = Some(pid);
+    }
+
+    sleep(Duration::from_millis(PLAYIT_AGENT_START_WAIT_MS)).await;
+    if !pid_is_running(pid) {
+        if let Ok(mut guard) = app.state::<AppState>().playit_agent_pid.lock() {
+            if guard.as_ref().copied() == Some(pid) {
+                *guard = None;
+            }
+        }
+        return Err("playit: Playit agent runtime exited immediately after launch".to_string());
+    }
+
+    logs::append_line(app, "[playit] Playit agent runtime started");
+    Ok(true)
+}
+
 async fn playit_agent_rundata(secret_key: &str) -> AppResult<Value> {
     playit_post(Some(secret_key), "/agents/rundata", &json!({})).await
+}
+
+async fn playit_fetch_tunnels(secret_key: &str) -> AppResult<Vec<Value>> {
+    let response = playit_post(Some(secret_key), "/tunnels/list", &json!({})).await?;
+    Ok(response
+        .get("tunnels")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default())
+}
+
+fn summarize_created_tunnel_from_list(
+    state: &Value,
+    tunnels: &[Value],
+    created_tunnel_id: Option<&str>,
+    name: Option<&str>,
+    tunnel_type: Option<&str>,
+    port_type: &str,
+    local_port: Option<u16>,
+) -> Value {
+    tunnels
+        .iter()
+        .find(|item| {
+            created_tunnel_matches(
+                item,
+                created_tunnel_id,
+                name,
+                tunnel_type,
+                port_type,
+                local_port,
+            )
+        })
+        .map(summarize_tunnel)
+        .or_else(|| {
+            state
+                .get("activeTunnels")
+                .and_then(|v| v.as_array())
+                .and_then(|items| {
+                    items
+                        .iter()
+                        .find(|item| {
+                            let item_id = item.get("id").and_then(|v| v.as_str());
+                            if let Some(expected_id) = created_tunnel_id {
+                                item_id == Some(expected_id)
+                            } else {
+                                item.get("localPort").and_then(|v| match v {
+                                    Value::Number(n) => n.as_u64(),
+                                    Value::String(s) => s.trim().parse::<u64>().ok(),
+                                    _ => None,
+                                }) == local_port.map(|port| port as u64)
+                                    && item.get("portType").and_then(|v| v.as_str())
+                                        == Some(port_type)
+                                    && item.get("tunnelType").and_then(|v| v.as_str())
+                                        == tunnel_type
+                            }
+                        })
+                        .cloned()
+                })
+        })
+        .unwrap_or_else(|| {
+            json!({
+              "id": created_tunnel_id,
+              "name": name,
+              "tunnelType": tunnel_type,
+              "portType": port_type,
+              "localPort": local_port,
+              "joinAddress": Value::Null
+            })
+        })
+}
+
+fn tunnel_ready(summary: &Value) -> bool {
+    summary
+        .get("joinAddress")
+        .and_then(|v| v.as_str())
+        .map(|v| !v.trim().is_empty())
+        .unwrap_or(false)
+        || summary
+            .get("allocated")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false)
+}
+
+fn tunnel_matches_id(item: &Value, tunnel_id: &str) -> bool {
+    item.get("id").and_then(|v| v.as_str()) == Some(tunnel_id)
 }
 fn parse_local_ip(payload: &Value) -> AppResult<String> {
     let raw = payload
@@ -499,8 +846,16 @@ fn parse_local_port(payload: &Value) -> AppResult<Option<u16>> {
 }
 
 #[command]
-pub fn playit_get_state(app: tauri::AppHandle) -> AppResult<Value> {
-    Ok(sanitized_state(&read_state(&app)?))
+pub async fn playit_get_state(app: tauri::AppHandle) -> AppResult<Value> {
+    let mut state = read_state(&app)?;
+    if let Ok(secret_key) = stored_secret_key(&state) {
+        let _ = ensure_playit_agent_running(&app, &secret_key).await;
+        if let Ok(tunnels) = playit_fetch_tunnels(&secret_key).await {
+            refresh_state_tunnels(&mut state, &tunnels);
+            let _ = write_state(&app, &state);
+        }
+    }
+    Ok(sanitized_state_with_runtime(&app, &state))
 }
 
 #[command]
@@ -515,7 +870,7 @@ pub fn playit_set_auto_tunnel_enabled(app: tauri::AppHandle, enabled: bool) -> A
             if enabled { "enabled" } else { "disabled" }
         ),
     );
-    Ok(sanitized_state(&state))
+    Ok(sanitized_state_with_runtime(&app, &state))
 }
 
 #[command]
@@ -554,7 +909,8 @@ pub async fn playit_exchange_setup_code(app: tauri::AppHandle, code: String) -> 
     Ok(json!({
       "ok": true,
       "linked": true,
-      "secretKey": secret_key
+      "secretKey": secret_key,
+      "agentRunning": false
     }))
 }
 
@@ -589,30 +945,30 @@ pub async fn playit_link_secret(app: tauri::AppHandle, secret_key: String) -> Ap
     state["linkedAt"] = json!(now_ms());
     refresh_state_tunnels(&mut state, &tunnel_items);
     write_state(&app, &state)?;
+    if let Err(err) = ensure_playit_agent_running(&app, secret_key).await {
+        logs::append_line(&app, &format!("[playit] Playit runtime start failed: {err}"));
+    }
     logs::append_line(&app, "[playit] Link complete");
-    Ok(sanitized_state(&state))
+    Ok(sanitized_state_with_runtime(&app, &state))
 }
 
 #[command]
 pub fn playit_unlink(app: tauri::AppHandle) -> AppResult<Value> {
+    stop_playit_agent(&app);
     let path = playit_state_path(&app)?;
     if path.exists() {
         fs::remove_file(path).map_err(into_error)?;
     }
     logs::append_line(&app, "[playit] Account unlinked");
-    Ok(sanitized_state(&default_state()))
+    Ok(sanitized_state_with_runtime(&app, &default_state()))
 }
 
 #[command]
 pub async fn playit_list_tunnels(app: tauri::AppHandle) -> AppResult<Value> {
     let mut state = read_state(&app)?;
     let secret_key = stored_secret_key(&state)?;
-    let response = playit_post(Some(&secret_key), "/tunnels/list", &json!({})).await?;
-    let tunnels = response
-        .get("tunnels")
-        .and_then(|v| v.as_array())
-        .cloned()
-        .unwrap_or_default();
+    let _ = ensure_playit_agent_running(&app, &secret_key).await;
+    let tunnels = playit_fetch_tunnels(&secret_key).await?;
     refresh_state_tunnels(&mut state, &tunnels);
     write_state(&app, &state)?;
     Ok(json!({
@@ -624,6 +980,7 @@ pub async fn playit_list_tunnels(app: tauri::AppHandle) -> AppResult<Value> {
 pub async fn playit_create_tunnel(app: tauri::AppHandle, payload: Value) -> AppResult<Value> {
     let mut state = read_state(&app)?;
     let secret_key = stored_secret_key(&state)?;
+    ensure_playit_agent_running(&app, &secret_key).await?;
     let name = payload
         .get("name")
         .and_then(|v| v.as_str())
@@ -713,64 +1070,40 @@ pub async fn playit_create_tunnel(app: tauri::AppHandle, payload: Value) -> AppR
         );
     }
 
-    let listed = playit_post(Some(&secret_key), "/tunnels/list", &json!({})).await?;
-    let tunnels = listed
-        .get("tunnels")
-        .and_then(|v| v.as_array())
-        .cloned()
-        .unwrap_or_default();
+    let mut tunnels = playit_fetch_tunnels(&secret_key).await?;
     refresh_state_tunnels(&mut state, &tunnels);
     write_state(&app, &state)?;
 
-    let created_summary = tunnels
-        .iter()
-        .find(|item| {
-            created_tunnel_matches(
-                item,
+    let mut created_summary = summarize_created_tunnel_from_list(
+        &state,
+        &tunnels,
+        created_tunnel_id.as_deref(),
+        name.as_deref(),
+        tunnel_type.as_deref(),
+        &port_type,
+        local_port,
+    );
+    if !tunnel_ready(&created_summary) {
+        logs::append_line(&app, "[playit] Waiting for tunnel allocation");
+        for _ in 0..PLAYIT_ALLOC_WAIT_ATTEMPTS {
+            sleep(Duration::from_millis(PLAYIT_ALLOC_WAIT_MS)).await;
+            tunnels = playit_fetch_tunnels(&secret_key).await?;
+            refresh_state_tunnels(&mut state, &tunnels);
+            write_state(&app, &state)?;
+            created_summary = summarize_created_tunnel_from_list(
+                &state,
+                &tunnels,
                 created_tunnel_id.as_deref(),
                 name.as_deref(),
                 tunnel_type.as_deref(),
                 &port_type,
                 local_port,
-            )
-        })
-        .map(summarize_tunnel)
-        .or_else(|| {
-            state
-                .get("activeTunnels")
-                .and_then(|v| v.as_array())
-                .and_then(|items| {
-                    items
-                        .iter()
-                        .find(|item| {
-                            let item_id = item.get("id").and_then(|v| v.as_str());
-                            if let Some(expected_id) = created_tunnel_id.as_deref() {
-                                item_id == Some(expected_id)
-                            } else {
-                                item.get("localPort").and_then(|v| match v {
-                                    Value::Number(n) => n.as_u64(),
-                                    Value::String(s) => s.trim().parse::<u64>().ok(),
-                                    _ => None,
-                                }) == local_port.map(|port| port as u64)
-                                    && item.get("portType").and_then(|v| v.as_str())
-                                        == Some(port_type.as_str())
-                                    && item.get("tunnelType").and_then(|v| v.as_str())
-                                        == tunnel_type.as_deref()
-                            }
-                        })
-                        .cloned()
-                })
-        })
-        .unwrap_or_else(|| {
-            json!({
-              "id": created_tunnel_id,
-              "name": name,
-              "tunnelType": tunnel_type,
-              "portType": port_type,
-              "localPort": local_port,
-              "joinAddress": Value::Null
-            })
-        });
+            );
+            if tunnel_ready(&created_summary) {
+                break;
+            }
+        }
+    }
 
     Ok(json!({
       "created": created_summary,
@@ -795,27 +1128,66 @@ pub async fn playit_update_tunnel(app: tauri::AppHandle, payload: Value) -> AppR
         .get("enabled")
         .and_then(|v| v.as_bool())
         .unwrap_or(true);
-
+    let requested_config_change = payload.get("localIp").is_some() || payload.get("localPort").is_some();
+    if requested_config_change {
+        let mut fields = vec![json!({
+            "name": "local_ip",
+            "value": local_ip
+        })];
+        if let Some(port) = local_port {
+            fields.push(json!({
+                "name": "local_port",
+                "value": port.to_string()
+            }));
+        }
+        playit_post(
+            Some(&secret_key),
+            "/v1/tunnels/config",
+            &json!({
+              "tunnel_id": tunnel_id,
+              "new_agent_id": Value::Null,
+              "new_config": {
+                "fields": fields
+              }
+            }),
+        )
+        .await?;
+    }
     playit_post(
         Some(&secret_key),
-        "/tunnels/update",
+        "/tunnels/enable",
         &json!({
           "tunnel_id": tunnel_id,
-          "local_ip": local_ip,
-          "local_port": local_port,
-          "agent_id": Value::Null,
           "enabled": enabled
         }),
     )
     .await?;
     logs::append_line(&app, &format!("[playit] Tunnel updated: {tunnel_id}"));
 
-    let listed = playit_post(Some(&secret_key), "/tunnels/list", &json!({})).await?;
-    let tunnels = listed
-        .get("tunnels")
-        .and_then(|v| v.as_array())
-        .cloned()
-        .unwrap_or_default();
+    let desired_local_port = local_port.map(|v| v as u64);
+    let mut tunnels = playit_fetch_tunnels(&secret_key).await?;
+    for _ in 0..4 {
+        let matched = tunnels.iter().find(|item| tunnel_matches_id(item, tunnel_id));
+        let current_local_port = matched
+            .and_then(|item| {
+                item.get("origin")
+                    .and_then(|v| v.get("data"))
+                    .and_then(|v| v.get("local_port"))
+                    .and_then(|v| match v {
+                        Value::Number(n) => n.as_u64(),
+                        Value::String(s) => s.trim().parse::<u64>().ok(),
+                        _ => None,
+                    })
+            });
+        let current_active = matched.and_then(|item| item.get("active").and_then(|v| v.as_bool()));
+        let local_port_matches = desired_local_port.is_none() || current_local_port == desired_local_port;
+        let enabled_matches = current_active == Some(enabled);
+        if local_port_matches && enabled_matches {
+            break;
+        }
+        sleep(Duration::from_millis(600)).await;
+        tunnels = playit_fetch_tunnels(&secret_key).await?;
+    }
     refresh_state_tunnels(&mut state, &tunnels);
     write_state(&app, &state)?;
 

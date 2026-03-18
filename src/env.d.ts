@@ -359,6 +359,7 @@ declare global {
         linkedAt: number | null;
         preferredRegion: string | null;
         autoTunnelEnabled: boolean;
+        agentRunning: boolean;
         activeTunnels: Array<{
           id: string;
           name: string | null;
@@ -385,6 +386,7 @@ declare global {
         linkedAt: number | null;
         preferredRegion: string | null;
         autoTunnelEnabled: boolean;
+        agentRunning: boolean;
         activeTunnels: Array<{
           id: string;
           name: string | null;
@@ -417,6 +419,7 @@ declare global {
         linkedAt: number | null;
         preferredRegion: string | null;
         autoTunnelEnabled: boolean;
+        agentRunning: boolean;
         activeTunnels: Array<{
           id: string;
           name: string | null;
@@ -443,6 +446,7 @@ declare global {
         linkedAt: number | null;
         preferredRegion: string | null;
         autoTunnelEnabled: boolean;
+        agentRunning: boolean;
         activeTunnels: any[];
         hasSecretKey: boolean;
       }>;
@@ -452,6 +456,7 @@ declare global {
         linkedAt: number | null;
         preferredRegion: string | null;
         autoTunnelEnabled: boolean;
+        agentRunning: boolean;
         activeTunnels: any[];
         hasSecretKey: boolean;
       }>;
@@ -769,6 +774,7 @@ declare global {
           playitHostname?: string | null;
           playitLocalPort?: number | null;
           playitActive?: boolean | null;
+          playitAutoLan?: boolean | null;
           createdAt: number;
           updatedAt: number;
         }>;
@@ -785,6 +791,7 @@ declare global {
           playitHostname?: string | null;
           playitLocalPort?: number | null;
           playitActive?: boolean | null;
+          playitAutoLan?: boolean | null;
         }
       ) => Promise<any>;
       serversRemove: (instanceId: string, serverId: string) => Promise<any>;

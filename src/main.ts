@@ -386,6 +386,7 @@ type PlayitUiState = {
   linkedAt: number | null;
   preferredRegion: string | null;
   autoTunnelEnabled: boolean;
+  agentRunning: boolean;
   activeTunnels: PlayitTunnelUi[];
   hasSecretKey: boolean;
   lastError: string | null;
@@ -409,6 +410,7 @@ let playitState: PlayitUiState = {
   linkedAt: null,
   preferredRegion: null,
   autoTunnelEnabled: false,
+  agentRunning: false,
   activeTunnels: [],
   hasSecretKey: false,
   lastError: null
@@ -424,8 +426,15 @@ const PLAYIT_LAN_PORT_PATTERNS = [
   /hosting game on (?:(?:[\w.\-]+|\*):)?(\d+)/i,
   /lan server.*port (\d+)/i
 ] as const;
+const PLAYIT_LAN_CLOSED_PATTERNS = [
+  /\bstopping integrated server\b/i,
+  /\bstopping server\b/i,
+  /\[render thread\/info\]: stopping!/i,
+  /\bdisconnecting from singleplayer server\b/i
+] as const;
 let playitAutoTunnelBusy = false;
 let playitAutoTunnelAttemptKey = "";
+let playitAutoTunnelDisableBusy = false;
 let cloudSyncIntervalId: number | null = null;
 let runningStatusPollId: number | null = null;
 let lastRunningSignature = "";
@@ -4526,6 +4535,9 @@ function playitStatusText(s: PlayitUiState) {
   if (s.lastError) return s.lastError;
   if (s.linked) {
     const tunnelCount = Array.isArray(s.activeTunnels) ? s.activeTunnels.length : 0;
+    if (!s.agentRunning) {
+      return `Linked. Starting Playit runtime${tunnelCount ? ` with ${tunnelCount} tunnel${tunnelCount === 1 ? "" : "s"}` : ""}...`;
+    }
     return `Linked. ${tunnelCount} tunnel${tunnelCount === 1 ? "" : "s"} available.`;
   }
   return "Not linked. Exchange a Playit setup code through your Fishbattery account, then manage tunnels here.";
@@ -4549,31 +4561,35 @@ async function upsertPlayitServerEntry(
     assignedDomain?: string | null;
     localPort?: number | string | null;
     active?: boolean | null;
-  }
+  },
+  options?: { autoLan?: boolean; setPreferred?: boolean }
 ) {
   const safeInstanceId = String(instanceId || "").trim();
-  const joinAddress = String(tunnel.joinAddress || "").trim();
-  if (!safeInstanceId || !joinAddress) return null;
+  if (!safeInstanceId) return null;
   const listed = await backend.serversList(safeInstanceId);
   const tunnelId = String(tunnel.id || "").trim();
+  const joinAddress = String(tunnel.joinAddress || "").trim();
   const existing = (listed?.servers ?? []).find((entry: any) => {
     return (
       (tunnelId && String(entry?.playitTunnelId || "").trim() === tunnelId) ||
-      String(entry?.address || "").trim() === joinAddress
+      (!!joinAddress && String(entry?.address || "").trim() === joinAddress)
     );
   });
+  const resolvedAddress = joinAddress || String(existing?.address || "").trim();
+  if (!resolvedAddress) return null;
   const saved = await backend.serversUpsert(safeInstanceId, {
     id: existing?.id,
     name: String(tunnel.name || "").trim() || "Playit Tunnel",
-    address: joinAddress,
+    address: resolvedAddress,
     notes: buildPlayitServerNotes(tunnel),
     source: "playit",
     playitTunnelId: tunnelId || null,
     playitHostname: String(tunnel.assignedDomain || "").trim() || null,
     playitLocalPort: Number(tunnel.localPort || 0) || null,
-    playitActive: tunnel.active == null ? null : Boolean(tunnel.active)
+    playitActive: tunnel.active == null ? null : Boolean(tunnel.active),
+    playitAutoLan: options?.autoLan == null ? existing?.playitAutoLan ?? null : Boolean(options.autoLan)
   });
-  if (saved?.id) {
+  if (saved?.id && options?.setPreferred !== false) {
     await backend.serversSetPreferred(safeInstanceId, saved.id);
   }
   return saved;
@@ -4596,6 +4612,37 @@ async function removePlayitServerEntry(instanceId: string, tunnelId: string) {
 function resetPlayitAutoTunnelState() {
   playitAutoTunnelBusy = false;
   playitAutoTunnelAttemptKey = "";
+}
+
+function findPlayitTunnelById(tunnelId: string) {
+  const safeTunnelId = String(tunnelId || "").trim();
+  if (!safeTunnelId) return null;
+  return playitState.activeTunnels.find((tunnel) => String(tunnel?.id || "").trim() === safeTunnelId) ?? null;
+}
+
+function isPlayitLanWorldClosedLog(line: string) {
+  const text = String(line || "");
+  return PLAYIT_LAN_CLOSED_PATTERNS.some((pattern) => pattern.test(text));
+}
+
+async function resolveInstanceAutoLanServerEntry(instanceId: string) {
+  const safeInstanceId = String(instanceId || "").trim();
+  if (!safeInstanceId) return null;
+  const listed = await backend.serversList(safeInstanceId);
+  const servers = Array.isArray(listed?.servers) ? listed.servers : [];
+  const preferredId = String(listed?.preferredServerId || "").trim();
+  const autoLanEntries = servers.filter(
+    (entry: any) =>
+      String(entry?.source || "").trim() === "playit" &&
+      !!String(entry?.playitTunnelId || "").trim() &&
+      (entry?.playitAutoLan === true || entry?.playitAutoLan == null)
+  );
+  if (!autoLanEntries.length) return null;
+  return (
+    autoLanEntries.find((entry: any) => String(entry?.id || "").trim() === preferredId) ??
+    autoLanEntries.sort((a: any, b: any) => Number(b?.updatedAt || 0) - Number(a?.updatedAt || 0))[0] ??
+    null
+  );
 }
 
 async function finalizePlayitTunnelReady(
@@ -4669,6 +4716,61 @@ async function createPlayitMinecraftLanTunnel(localPort: number, reason: "manual
   return createdTunnel;
 }
 
+async function disablePlayitAutoTunnelForInstance(instanceId: string, reason: string) {
+  const safeInstanceId = String(instanceId || "").trim();
+  if (!safeInstanceId || !playitState.linked) return false;
+  if (playitAutoTunnelDisableBusy) return false;
+  const serverEntry = await resolveInstanceAutoLanServerEntry(safeInstanceId);
+  const tunnelId = String(serverEntry?.playitTunnelId || "").trim();
+  if (!tunnelId) return false;
+  const current = findPlayitTunnelById(tunnelId);
+  if (current && current.active === false) {
+    await upsertPlayitServerEntry(
+      safeInstanceId,
+      {
+        ...current,
+        joinAddress: current.joinAddress || serverEntry?.address || null,
+        assignedDomain: current.assignedDomain || serverEntry?.playitHostname || null,
+        localPort: current.localPort ?? serverEntry?.playitLocalPort ?? null,
+        active: false
+      },
+      { autoLan: true, setPreferred: false }
+    );
+    return false;
+  }
+
+  playitAutoTunnelDisableBusy = true;
+  try {
+    appendLog(`[playit] Disabling auto-LAN tunnel for instance ${safeInstanceId} (${reason}).`);
+    await backend.playitUpdateTunnel({
+      tunnelId,
+      localIp: "127.0.0.1",
+      localPort: serverEntry?.playitLocalPort ?? current?.localPort ?? null,
+      enabled: false
+    });
+    await refreshPlayitState(true);
+    const updated = findPlayitTunnelById(tunnelId);
+    await upsertPlayitServerEntry(
+      safeInstanceId,
+      {
+        id: tunnelId,
+        name: updated?.name || serverEntry?.name || "Playit Tunnel",
+        joinAddress: updated?.joinAddress || serverEntry?.address || null,
+        assignedDomain: updated?.assignedDomain || serverEntry?.playitHostname || null,
+        localPort: updated?.localPort ?? serverEntry?.playitLocalPort ?? null,
+        active: false
+      },
+      { autoLan: true, setPreferred: false }
+    );
+    if (viewPlayit.style.display !== "none") {
+      renderPlayitPanel();
+    }
+    return true;
+  } finally {
+    playitAutoTunnelDisableBusy = false;
+  }
+}
+
 async function handleDetectedLanPort(localPort: number) {
   const safePort = Number(localPort || 0);
   if (!Number.isFinite(safePort) || safePort <= 0) return;
@@ -4678,19 +4780,66 @@ async function handleDetectedLanPort(localPort: number) {
   const attemptKey = `${activeInstanceId}:${safePort}`;
   if (playitAutoTunnelBusy || playitAutoTunnelAttemptKey === attemptKey) return;
 
-  const existing = findPlayitTunnelByLocalPort(safePort);
-  if (existing) {
+  const autoLanEntry = await resolveInstanceAutoLanServerEntry(activeInstanceId);
+  const autoLanTunnelId = String(autoLanEntry?.playitTunnelId || "").trim();
+  const autoLanTunnel = autoLanTunnelId ? findPlayitTunnelById(autoLanTunnelId) : null;
+
+  if (autoLanTunnelId) {
     playitAutoTunnelAttemptKey = attemptKey;
-    await finalizePlayitTunnelReady(existing, activeInstanceId, "Existing Playit tunnel", { alert: false });
-    return;
+    if (autoLanTunnel && Number(autoLanTunnel.localPort || 0) === safePort && autoLanTunnel.active) {
+      await finalizePlayitTunnelReady(autoLanTunnel, activeInstanceId, "Existing Playit tunnel", { alert: false });
+      return;
+    }
   }
 
   playitAutoTunnelBusy = true;
   playitAutoTunnelAttemptKey = attemptKey;
   try {
+    if (autoLanTunnelId) {
+      appendLog(`[playit] Detected LAN world on port ${safePort}. Reusing Playit tunnel ${autoLanTunnelId}...`);
+      setStatus(`Detected LAN world on ${safePort}. Updating Playit tunnel...`);
+      await backend.playitUpdateTunnel({
+        tunnelId: autoLanTunnelId,
+        localIp: "127.0.0.1",
+        localPort: safePort,
+        enabled: true
+      });
+      await refreshPlayitState(true);
+      const updated = findPlayitTunnelById(autoLanTunnelId) ?? {
+        id: autoLanTunnelId,
+        name: autoLanEntry?.name || "Playit Tunnel",
+        joinAddress: autoLanEntry?.address || null,
+        assignedDomain: autoLanEntry?.playitHostname || null,
+        localPort: safePort,
+        active: true
+      };
+      await finalizePlayitTunnelReady(updated, activeInstanceId, "Playit tunnel", { alert: false });
+      await upsertPlayitServerEntry(
+        activeInstanceId,
+        {
+          ...updated,
+          localPort: safePort,
+          active: true
+        },
+        { autoLan: true, setPreferred: true }
+      );
+      if (viewPlayit.style.display !== "none") {
+        renderPlayitPanel();
+      }
+      return;
+    }
+
     appendLog(`[playit] Detected LAN world on port ${safePort}. Creating Playit tunnel...`);
     setStatus(`Detected LAN world on ${safePort}. Creating Playit tunnel...`);
-    await createPlayitMinecraftLanTunnel(safePort, "auto-lan");
+    const created = await createPlayitMinecraftLanTunnel(safePort, "auto-lan");
+    await upsertPlayitServerEntry(
+      activeInstanceId,
+      {
+        ...(created || { localPort: safePort, active: true }),
+        active: true
+      },
+      { autoLan: true, setPreferred: true }
+    );
   } catch (err: any) {
     playitAutoTunnelAttemptKey = "";
     const message = String(err?.message ?? err ?? "Could not create Playit tunnel for LAN world.");
@@ -10662,10 +10811,16 @@ backend.onLaunchLog((line) => {
   if (detectedPort > 0) {
     void handleDetectedLanPort(detectedPort);
   }
+  if (active && isPlayitLanWorldClosedLog(line)) {
+    void disablePlayitAutoTunnelForInstance(String(active), "world closed");
+  }
   if (lower.includes("[launcher] launch command:") || lower.includes("[launcher] launching")) {
     resetPlayitAutoTunnelState();
   }
   if (lower.includes("[launcher] game exited")) {
+    if (active) {
+      void disablePlayitAutoTunnelForInstance(String(active), "game exited");
+    }
     resetPlayitAutoTunnelState();
   }
   if (
