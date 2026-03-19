@@ -82,6 +82,7 @@ const accountName = $("accountName");
 const accountSub = $("accountSub");
 const accountAvatarImg = $("accountAvatarImg") as HTMLImageElement;
 
+const btnQuickLaunchLatestVanilla = $("btnQuickLaunchLatestVanilla");
 const btnCreate = $("btnCreate");
 const btnImport = $("btnImport");
 const btnJoinPreferred = document.getElementById("btnJoinPreferred") as HTMLButtonElement | null;
@@ -112,6 +113,7 @@ const TRASH_ICON_PATH =
 const STARTUP_REVEAL_TIMEOUT_MS = 2500;
 
 function applyActionButtonIcons() {
+  setButtonIcon(btnQuickLaunchLatestVanilla, "M5 5h10a4 4 0 1 1 0 8h-1v3l-4-3H5zM7 19h10v2H7z");
   setButtonIcon(btnCreate, "M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6z");
   setButtonIcon(btnImport, "M12 3v10.17l3.59-3.58L17 11l-5 5-5-5 1.41-1.41L11 13.17V3zM5 19h14v2H5z");
   setButtonIcon(btnJoinPreferred, "M4 6h16v10H4zM2 4h20v14H2zM6 20h12v2H6z");
@@ -9011,10 +9013,92 @@ function updateCreateLoaderUi() {
   createLoaderVersion.value = "";
   createLoaderVersion.disabled = true;
   if (loader === "vanilla") {
-    createLoaderHint.textContent = "Shown as vanilla, but uses Fishbattery's Fabric compatibility layer so cape features still work.";
+    createLoaderHint.textContent =
+      "Shown as vanilla, but uses Fishbattery's Fabric compatibility layer so cape features still work. Fabric may report more internal mods than the Installed list.";
     return;
   }
   createLoaderHint.textContent = "Select a supported loader.";
+}
+
+function getLatestReleaseVersionId() {
+  const latestListedRelease = (state.versions ?? []).find((v: any) => v?.type === "release" && String(v?.id || "").trim());
+  return String(latestListedRelease?.id || "").trim();
+}
+
+function getUniqueInstanceName(baseName: string) {
+  const normalizedBase = String(baseName || "New Instance").trim() || "New Instance";
+  const existing = new Set(
+    (state.instances?.instances ?? [])
+      .map((inst: any) => String(inst?.name || "").trim().toLowerCase())
+      .filter((name: string) => !!name)
+  );
+  if (!existing.has(normalizedBase.toLowerCase())) return normalizedBase;
+  let suffix = 2;
+  while (existing.has(`${normalizedBase} ${suffix}`.toLowerCase())) suffix += 1;
+  return `${normalizedBase} ${suffix}`;
+}
+
+async function quickLaunchLatestVanillaClient() {
+  await withGlobalActionProgress("Launching latest vanilla", "Resolving latest release...", async (update) => {
+    let mcVersion = getLatestReleaseVersionId();
+    if (!mcVersion) {
+      const manifest = await backend.versionsList();
+      state.versions = manifest?.versions ?? state.versions ?? [];
+      mcVersion = String(manifest?.latest?.release || getLatestReleaseVersionId() || "").trim();
+    }
+    if (!mcVersion) {
+      throw new Error("Could not determine the latest Minecraft release.");
+    }
+
+    const id = crypto.randomUUID();
+    const name = getUniqueInstanceName(`Vanilla ${mcVersion}`);
+    const memoryMb = Number(getSettings().defaultMemoryMb ?? 4096);
+
+    update?.("Resolving Fabric compatibility runtime...");
+    const fabricLoaderVersion = ((await backend.loaderPickVersion("fabric", mcVersion)) || "").trim();
+
+    update?.("Creating instance...");
+    await backend.instancesCreate({
+      id,
+      name,
+      mcVersion,
+      loader: "fabric",
+      displayLoader: "vanilla",
+      fabricLoaderVersion,
+      memoryMb,
+      accountId: null,
+      instancePreset: "none",
+      syncEnabled: true
+    });
+
+    update?.("Preparing runtime...");
+    await backend.loaderInstall(id, mcVersion, "fabric", fabricLoaderVersion || undefined);
+    await ensureFabricApiForFabricInstance(id, mcVersion, "fabric");
+    await backend.instancesSetIconFallback(id, name, "green");
+
+    update?.("Refreshing library...");
+    state.instances = await backend.instancesList();
+    await renderInstances();
+
+    const created =
+      (state.instances?.instances ?? []).find((inst: any) => String(inst?.id || "") === id) ??
+      ({
+        id,
+        name,
+        mcVersion,
+        loader: "fabric",
+        displayLoader: "vanilla",
+        memoryMb,
+        accountId: null
+      } as any);
+
+    appendLog(
+      `[quick-launch] Created ${name} on Minecraft ${mcVersion}. Vanilla instances still run through Fishbattery's Fabric compatibility layer, so Fabric's in-game mod count can be higher than the Installed list.`
+    );
+
+    update?.("Launching Minecraft...");
+    await launchForInstance(created);
+  });
 }
 
 // Render modal instance sync toggle.
@@ -10111,6 +10195,11 @@ btnImport.onclick = () =>
         }
       }
     });
+  });
+
+btnQuickLaunchLatestVanilla.onclick = () =>
+  guarded(async () => {
+    await quickLaunchLatestVanillaClient();
   });
 
 modalClose.onclick = closeModal;

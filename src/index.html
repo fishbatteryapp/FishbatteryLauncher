@@ -2,7 +2,7 @@
 <html>
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="icon" href="/branding/transparent.svg" type="image/svg+xml" sizes="any" />
     <title>Fishbattery Launcher</title>
     <meta
       http-equiv="Content-Security-Policy"
@@ -24,7 +24,7 @@
     <div id="startupSplash" class="startupSplash" aria-live="polite">
       <div class="startupSplashCard">
         <div class="startupSplashLogo" aria-hidden="true">
-          <img class="startupSplashLogoImg" src="/startup-logo.png" alt="" />
+          <img class="startupSplashLogoImg" src="/branding/transparent.png" alt="" />
         </div>
         <div class="startupSplashWordmark">Fishbattery Launcher</div>
         <div id="startupSplashTitle" class="startupSplashTitle">Launching launcher</div>
@@ -50,7 +50,7 @@
     <div id="appShell" class="app appStartupHidden" aria-hidden="true">
       <aside class="sidebar">
         <div class="brand">
-          <div class="dot"></div>
+          <div class="dot" aria-hidden="true"></div>
           <div>
             <strong>Fishbattery Launcher</strong>
             <small>Introducing fishbattery launcher</small>
@@ -139,6 +139,7 @@
               <p>Manage instances and launch Minecraft.</p>
             </div>
             <div class="topActions">
+              <button id="btnQuickLaunchLatestVanilla" class="btn">Latest Vanilla</button>
               <button id="btnCreate" class="btn btnPrimary">Create</button>
               <button id="btnImport" class="btn">Import</button>
             </div>
