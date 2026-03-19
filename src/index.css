@@ -715,6 +715,9 @@ body{
   display: inline-block;
   opacity: .9;
 }
+.btnIconImage{
+  filter: brightness(0) invert(1);
+}
 .btn:disabled{
   opacity: .55;
   cursor: not-allowed;

@@ -108,12 +108,24 @@ function setButtonIcon(btn: HTMLButtonElement | null, svgPath: string) {
   `;
 }
 
+function setButtonImageIcon(btn: HTMLButtonElement | null, src: string, alt = "") {
+  if (!btn) return;
+  const label = String(btn.textContent || "").trim();
+  if (!label) return;
+  btn.innerHTML = `
+    <img class="btnIcon btnIconImage" src="${src}" alt="${alt}" aria-hidden="true" />
+    <span>${label}</span>
+  `;
+}
+
 const TRASH_ICON_PATH =
   "M9.5 3.5c0-.83.67-1.5 1.5-1.5h2c.83 0 1.5.67 1.5 1.5V4h3.75C19.77 4 21 5.23 21 6.75S19.77 9.5 18.25 9.5H18l-1.02 9.2A4 4 0 0 1 13 22H11a4 4 0 0 1-3.98-3.3L6 9.5h-.25A2.75 2.75 0 0 1 3 6.75C3 5.23 4.23 4 5.75 4H9.5z";
+const VANILLA_BUTTON_ICON_DATA_URL =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAACXBIWXMAAAsTAAALEwEAmpwYAAABBklEQVR4nOWUMQrCQBBFH5g6dtraewELwc4beBDtBS+gYO0FxFYQK01vbSlewMbawEpgFsIym2wWLcQPA8nw57/dkF34F/WBBXCRWkjvI6FXwHjqBqyBYWhoG5groQ9gA4ylNtIre64ym1YBjp7QRPEmHtihCvASky/UJwszkuGVXUWsTN28NbS+DbgD08DQNAbgGnuKt+itgGcMYARkpX4O7ICB03P9wQCrTIa1XfkOXyOAUcpdbRRAW7lRyuerBYSWlQv6GGDk/Ay1gHPE9zaO71QF6ALb0i9oFbKbXGY7BKg4RMvSe1XwUw6cdhiDdVeCi96s7v5vch1PgL1U8dzkOv9hvQHB1L4BlVIn0wAAAABJRU5ErkJggg==";
 const STARTUP_REVEAL_TIMEOUT_MS = 2500;
 
 function applyActionButtonIcons() {
-  setButtonIcon(btnQuickLaunchLatestVanilla, "M5 5h10a4 4 0 1 1 0 8h-1v3l-4-3H5zM7 19h10v2H7z");
+  setButtonImageIcon(btnQuickLaunchLatestVanilla, VANILLA_BUTTON_ICON_DATA_URL);
   setButtonIcon(btnCreate, "M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6z");
   setButtonIcon(btnImport, "M12 3v10.17l3.59-3.58L17 11l-5 5-5-5 1.41-1.41L11 13.17V3zM5 19h14v2H5z");
   setButtonIcon(btnJoinPreferred, "M4 6h16v10H4zM2 4h20v14H2zM6 20h12v2H6z");
@@ -285,16 +297,16 @@ function getInstanceDisplayLoader(inst: any): LoaderKind {
   if (display === "vanilla" || display === "fabric" || display === "quilt" || display === "forge" || display === "neoforge") {
     return display as LoaderKind;
   }
-  return String(inst?.loader || "fabric").trim().toLowerCase() as LoaderKind;
+  return String(inst?.loader || "vanilla").trim().toLowerCase() as LoaderKind;
 }
 
 function getEffectiveRuntimeLoader(loaderChoice: string): LoaderKind {
-  const normalized = String(loaderChoice || "fabric").trim().toLowerCase();
-  if (normalized === "vanilla") return "fabric";
+  const normalized = String(loaderChoice || "vanilla").trim().toLowerCase();
+  if (normalized === "vanilla") return "vanilla";
   if (normalized === "fabric" || normalized === "quilt" || normalized === "forge" || normalized === "neoforge") {
     return normalized as LoaderKind;
   }
-  return "fabric";
+  return "vanilla";
 }
 
 function getPersistedDisplayLoader(loaderChoice: string): LoaderKind | null {
@@ -9013,8 +9025,7 @@ function updateCreateLoaderUi() {
   createLoaderVersion.value = "";
   createLoaderVersion.disabled = true;
   if (loader === "vanilla") {
-    createLoaderHint.textContent =
-      "Shown as vanilla, but uses Fishbattery's Fabric compatibility layer so cape features still work. Fabric may report more internal mods than the Installed list.";
+    createLoaderHint.textContent = "Launches as true vanilla Minecraft with no mod loader.";
     return;
   }
   createLoaderHint.textContent = "Select a supported loader.";
@@ -9039,7 +9050,7 @@ function getUniqueInstanceName(baseName: string) {
 }
 
 async function quickLaunchLatestVanillaClient() {
-  await withGlobalActionProgress("Launching latest vanilla", "Resolving latest release...", async (update) => {
+  await withGlobalActionProgress("Launching latest version", "Resolving latest release...", async (update) => {
     let mcVersion = getLatestReleaseVersionId();
     if (!mcVersion) {
       const manifest = await backend.versionsList();
@@ -9054,17 +9065,12 @@ async function quickLaunchLatestVanillaClient() {
     const name = getUniqueInstanceName(`Vanilla ${mcVersion}`);
     const memoryMb = Number(getSettings().defaultMemoryMb ?? 4096);
 
-    update?.("Resolving Fabric compatibility runtime...");
-    const fabricLoaderVersion = ((await backend.loaderPickVersion("fabric", mcVersion)) || "").trim();
-
     update?.("Creating instance...");
     await backend.instancesCreate({
       id,
       name,
       mcVersion,
-      loader: "fabric",
-      displayLoader: "vanilla",
-      fabricLoaderVersion,
+      loader: "vanilla",
       memoryMb,
       accountId: null,
       instancePreset: "none",
@@ -9072,8 +9078,7 @@ async function quickLaunchLatestVanillaClient() {
     });
 
     update?.("Preparing runtime...");
-    await backend.loaderInstall(id, mcVersion, "fabric", fabricLoaderVersion || undefined);
-    await ensureFabricApiForFabricInstance(id, mcVersion, "fabric");
+    await backend.loaderInstall(id, mcVersion, "vanilla");
     await backend.instancesSetIconFallback(id, name, "green");
 
     update?.("Refreshing library...");
@@ -9086,15 +9091,12 @@ async function quickLaunchLatestVanillaClient() {
         id,
         name,
         mcVersion,
-        loader: "fabric",
-        displayLoader: "vanilla",
+        loader: "vanilla",
         memoryMb,
         accountId: null
       } as any);
 
-    appendLog(
-      `[quick-launch] Created ${name} on Minecraft ${mcVersion}. Vanilla instances still run through Fishbattery's Fabric compatibility layer, so Fabric's in-game mod count can be higher than the Installed list.`
-    );
+    appendLog(`[quick-launch] Created ${name} on Minecraft ${mcVersion} using the vanilla runtime.`);
 
     update?.("Launching Minecraft...");
     await launchForInstance(created);
@@ -10143,10 +10145,10 @@ btnCreate.onclick = async () => {
   createIncludeSnapshots = false;
   renderCreateFilterButtons();
   fillCreateVersionOptions();
-  createLoaderType.value = "fabric";
+  createLoaderType.value = "vanilla";
   createLoaderVersion.value = "";
   updateCreateLoaderUi();
-  await refreshPresetDropdownAvailability("none", "fabric", newVersion.value || "");
+  await refreshPresetDropdownAvailability("none", "vanilla", newVersion.value || "");
   setCreateSource("custom");
   selectedModrinthPack = null;
   selectedProviderPack = null;
