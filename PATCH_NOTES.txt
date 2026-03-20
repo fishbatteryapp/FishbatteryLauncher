@@ -1,2 +1,2 @@
-v0.4.10
+v0.6.1
 See CHANGELOG.md for full release notes.

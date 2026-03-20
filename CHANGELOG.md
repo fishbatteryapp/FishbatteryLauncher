@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.6.1 - 2026-03-20
+
+### Added
+- Added a `Play Latest Version` action in the library for quickly spinning up a fresh vanilla instance.
+
+### Changed
+- Refreshed Fishbattery branding across the launcher splash screen, website branding, and packaged app icons so the app presents a more consistent identity.
+- Vanilla quick-play flow now uses cleaner vanilla-specific setup and visuals when creating the latest-version instance.
+
+### Fixed
+- Fixed Windows desktop icon updates not reliably rebuilding after icon asset changes, which could leave the taskbar icon stuck on an older logo.
+- Fixed launcher icon consistency so the splash screen, favicon, installer assets, and packaged desktop app icon now match.
+
 ## v0.6.0 - 2026-03-18
 
 ### Added

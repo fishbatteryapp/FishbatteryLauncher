@@ -1,7 +1,7 @@
 {
   "name": "fishbattery-launcher",
   "private": true,
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "A fast, underwater-themed Minecraft launcher focused on clean UX, modded play, and reliable cross-device updates.",
   "type": "module",
   "scripts": {
