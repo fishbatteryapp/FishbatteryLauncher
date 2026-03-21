@@ -1089,15 +1089,92 @@ fn rewrite_legacy_library_url(name: &str, rel: &str, current_url: Option<&str>) 
         return None;
     }
 
+    let rewritten_rel = if name.starts_with("java3d:vecmath:") {
+        Some(rel.replacen("java3d/vecmath/", "javax/vecmath/vecmath/", 1))
+    } else {
+        None
+    };
     let needs_forge_maven = name.starts_with("lzma:lzma:");
     let uses_maven_central =
         url.contains("repo1.maven.org/maven2/") || url.contains("repo.maven.apache.org/maven2/");
+
+    if let Some(remapped_rel) = rewritten_rel {
+        if uses_maven_central {
+            return Some(format!("https://repo1.maven.org/maven2/{remapped_rel}"));
+        }
+    }
 
     if needs_forge_maven && uses_maven_central {
         return Some(format!("https://maven.minecraftforge.net/{rel}"));
     }
 
     None
+}
+
+fn push_unique_url(out: &mut Vec<String>, url: String) {
+    if !out.iter().any(|existing| existing == &url) {
+        out.push(url);
+    }
+}
+
+fn known_maven_relative_path(url: &str) -> Option<&str> {
+    const BASES: [&str; 9] = [
+        "https://repo1.maven.org/maven2/",
+        "https://repo.maven.apache.org/maven2/",
+        "https://libraries.minecraft.net/",
+        "https://maven.minecraftforge.net/",
+        "https://maven.neoforged.net/releases/",
+        "https://maven.fabricmc.net/",
+        "https://maven.quiltmc.org/repository/release/",
+        "https://maven.mohistmc.com/libraries/",
+        "https://repo.spongepowered.org/maven/",
+    ];
+
+    BASES
+        .iter()
+        .find_map(|base| url.strip_prefix(base))
+        .filter(|rel| !rel.trim().is_empty())
+}
+
+fn download_candidates(url: &str) -> Vec<String> {
+    let mut candidates = vec![url.to_string()];
+    let Some(rel) = known_maven_relative_path(url) else {
+        if url.ends_with("/lzma/lzma/0.0.1/lzma-0.0.1.jar") {
+            push_unique_url(
+                &mut candidates,
+                "https://libraries.minecraft.net/lzma/lzma/0.0.1/lzma-0.0.1.jar".to_string(),
+            );
+            push_unique_url(
+                &mut candidates,
+                "https://maven.mohistmc.com/libraries/lzma/lzma/0.0.1/lzma-0.0.1.jar".to_string(),
+            );
+        }
+        return candidates;
+    };
+
+    const FALLBACK_BASES: [&str; 8] = [
+        "https://repo1.maven.org/maven2/",
+        "https://repo.maven.apache.org/maven2/",
+        "https://libraries.minecraft.net/",
+        "https://maven.minecraftforge.net/",
+        "https://maven.neoforged.net/releases/",
+        "https://maven.fabricmc.net/",
+        "https://maven.quiltmc.org/repository/release/",
+        "https://maven.mohistmc.com/libraries/",
+    ];
+
+    for base in FALLBACK_BASES {
+        push_unique_url(&mut candidates, format!("{base}{rel}"));
+    }
+
+    if rel.starts_with("org/spongepowered/") {
+        push_unique_url(
+            &mut candidates,
+            format!("https://repo.spongepowered.org/maven/{rel}"),
+        );
+    }
+
+    candidates
 }
 
 fn ensure_library_download_fields(lib: &mut Value) {
@@ -1133,9 +1210,6 @@ fn ensure_library_download_fields(lib: &mut Value) {
             .and_then(|v| v.as_str())
             .map(|s| !s.trim().is_empty())
             .unwrap_or(false);
-    if has_artifact {
-        return;
-    }
     let Some(name) = lib.get("name").and_then(|v| v.as_str()) else {
         return;
     };
@@ -1178,6 +1252,59 @@ fn ensure_library_download_fields(lib: &mut Value) {
         lib["downloads"] = json!({});
     }
     lib["downloads"]["artifact"] = artifact;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{download_candidates, rewrite_legacy_library_url};
+
+    #[test]
+    fn rewrites_vecmath_to_javax_group_on_maven_central() {
+        let rewritten = rewrite_legacy_library_url(
+            "java3d:vecmath:1.5.2",
+            "java3d/vecmath/1.5.2/vecmath-1.5.2.jar",
+            Some("https://repo1.maven.org/maven2/java3d/vecmath/1.5.2/vecmath-1.5.2.jar"),
+        );
+        assert_eq!(
+            rewritten.as_deref(),
+            Some("https://repo1.maven.org/maven2/javax/vecmath/vecmath/1.5.2/vecmath-1.5.2.jar")
+        );
+    }
+
+    #[test]
+    fn rewrites_lzma_to_forge_maven() {
+        let rewritten = rewrite_legacy_library_url(
+            "lzma:lzma:0.0.1",
+            "lzma/lzma/0.0.1/lzma-0.0.1.jar",
+            Some("https://repo1.maven.org/maven2/lzma/lzma/0.0.1/lzma-0.0.1.jar"),
+        );
+        assert_eq!(
+            rewritten.as_deref(),
+            Some("https://maven.minecraftforge.net/lzma/lzma/0.0.1/lzma-0.0.1.jar")
+        );
+    }
+
+    #[test]
+    fn includes_multiple_maven_fallbacks_for_library_downloads() {
+        let candidates = download_candidates(
+            "https://repo1.maven.org/maven2/com/google/guava/guava/21.0/guava-21.0.jar",
+        );
+        assert!(candidates.iter().any(|url| {
+            url == "https://repo1.maven.org/maven2/com/google/guava/guava/21.0/guava-21.0.jar"
+        }));
+        assert!(candidates.iter().any(|url| {
+            url == "https://repo.maven.apache.org/maven2/com/google/guava/guava/21.0/guava-21.0.jar"
+        }));
+        assert!(candidates.iter().any(|url| {
+            url == "https://maven.minecraftforge.net/com/google/guava/guava/21.0/guava-21.0.jar"
+        }));
+        assert!(candidates.iter().any(|url| {
+            url == "https://maven.fabricmc.net/com/google/guava/guava/21.0/guava-21.0.jar"
+        }));
+        assert!(candidates.iter().any(|url| {
+            url == "https://maven.quiltmc.org/repository/release/com/google/guava/guava/21.0/guava-21.0.jar"
+        }));
+    }
 }
 
 fn rule_matches(rule: &Value, features: &HashMap<&str, bool>) -> bool {
@@ -1710,14 +1837,7 @@ async fn download_file_if_missing(
     if let Some(parent) = target.parent() {
         fs::create_dir_all(parent).map_err(into_error)?;
     }
-    let mut candidates = vec![url.to_string()];
-    if url.ends_with("/lzma/lzma/0.0.1/lzma-0.0.1.jar") {
-        candidates
-            .push("https://libraries.minecraft.net/lzma/lzma/0.0.1/lzma-0.0.1.jar".to_string());
-        candidates.push(
-            "https://maven.mohistmc.com/libraries/lzma/lzma/0.0.1/lzma-0.0.1.jar".to_string(),
-        );
-    }
+    let candidates = download_candidates(url);
 
     let mut last_err: Option<String> = None;
     for candidate in candidates {
