@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.6.2 - 2026-03-21
+
+### Fixed
+- Fixed legacy Forge and other older modpack launches failing when library metadata pointed at dead or moved Maven artifact hosts.
+- Added broader fallback repository retries for launch-time library downloads across Maven Central, Mojang, Forge, NeoForged, Fabric, Quilt, Mohist, and Sponge-compatible artifact paths.
+- Fixed legacy `java3d:vecmath:1.5.2` resolution by remapping it to the live `javax.vecmath` artifact coordinates on Maven Central.
+
 ## v0.6.1 - 2026-03-20
 
 ### Added
