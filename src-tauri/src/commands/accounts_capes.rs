@@ -42,6 +42,7 @@ struct DeviceCodeResponse {
 #[derive(Debug, Clone, Deserialize)]
 struct MicrosoftAccessTokenResponse {
     access_token: String,
+    #[serde(default)]
     refresh_token: String,
 }
 
@@ -160,6 +161,38 @@ async fn poll_device_access_token(
     }
 
     Err("Microsoft sign-in timed out. Retry and finish the browser sign-in sooner.".to_string())
+}
+
+async fn refresh_microsoft_access_token(
+    client: &reqwest::Client,
+    refresh_token: &str,
+) -> AppResult<MicrosoftAccessTokenResponse> {
+    let token = refresh_token.trim();
+    if token.is_empty() {
+        return Err("Minecraft account is missing the Microsoft refresh token. Remove and re-add the account.".to_string());
+    }
+
+    let res = client
+        .post("https://login.live.com/oauth20_token.srf")
+        .form(&[
+            ("client_id", DEVICE_AUTH_CLIENT_ID),
+            ("refresh_token", token),
+            ("grant_type", "refresh_token"),
+            ("scope", DEVICE_AUTH_SCOPE),
+        ])
+        .send()
+        .await
+        .map_err(into_error)?;
+    let status = res.status();
+    let text = res.text().await.map_err(into_error)?;
+    if !status.is_success() {
+        return Err(http_error_message(
+            status,
+            &text,
+            "Microsoft session refresh failed",
+        ));
+    }
+    serde_json::from_str::<MicrosoftAccessTokenResponse>(&text).map_err(into_error)
 }
 
 async fn authenticate_xbox_live(
@@ -355,7 +388,8 @@ async fn add_account_via_device_code() -> AppResult<StoredAccount> {
           "user_properties": {}
         }),
         access_token: Some(minecraft.access_token),
-        msmc_refresh_token: Some(microsoft.refresh_token),
+        msmc_refresh_token: Some(microsoft.refresh_token)
+            .filter(|value| !value.trim().is_empty()),
         added_at: SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map(|d| d.as_millis() as u64)
@@ -1471,6 +1505,78 @@ fn get_account_by_id(app: &tauri::AppHandle, account_id: &str) -> AppResult<Stor
         .into_iter()
         .find(|a| a.id == account_id)
         .ok_or_else(|| "Minecraft account not found".to_string())
+}
+
+pub async fn refresh_account_session(
+    app: &tauri::AppHandle,
+    account_id: &str,
+) -> AppResult<StoredAccount> {
+    let target_id = account_id.trim();
+    if target_id.is_empty() {
+        return Err("Minecraft account not found".to_string());
+    }
+
+    let mut db = read_accounts_db(app)?;
+    let Some(index) = db.accounts.iter().position(|account| account.id == target_id) else {
+        return Err("Minecraft account not found".to_string());
+    };
+    let existing = db.accounts[index].clone();
+    let refresh_token = existing
+        .msmc_refresh_token
+        .clone()
+        .unwrap_or_default()
+        .trim()
+        .to_string();
+    if refresh_token.is_empty() {
+        return Err(
+            "Minecraft account is missing the Microsoft refresh token. Remove and re-add the account."
+                .to_string(),
+        );
+    }
+
+    let client = reqwest::Client::new();
+    let microsoft = refresh_microsoft_access_token(&client, &refresh_token).await?;
+    let (xbox_token, user_hash) = authenticate_xbox_live(&client, &microsoft.access_token).await?;
+    let xsts_token = obtain_xsts_for_minecraft(&client, &xbox_token).await?;
+    let minecraft = authenticate_minecraft(&client, &user_hash, &xsts_token).await?;
+    verify_minecraft_ownership(&client, &minecraft.access_token).await?;
+    let profile = fetch_minecraft_profile_with_token(&client, &minecraft.access_token).await?;
+
+    if profile.id.trim() != existing.id.trim() {
+        return Err(
+            "Microsoft session refresh resolved to a different Minecraft account. Remove and re-add this account."
+                .to_string(),
+        );
+    }
+
+    let next_refresh_token = if microsoft.refresh_token.trim().is_empty() {
+        existing.msmc_refresh_token.clone()
+    } else {
+        Some(microsoft.refresh_token.trim().to_string())
+    };
+
+    let refreshed = StoredAccount {
+        id: profile.id.clone(),
+        username: profile.name.clone(),
+        mclc_auth: serde_json::json!({
+          "access_token": minecraft.access_token,
+          "token_type": "Bearer",
+          "uuid": profile.id,
+          "name": profile.name,
+          "meta": {
+            "type": "Xbox",
+            "xuid": minecraft.username,
+          },
+          "user_properties": {}
+        }),
+        access_token: Some(minecraft.access_token),
+        msmc_refresh_token: next_refresh_token,
+        added_at: existing.added_at,
+    };
+
+    db.accounts[index] = refreshed.clone();
+    write_accounts_db(app, &db)?;
+    Ok(refreshed)
 }
 
 fn account_minecraft_token(account: &StoredAccount) -> AppResult<String> {

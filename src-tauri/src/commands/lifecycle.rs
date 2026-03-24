@@ -11,7 +11,7 @@ use tar::Archive as TarArchive;
 use tauri::{command, Manager, Window};
 use zip::ZipArchive;
 
-use crate::commands::runtime_ops;
+use crate::commands::{accounts_capes, runtime_ops};
 use crate::error::{into_error, AppResult};
 use crate::events::{emit_launch_log, emit_launch_log_app};
 use crate::logs;
@@ -2005,23 +2005,6 @@ fn sanitize_legacy_jvm_flags_for_java(
     (out, removed)
 }
 
-fn read_account_mclc_auth(app: &tauri::AppHandle, account_id: &str) -> AppResult<Value> {
-    let db = read_accounts_db(app);
-    let accounts = db
-        .get("accounts")
-        .and_then(|v| v.as_array())
-        .ok_or_else(|| "launch: accounts database malformed".to_string())?;
-    let account = accounts
-        .iter()
-        .find(|x| x.get("id").and_then(|v| v.as_str()) == Some(account_id))
-        .ok_or_else(|| "launch: account not found".to_string())?;
-    account
-        .get("mclcAuth")
-        .cloned()
-        .filter(|v| v.is_object())
-        .ok_or_else(|| "launch: account mclcAuth missing. Remove and re-add account.".to_string())
-}
-
 fn update_instance_loader_field(
     app: &tauri::AppHandle,
     instance_id: &str,
@@ -2879,17 +2862,19 @@ pub async fn launch(
     }
     let _ = emit_launch_log(&window, "[launcher] Assets ready".to_string());
 
-    let _ = emit_launch_log(&window, "[launcher] Loading account auth".to_string());
-    let auth = match read_account_mclc_auth(&app, &safe_account_id) {
-        Ok(a) => a,
+    let _ = emit_launch_log(&window, "[launcher] Refreshing account session".to_string());
+    let refreshed_account = match accounts_capes::refresh_account_session(&app, &safe_account_id).await {
+        Ok(account) => account,
         Err(err) => {
             let _ = emit_launch_log(
                 &window,
-                format!("[launcher] Account auth unavailable: {err}"),
+                format!("[launcher] Account refresh failed: {err}"),
             );
             return Ok(json!({ "ok": false, "error": err }));
         }
     };
+    let auth = refreshed_account.mclc_auth;
+    let _ = emit_launch_log(&window, "[launcher] Account auth ready".to_string());
     let access_token = auth
         .get("access_token")
         .and_then(|v| v.as_str())
@@ -2908,7 +2893,6 @@ pub async fn launch(
         .or_else(|| auth.get("username").and_then(|v| v.as_str()))
         .map(|s| s.to_string())
         .ok_or_else(|| "launch: auth missing name".to_string())?;
-    let _ = emit_launch_log(&window, "[launcher] Account auth ready".to_string());
     let auth_xuid = auth
         .get("meta")
         .and_then(|v| v.get("xuid"))
