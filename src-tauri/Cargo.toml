@@ -1,6 +1,6 @@
 [package]
 name = "fishbattery-launcher"
-version = "0.6.2"
+version = "0.6.3"
 description = "A fast, underwater-themed Minecraft launcher focused on clean UX, modded play, and reliable cross-device updates."
 authors = ["Fishbattery"]
 license = "GPL-3.0"

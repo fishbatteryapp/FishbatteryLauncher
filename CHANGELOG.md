@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.6.3 - 2026-03-25
+
+### Fixed
+- Fixed Microsoft/Minecraft account sessions being launched with stale auth tokens by refreshing the Microsoft, Xbox, XSTS, and Minecraft session chain before each launch.
+- Fixed multiplayer server joins failing after an account had been added earlier and its stored Minecraft session had gone stale.
+
 ## v0.6.2 - 2026-03-21
 
 ### Fixed
