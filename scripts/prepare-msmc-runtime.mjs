@@ -40,6 +40,12 @@ function hostRuntimeMatrix() {
         archiveKind: "zip",
         url: "https://api.adoptium.net/v3/binary/latest/21/ga/windows/x64/jre/hotspot/normal/eclipse",
         localPattern: /^OpenJDK21U-.*_x64_windows_/i
+      },
+      {
+        channel: "java25",
+        archiveKind: "zip",
+        url: "https://api.adoptium.net/v3/binary/latest/25/ga/windows/x64/jre/hotspot/normal/eclipse",
+        localPattern: /^(?:OpenJDK25U-.*_x64_windows_|jdk-25.*_windows-x64_bin)$/i
       }
     ];
   }
@@ -63,6 +69,12 @@ function hostRuntimeMatrix() {
         archiveKind: "targz",
         url: "https://api.adoptium.net/v3/binary/latest/21/ga/mac/aarch64/jdk/hotspot/normal/eclipse",
         localPattern: /^OpenJDK21U-.*_aarch64_mac_/i
+      },
+      {
+        channel: "java25",
+        archiveKind: "targz",
+        url: "https://api.adoptium.net/v3/binary/latest/25/ga/mac/aarch64/jre/hotspot/normal/eclipse",
+        localPattern: /^OpenJDK25U-.*_aarch64_mac_/i
       }
     ];
   }
@@ -86,6 +98,12 @@ function hostRuntimeMatrix() {
         archiveKind: "targz",
         url: "https://api.adoptium.net/v3/binary/latest/21/ga/mac/x64/jre/hotspot/normal/eclipse",
         localPattern: /^OpenJDK21U-.*_x64_mac_/i
+      },
+      {
+        channel: "java25",
+        archiveKind: "targz",
+        url: "https://api.adoptium.net/v3/binary/latest/25/ga/mac/x64/jre/hotspot/normal/eclipse",
+        localPattern: /^OpenJDK25U-.*_x64_mac_/i
       }
     ];
   }

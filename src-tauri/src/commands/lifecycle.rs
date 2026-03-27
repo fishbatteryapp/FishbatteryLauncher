@@ -356,11 +356,54 @@ fn java21_download_spec() -> Option<(&'static str, JavaArchiveKind)> {
     None
 }
 
+#[cfg(all(target_os = "windows", target_arch = "x86_64"))]
+fn java25_download_spec() -> Option<(&'static str, JavaArchiveKind)> {
+    Some((
+        "https://api.adoptium.net/v3/binary/latest/25/ga/windows/x64/jre/hotspot/normal/eclipse",
+        JavaArchiveKind::Zip,
+    ))
+}
+
+#[cfg(all(target_os = "macos", target_arch = "x86_64"))]
+fn java25_download_spec() -> Option<(&'static str, JavaArchiveKind)> {
+    Some((
+        "https://api.adoptium.net/v3/binary/latest/25/ga/mac/x64/jre/hotspot/normal/eclipse",
+        JavaArchiveKind::TarGz,
+    ))
+}
+
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+fn java25_download_spec() -> Option<(&'static str, JavaArchiveKind)> {
+    Some((
+        "https://api.adoptium.net/v3/binary/latest/25/ga/mac/aarch64/jre/hotspot/normal/eclipse",
+        JavaArchiveKind::TarGz,
+    ))
+}
+
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+fn java25_download_spec() -> Option<(&'static str, JavaArchiveKind)> {
+    Some((
+        "https://api.adoptium.net/v3/binary/latest/25/ga/linux/x64/jre/hotspot/normal/eclipse",
+        JavaArchiveKind::TarGz,
+    ))
+}
+
+#[cfg(not(any(
+    all(target_os = "windows", target_arch = "x86_64"),
+    all(target_os = "macos", target_arch = "x86_64"),
+    all(target_os = "macos", target_arch = "aarch64"),
+    all(target_os = "linux", target_arch = "x86_64")
+)))]
+fn java25_download_spec() -> Option<(&'static str, JavaArchiveKind)> {
+    None
+}
+
 fn java_download_spec(major: u32) -> Option<(&'static str, JavaArchiveKind)> {
     match major {
         8 => java8_download_spec(),
         17 => java17_download_spec(),
         21 => java21_download_spec(),
+        25 => java25_download_spec(),
         _ => None,
     }
 }
@@ -519,6 +562,9 @@ fn preferred_java_channels(mc_version: Option<&str>) -> Vec<&'static str> {
         return vec!["java21", "java17", "java8"];
     };
     if major != 1 {
+        if major >= 24 {
+            return vec!["java25", "java21", "java17", "java8"];
+        }
         return vec!["java21", "java17", "java8"];
     }
     if minor <= 16 {
@@ -654,6 +700,7 @@ fn env_java_home_candidates_for_major(major: u32) -> Vec<PathBuf> {
         8 => vec!["JAVA8_HOME", "JAVA_8_HOME", "JRE8_HOME"],
         17 => vec!["JAVA17_HOME", "JAVA_17_HOME"],
         21 => vec!["JAVA21_HOME", "JAVA_21_HOME"],
+        25 => vec!["JAVA25_HOME", "JAVA_25_HOME"],
         _ => vec![],
     };
     let mut out = Vec::new();
@@ -704,7 +751,8 @@ fn windows_known_java_candidates_for_major(major: u32) -> Vec<PathBuf> {
                 || name.contains(&format!("jre{major_token}"))
                 || (major == 8 && (name.contains("1.8") || name.contains("java8")))
                 || (major == 17 && name.contains("17"))
-                || (major == 21 && name.contains("21")))
+                || (major == 21 && name.contains("21"))
+                || (major == 25 && name.contains("25")))
             {
                 continue;
             }
@@ -1995,7 +2043,8 @@ fn sanitize_legacy_jvm_flags_for_java(
     for arg in args {
         let drop = (major >= 14
             && (arg == "-XX:+UseConcMarkSweepGC" || arg == "-XX:+CMSIncrementalMode"))
-            || (major >= 9 && arg == "-Xverify:none");
+            || (major >= 9 && arg == "-Xverify:none")
+            || (major < 23 && arg == "--sun-misc-unsafe-memory-access=allow");
         if drop {
             removed.push(arg);
             continue;

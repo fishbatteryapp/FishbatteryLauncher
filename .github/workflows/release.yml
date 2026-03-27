@@ -68,6 +68,7 @@ jobs:
           test -f src-tauri/resources/runtime/java8/bin/java.exe
           test -f src-tauri/resources/runtime/java17/bin/java.exe
           test -f src-tauri/resources/runtime/java21/bin/java.exe
+          test -f src-tauri/resources/runtime/java25/bin/java.exe
           test -f src-tauri/resources/msmc-runtime/bin/node.exe
 
       - name: Setup Rust
