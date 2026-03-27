@@ -2,7 +2,7 @@
 
 Fishbattery Launcher is a Tauri-based Minecraft launcher focused on performance presets, modpack install flows, and Fishbattery account/cloud features.
 
-Current app version: `0.5.2`.
+Current app version: `0.6.3`.
 
 ## What It Does
 
