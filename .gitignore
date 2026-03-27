@@ -34,6 +34,7 @@ secrets/*
 # Local migration/archive scratch
 legacy-electron/
 runtime/OpenJDK*/
+runtime/jdk*/
 src/src/
 src-tauri/src-tauri/
 api/api/
