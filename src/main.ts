@@ -521,6 +521,7 @@ const INSTANCE_SORT_MODE_SET = new Set<InstanceSortMode>(["recent", "name", "ver
 const INSTANCE_GROUP_MODE_SET = new Set<InstanceGroupMode>(["type", "source", "loader", "version", "sync", "none"]);
 const INSTANCE_FILTER_MODE_SET = new Set<InstanceFilterMode>(["all", "custom", "modpack", "imported", "synced", "local-only"]);
 const worldSyncInFlight = new Set<string>();
+const worldSyncRemovalInFlight = new Set<string>();
 let cloudWorldAutoSyncInFlight = false;
 const INSTANCE_CONTENT_FILTER_SET = new Set<InstanceContentFilter>(["all", "mods", "resourcepacks", "shaderpacks", "updates"]);
 const INSTANCE_WORLDS_FILTER_SET = new Set<InstanceWorldsFilter>(["all", "singleplayer", "servers"]);
@@ -7249,14 +7250,34 @@ async function removeCloudSyncedWorld(item: CloudWorldSyncItemUi, inst?: any) {
     `Remove sync for "${item.worldName || item.worldId || "this world"}"?\n\nThis keeps the local world on this device, deletes the cloud copy from Fishbattery, and frees up cloud storage for another world.`
   );
   if (!confirmed) return;
-  const result = await backend.cloudWorldSyncRemoveWorld(String(item.id || ""));
-  cloudWorldSyncState.summary = result.summary;
-  await refreshCloudWorldSyncState();
-  await renderSettingsPanels();
-  if (inst && selectedInstanceId === String(inst?.id || "") && selectedInstanceTab === "worlds") {
-    await renderInstanceWorldsPage(inst);
+  const instanceId = String(item.instanceId || inst?.id || "");
+  const worldId = String(item.worldId || "");
+  const syncKey = cloudWorldSyncKey(instanceId, worldId);
+  worldSyncRemovalInFlight.add(syncKey);
+  try {
+    if (inst && selectedInstanceId === String(inst?.id || "") && selectedInstanceTab === "worlds") {
+      await renderInstanceWorldsPage(inst);
+    }
+    invalidateHomeData();
+    if (activeView === "home") await renderHomeView(true);
+    const result = await backend.cloudWorldSyncRemoveWorld(String(item.id || ""));
+    cloudWorldSyncState.summary = result.summary;
+    await refreshCloudWorldSyncState();
+    await renderSettingsPanels();
+    invalidateHomeData();
+    if (activeView === "home") await renderHomeView(true);
+    if (inst && selectedInstanceId === String(inst?.id || "") && selectedInstanceTab === "worlds") {
+      await renderInstanceWorldsPage(inst);
+    }
+    await showLauncherAlert(result.message);
+  } finally {
+    worldSyncRemovalInFlight.delete(syncKey);
+    if (inst && selectedInstanceId === String(inst?.id || "") && selectedInstanceTab === "worlds") {
+      await renderInstanceWorldsPage(inst);
+    }
+    invalidateHomeData();
+    if (activeView === "home") void renderHomeView(true);
   }
-  await showLauncherAlert(result.message);
 }
 
 async function downloadCloudSyncedWorld(item: CloudWorldSyncItemUi, inst: any, overwriteExisting: boolean) {
@@ -8152,8 +8173,8 @@ function renderSettingsPanels() {
     syncPriorityMeta.style.fontSize = "12px";
     syncPriorityMeta.style.marginBottom = "10px";
     syncPriorityMeta.textContent = hasPremium()
-      ? "Cloud sync priority: Premium"
-      : "Cloud sync priority: Standard (Premium includes priority syncing)";
+      ? "Cloud sync priority: Premium • up to 10 synced worlds • 40 GB total storage"
+      : "Cloud sync priority: Standard (Premium includes up to 10 synced worlds and 40 GB total storage)";
     settingsPanelInstall.appendChild(syncPriorityMeta);
 
     const worldSyncCard = document.createElement("div");
@@ -10023,6 +10044,7 @@ async function renderInstanceWorldsPage(inst: any) {
     const cloudItem = findCloudSyncedWorld(String(inst?.id || ""), String(world?.id || world?.folderName || ""));
     const syncKey = cloudWorldSyncKey(String(inst?.id || ""), String(world?.id || world?.folderName || ""));
     const isSyncing = worldSyncInFlight.has(syncKey);
+    const isRemovingSync = worldSyncRemovalInFlight.has(syncKey);
     const isSynced = isWorldFullySyncedToCloud(world, cloudItem);
     const row = document.createElement("div");
     row.className = "instanceWorldRow";
@@ -10076,6 +10098,7 @@ async function renderInstanceWorldsPage(inst: any) {
           : "Sync to cloud";
     syncBtn.disabled =
       isSyncing ||
+      isRemovingSync ||
       isSynced ||
       !state.launcherAccount?.activeAccountId ||
       !cloudWorldSyncState.configured ||
@@ -10089,8 +10112,10 @@ async function renderInstanceWorldsPage(inst: any) {
     actions.appendChild(syncBtn);
     if (cloudItem) {
       const removeBtn = document.createElement("button");
-      removeBtn.className = "btn";
-      removeBtn.textContent = "Remove sync";
+      removeBtn.className = "btn btnDanger";
+      setButtonAssetIcon(removeBtn, ICON_ASSETS.trash);
+      removeBtn.textContent = isRemovingSync ? "Removing..." : "Remove sync";
+      removeBtn.disabled = isRemovingSync;
       removeBtn.onclick = () =>
         void guarded(async () => {
           await removeCloudSyncedWorld(cloudItem, inst);
@@ -10127,10 +10152,13 @@ async function renderInstanceWorldsPage(inst: any) {
 
     const actions = document.createElement("div");
     actions.className = "instanceInstalledActions";
+    const remoteSyncKey = cloudWorldSyncKey(String(item.instanceId || inst?.id || ""), String(item.worldId || ""));
+    const isRemovingSync = worldSyncRemovalInFlight.has(remoteSyncKey);
 
     const downloadBtn = document.createElement("button");
     downloadBtn.className = "btn btnPrimary";
     downloadBtn.textContent = "Download";
+    downloadBtn.disabled = isRemovingSync;
     downloadBtn.onclick = () =>
       void guarded(async () => {
         await downloadCloudSyncedWorld(item, inst, false);
@@ -10138,8 +10166,10 @@ async function renderInstanceWorldsPage(inst: any) {
     actions.appendChild(downloadBtn);
 
     const removeBtn = document.createElement("button");
-    removeBtn.className = "btn";
-    removeBtn.textContent = "Remove sync";
+    removeBtn.className = "btn btnDanger";
+    setButtonAssetIcon(removeBtn, ICON_ASSETS.trash);
+    removeBtn.textContent = isRemovingSync ? "Removing..." : "Remove sync";
+    removeBtn.disabled = isRemovingSync;
     removeBtn.onclick = () =>
       void guarded(async () => {
         await removeCloudSyncedWorld(item, inst);
@@ -12467,6 +12497,7 @@ async function renderAccounts() {
   const btnUpgradePremium = document.createElement("button");
   btnUpgradePremium.className = "btn";
   btnUpgradePremium.textContent = "Upgrade to Premium";
+  btnUpgradePremium.title = "Premium includes up to 10 cloud synced worlds with 40 GB total storage.";
   btnUpgradePremium.onclick = () => {
     void runLauncherAccountAction(async () => {
       await openUpgradeFlow();
@@ -12587,8 +12618,11 @@ async function renderAccounts() {
     planHint.style.padding = "0 12px 10px";
     planHint.className = "muted";
     planHint.style.fontSize = "12px";
-    const priorityLabel = launcherSubscription?.features?.cloudSyncPriority ? "Priority" : "Standard";
-    planHint.textContent = `Plan: ${launcherPlanLabel} - Cloud sync: ${priorityLabel}`;
+    if (launcherPlanTier === "premium" || launcherPlanTier === "founder") {
+      planHint.textContent = `Plan: ${launcherPlanLabel} - Up to 10 cloud synced worlds • 40 GB total storage`;
+    } else {
+      planHint.textContent = "Plan: Free - Upgrade to Premium for up to 10 cloud synced worlds and 40 GB total storage";
+    }
     accountItems.appendChild(planHint);
   }
 
