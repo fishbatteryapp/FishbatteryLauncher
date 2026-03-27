@@ -58,7 +58,9 @@ const phase2Commands: Record<string, (...args: unknown[]) => Promise<unknown>> =
   capesListLocal: () => invoke("capes_list_local"),
   capesGetLocalSelection: (accountId: string) => invoke("capes_get_local_selection", { accountId }),
   capesSetLocalSelection: (accountId: string, capeId: string | null) =>
-    invoke("capes_set_local_selection", { accountId, capeId })
+    invoke("capes_set_local_selection", { accountId, capeId }),
+  capesUploadLocalCustom: (accountId: string, imageDataUrl: string) =>
+    invoke("capes_upload_local_custom", { accountId, imageDataUrl })
 };
 
 const phase4Commands: Record<string, (...args: unknown[]) => Promise<unknown>> = {

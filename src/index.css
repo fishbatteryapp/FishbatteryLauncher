@@ -461,11 +461,11 @@ body{
 
 .sidebarCapesPreviewStage{
   width: 100%;
-  max-width: 180px;
-  height: 230px;
+  max-width: 108px;
+  height: 138px;
   display: grid;
-  place-items: end center;
-  overflow: visible;
+  place-items: center;
+  overflow: hidden;
 }
 
 .sidebarCapesPreviewHelp{
@@ -952,9 +952,42 @@ body{
 
 /* Content */
 .content{
+  grid-row: 2 / 3;
+  grid-column: 1;
   padding: 16px;
   overflow: auto;
   min-height: 0;
+  opacity: 0;
+  transform: translateY(16px) scale(.992);
+  transition: opacity .22s ease, transform .22s cubic-bezier(.22, 1, .36, 1);
+  pointer-events: none;
+  position: relative;
+  z-index: 0;
+}
+
+.content.contentPanelActive{
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+  z-index: 1;
+}
+
+.content.contentPanelEntering{
+  z-index: 2;
+}
+
+.content.contentPanelLeaving{
+  opacity: 0;
+  transform: translateY(-12px) scale(.992);
+  pointer-events: none;
+  z-index: 0;
+}
+
+@media (prefers-reduced-motion: reduce){
+  .content{
+    transition: none;
+    transform: none;
+  }
 }
 
 .homePanelRoot{
@@ -1344,6 +1377,14 @@ body{
   pointer-events: none;
   box-shadow: inset 0 0 0 1px rgba(87, 242, 135, .16);
 }
+.instanceCard.launching::after{
+  content: "";
+  position: absolute;
+  inset: 1px;
+  border-radius: inherit;
+  pointer-events: none;
+  box-shadow: inset 0 0 0 1px rgba(255, 93, 108, .18);
+}
 .instanceCardInner{
   padding: 14px 14px 12px;
   gap: 12px;
@@ -1418,6 +1459,11 @@ body{
   color: #dfffea;
   border-color: rgba(87, 242, 135, .45);
   background: rgba(87, 242, 135, .12);
+}
+.instanceStatusChipLaunching{
+  color: #ffe0e5;
+  border-color: rgba(255,93,108,.42);
+  background: rgba(255,93,108,.12);
 }
 .badges{
   display:flex;
@@ -1649,13 +1695,24 @@ pre{
   position: fixed;
   inset: 0;
   background: rgba(0,0,0,.55);
-  display: none;
+  display: flex;
   align-items: flex-start;
   justify-content: center;
   padding-top: 4px;
   z-index: 100;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  backdrop-filter: blur(0px);
+  transition: opacity .24s ease, backdrop-filter .24s ease, visibility 0s linear .24s;
 }
-.modalBackdrop.open{ display:flex; }
+.modalBackdrop.open{
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  backdrop-filter: blur(8px);
+  transition-delay: 0s;
+}
 
 .actionBusyBanner{
   margin: 0 0 12px;
@@ -1705,6 +1762,19 @@ pre{
   place-items: center;
   padding: 12px;
   background: rgba(4, 10, 18, .72);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  backdrop-filter: blur(0px);
+  transition: opacity .2s ease, backdrop-filter .2s ease, visibility 0s linear .2s;
+}
+
+.launcherDialogBackdrop.open{
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  backdrop-filter: blur(8px);
+  transition-delay: 0s;
 }
 
 .launcherDialog{
@@ -1717,6 +1787,14 @@ pre{
   display: flex;
   flex-direction: column;
   gap: 10px;
+  opacity: .7;
+  transform: translateY(20px) scale(.985);
+  transition: transform .22s cubic-bezier(.22, 1, .36, 1), opacity .2s ease;
+}
+
+.launcherDialogBackdrop.open .launcherDialog{
+  opacity: 1;
+  transform: translateY(0) scale(1);
 }
 
 .launcherDialogTitle{
@@ -1753,6 +1831,15 @@ pre{
   display: flex;
   flex-direction: column;
   position: relative;
+  opacity: .72;
+  transform: translateY(28px) scale(.985);
+  transform-origin: center top;
+  transition: transform .24s cubic-bezier(.22, 1, .36, 1), opacity .22s ease, box-shadow .24s ease;
+}
+
+.modalBackdrop.open .modal{
+  opacity: 1;
+  transform: translateY(0) scale(1);
 }
 
 .modalHeader{
@@ -1956,6 +2043,36 @@ pre{
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+
+.modalSectionAnimated{
+  animation: modalSectionIn .28s cubic-bezier(.22, 1, .36, 1);
+}
+
+@keyframes modalSectionIn{
+  from{
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to{
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce){
+  .modalBackdrop,
+  .launcherDialogBackdrop,
+  .modal,
+  .launcherDialog{
+    transition: none;
+  }
+
+  .createFlowIntro,
+  .createFlowWorkspace,
+  .modalSectionAnimated{
+    animation: none;
+  }
 }
 
 .createFlowHeader{
@@ -2983,12 +3100,17 @@ pre{
   color: var(--text);
   padding: 12px 12px;
   cursor: pointer;
+  transition: background .18s ease, border-color .18s ease, color .18s ease, transform .18s ease;
 }
 .setNavBtn:last-child{ border-bottom: 0; }
-.setNavBtn:hover{ background: rgba(255,255,255,.03); }
+.setNavBtn:hover{
+  background: rgba(255,255,255,.03);
+  transform: translateX(2px);
+}
 .setNavBtn.active{
   background: rgba(var(--accent-rgb),.10);
   border-color: rgba(var(--accent-rgb),.25);
+  transform: translateX(4px);
 }
 
 .settingsPanel{
@@ -2998,6 +3120,32 @@ pre{
   padding: 14px;
   overflow: auto;
   max-height: calc(100vh - 220px);
+  position: relative;
+  transition: border-color .2s ease, box-shadow .22s ease, background .22s ease;
+}
+
+.settingsPanel.settingsPanelAnimating{
+  border-color: rgba(var(--accent-rgb), .22);
+  box-shadow: 0 14px 32px rgba(0,0,0,.14);
+}
+
+.setPanel{
+  transform-origin: left top;
+}
+
+.setPanelActive.setPanelAnimated{
+  animation: settingsPanelIn .24s cubic-bezier(.22, 1, .36, 1);
+}
+
+@keyframes settingsPanelIn{
+  from{
+    opacity: 0;
+    transform: translateY(12px) scale(.992);
+  }
+  to{
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 .setPanel h3{
@@ -3019,6 +3167,23 @@ pre{
 
 .setLabel{ font-size: 13px; }
 .setHelp{ color: var(--muted); font-size: 12px; margin-top: 4px; }
+
+@media (prefers-reduced-motion: reduce){
+  .setNavBtn,
+  .settingsPanel{
+    transition: none;
+  }
+
+  .setNavBtn:hover,
+  .setNavBtn.active{
+    transform: none;
+  }
+
+  .setPanelActive.setPanelAnimated{
+    animation: none;
+  }
+}
+
 .capeChooser{
   border-top: 1px solid var(--border2);
   padding-top: 10px;
@@ -3062,6 +3227,7 @@ pre{
   display: flex;
   align-items: flex-start;
   gap: 16px;
+  flex-wrap: wrap;
 }
 .capeMannequinStage{
   width: 180px;
@@ -3100,6 +3266,8 @@ pre{
   display: flex;
   flex-direction: column;
   gap: 4px;
+  min-width: 220px;
+  flex: 1 1 220px;
 }
 .capeMannequinTitle{
   font-size: 12px;
@@ -3141,6 +3309,7 @@ pre{
   box-shadow: 0 0 0 1px rgba(var(--accent-rgb), .45) inset;
 }
 .capeTilePreview{
+  position: relative;
   height: 156px;
   display: flex;
   align-items: center;
@@ -3154,6 +3323,15 @@ pre{
   height: 128px;
   object-fit: contain;
   image-rendering: pixelated;
+}
+.capeTilePreviewInteractive{
+  align-items: stretch;
+  justify-content: stretch;
+  padding: 0;
+}
+.capeTilePreviewHost{
+  width: 100%;
+  height: 100%;
 }
 .capeTileGhost{
   width: 64px;
@@ -3203,7 +3381,17 @@ pre{
     radial-gradient(120px 80px at 50% 100%, rgba(var(--accent-rgb), .13), transparent 72%),
     linear-gradient(180deg, rgba(255,255,255,.04), rgba(0,0,0,.22));
 }
+.skinTile.active .skinTilePreview{
+  height: 196px;
+}
 .skinTileImg{
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  padding: 6px 6px 0;
+  image-rendering: pixelated;
+}
+.capeRenderImg{
   width: 100%;
   height: 100%;
   object-fit: contain;
@@ -3585,7 +3773,6 @@ select optgroup {
 }
 
 .instanceCard--compact .instanceCardInner{
-  position: relative;
   min-height: 94px;
   padding: 12px 14px;
   gap: 12px;
@@ -3603,18 +3790,21 @@ select optgroup {
 .instanceCard--compact .instanceCardMeta{
   gap: 4px;
   min-width: 0;
-  padding-right: 108px;
+  padding-right: 0;
 }
 
 .instanceCard--compact .instanceCardTitleRow{
   align-items: center;
   justify-content: flex-start;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 .instanceCard--compact .instanceCardTitleRow strong{
   font-size: 14px;
   font-weight: 700;
+  min-width: 0;
+  flex: 1 1 120px;
 }
 
 .instanceCard--compact .instanceSubtext{
@@ -3632,22 +3822,38 @@ select optgroup {
 }
 
 .instanceCard--compact .instanceCardActions{
-  position: absolute;
-  right: 12px;
-  top: 50%;
-  transform: translateY(-50%);
+  position: static;
   margin: 0;
   width: auto;
+  flex: 0 0 auto;
+  align-self: center;
+  justify-content: flex-end;
+  flex-wrap: nowrap;
   opacity: 0;
   pointer-events: none;
-  transition: opacity .16s ease, transform .16s ease;
+  transition: opacity .16s ease;
 }
 
 .instanceCard--compact:hover .instanceCardActions,
 .instanceCard--compact:focus-within .instanceCardActions{
   opacity: 1;
   pointer-events: auto;
-  transform: translateY(-50%) scale(1);
+}
+
+.instanceCard--compact .instanceStatusChip{
+  flex: 0 0 auto;
+}
+
+@media (max-width: 1600px){
+  .instanceCard--compact .instanceCardInner{
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+
+  .instanceCard--compact .instanceCardActions{
+    width: 100%;
+    justify-content: flex-end;
+  }
 }
 
 .instanceHoverPlay{
@@ -3656,12 +3862,29 @@ select optgroup {
   gap: 8px;
   min-height: 38px;
   padding: 0 14px;
-  border: 1px solid rgba(var(--accent-rgb), .45);
+  border: 1px solid rgba(255,255,255,.12);
   border-radius: 999px;
+  background: rgba(11, 18, 25, .92);
+  color: rgba(233, 247, 255, .9);
+  cursor: pointer;
+  transition: border-color .16s ease, background .16s ease, color .16s ease, box-shadow .16s ease;
+  box-shadow: 0 10px 24px rgba(0,0,0,.22);
+}
+
+.instanceHoverPlay.btnPrimary{
+  border-color: rgba(var(--accent-rgb), .45);
   background: rgba(var(--accent-rgb), .16);
   color: #f2fff7;
-  cursor: pointer;
-  box-shadow: 0 10px 24px rgba(0,0,0,.22);
+}
+
+.instanceHoverPlay.btnDanger{
+  border-color: rgba(255,93,108,.38);
+  background: rgba(255,93,108,.12);
+  color: #ffd2d8;
+}
+
+.instanceHoverPlay.isLaunching{
+  box-shadow: 0 0 0 1px rgba(255,93,108,.1), 0 10px 24px rgba(0,0,0,.22);
 }
 
 .instanceHoverPlay svg{

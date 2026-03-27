@@ -409,6 +409,9 @@ pub struct LocalCapeItem {
     pub id: String,
     pub name: String,
     pub tier: String,
+    #[serde(rename = "accountId")]
+    pub account_id: Option<String>,
+    pub source: Option<String>,
     #[serde(rename = "fileName")]
     pub file_name: String,
     #[serde(rename = "fullPath")]
@@ -439,6 +442,12 @@ pub struct LocalCapeSelection {
 struct LocalCapeSelectionDb {
     #[serde(rename = "byAccountId")]
     by_account_id: HashMap<String, Option<String>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct CustomCapeDb {
+    #[serde(rename = "byAccountId")]
+    by_account_id: HashMap<String, LocalCapeItem>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -598,6 +607,14 @@ fn selection_db_path(app: &tauri::AppHandle) -> AppResult<PathBuf> {
     Ok(app_data_root(app)?.join("capes").join("selection.json"))
 }
 
+fn custom_capes_db_path(app: &tauri::AppHandle) -> AppResult<PathBuf> {
+    Ok(app_data_root(app)?.join("capes").join("custom.json"))
+}
+
+fn custom_capes_asset_root(app: &tauri::AppHandle) -> AppResult<PathBuf> {
+    Ok(app_data_root(app)?.join("capes").join("custom"))
+}
+
 fn launcher_accounts_db_path(app: &tauri::AppHandle) -> AppResult<PathBuf> {
     Ok(app_data_root(app)?
         .join("data")
@@ -626,6 +643,21 @@ fn read_selection_db(app: &tauri::AppHandle) -> AppResult<LocalCapeSelectionDb> 
 
 fn write_selection_db(app: &tauri::AppHandle, db: &LocalCapeSelectionDb) -> AppResult<()> {
     let path = selection_db_path(app)?;
+    safe_write_json(&path, db)
+}
+
+fn read_custom_capes_db(app: &tauri::AppHandle) -> AppResult<CustomCapeDb> {
+    let path = custom_capes_db_path(app)?;
+    Ok(safe_read_json(
+        &path,
+        CustomCapeDb {
+            by_account_id: HashMap::new(),
+        },
+    ))
+}
+
+fn write_custom_capes_db(app: &tauri::AppHandle, db: &CustomCapeDb) -> AppResult<()> {
+    let path = custom_capes_db_path(app)?;
     safe_write_json(&path, db)
 }
 
@@ -678,6 +710,28 @@ fn read_capes_catalog_cache(app: &tauri::AppHandle) -> AppResult<LocalCapeCatalo
 fn write_capes_catalog_cache(app: &tauri::AppHandle, catalog: &LocalCapeCatalog) -> AppResult<()> {
     let path = capes_catalog_cache_path(app)?;
     safe_write_json(&path, catalog)
+}
+
+fn custom_cape_id(account_id: &str) -> String {
+    format!("custom-upload-{}", sanitize_cape_id(account_id))
+}
+
+fn is_custom_local_cape_id(cape_id: &str) -> bool {
+    cape_id.trim().starts_with("custom-upload-")
+}
+
+fn merge_custom_capes_into_catalog(app: &tauri::AppHandle, catalog: &mut LocalCapeCatalog) {
+    let db = match read_custom_capes_db(app) {
+        Ok(v) => v,
+        Err(_) => return,
+    };
+    if !catalog.roots.iter().any(|root| root == "custom") {
+        catalog.roots.push("custom".to_string());
+    }
+    for item in db.by_account_id.values() {
+        catalog.items.retain(|existing| existing.id != item.id);
+        catalog.items.push(item.clone());
+    }
 }
 
 fn normalize_tier(raw: Option<&str>) -> &'static str {
@@ -876,7 +930,7 @@ fn capes_cache_root(app: &tauri::AppHandle) -> AppResult<PathBuf> {
 
 fn local_capes_empty() -> LocalCapeCatalog {
     LocalCapeCatalog {
-        roots: vec!["cloud".to_string()],
+        roots: vec!["cloud".to_string(), "custom".to_string()],
         items: vec![],
     }
 }
@@ -1110,6 +1164,8 @@ async fn payload_to_local_cape_catalog(
             id: id.clone(),
             name,
             tier,
+            account_id: None,
+            source: Some("cloud".to_string()),
             file_name,
             full_path: full_path.to_string_lossy().to_string(),
             preview_data_url,
@@ -1346,6 +1402,7 @@ pub async fn capes_list_local(app: tauri::AppHandle) -> AppResult<LocalCapeCatal
         Err(_) => read_capes_catalog_cache(&app).unwrap_or_else(|_| local_capes_empty()),
     };
     let mut catalog = fetched;
+    merge_custom_capes_into_catalog(&app, &mut catalog);
     if !can_use_cape_tier(&app, "founder") {
         catalog.items.retain(|item| item.tier != "founder");
     }
@@ -1364,14 +1421,24 @@ pub async fn capes_get_local_selection(
     }
 
     let mut db = read_selection_db(&app)?;
-    let remote_selected = fetch_remote_selected_cape_id(&app).await.ok().flatten();
+    let local_selected = db.by_account_id.get(&account).cloned().flatten();
+    let catalog = capes_list_local(app.clone()).await?;
+    let keep_local_custom = local_selected
+        .as_deref()
+        .filter(|id| is_custom_local_cape_id(id))
+        .and_then(|id| find_cape_by_id(&catalog, id))
+        .is_some();
+    let remote_selected = if keep_local_custom {
+        None
+    } else {
+        fetch_remote_selected_cape_id(&app).await.ok().flatten()
+    };
     if remote_selected.is_some() {
         db.by_account_id
             .insert(account.clone(), remote_selected.clone());
         write_selection_db(&app, &db)?;
     }
-    let catalog = read_capes_catalog_cache(&app).unwrap_or_else(|_| local_capes_empty());
-    let selected = remote_selected.or_else(|| db.by_account_id.get(&account).cloned().flatten());
+    let selected = remote_selected.or(local_selected);
     let valid = selected.filter(|id| {
         if let Some(cape) = find_cape_by_id(&catalog, id) {
             return can_use_cape_tier(&app, &cape.tier);
@@ -1401,10 +1468,7 @@ pub async fn capes_set_local_selection(
     let normalized = cape_id
         .map(|x| x.trim().to_string())
         .filter(|x| !x.is_empty());
-    let mut catalog = read_capes_catalog_cache(&app).unwrap_or_else(|_| local_capes_empty());
-    if catalog.items.is_empty() {
-        catalog = capes_list_local(app.clone()).await?;
-    }
+    let catalog = capes_list_local(app.clone()).await?;
     if let Some(ref chosen) = normalized {
         let item = find_cape_by_id(&catalog, chosen);
         if item.is_none() {
@@ -1419,15 +1483,19 @@ pub async fn capes_set_local_selection(
         }
         let _ = ensure_cached_cape_file(item).await;
     }
-    let remote_selected = persist_remote_selected_cape_id(&app, normalized.as_deref())
-        .await
-        .ok()
-        .flatten();
-    let effective = if remote_selected.is_some() {
-        remote_selected
+    let remote_selected = if normalized
+        .as_deref()
+        .map(is_custom_local_cape_id)
+        .unwrap_or(false)
+    {
+        None
     } else {
-        normalized.clone()
+        persist_remote_selected_cape_id(&app, normalized.as_deref())
+            .await
+            .ok()
+            .flatten()
     };
+    let effective = remote_selected.or(normalized.clone());
     if let Some(ref chosen) = effective {
         if let Some(item) = find_cape_by_id(&catalog, chosen) {
             let _ = ensure_cached_cape_file(item).await;
@@ -1440,6 +1508,63 @@ pub async fn capes_set_local_selection(
         account_id: account,
         cape_id: effective,
     })
+}
+
+#[command]
+pub async fn capes_upload_local_custom(
+    app: tauri::AppHandle,
+    account_id: String,
+    image_data_url: String,
+) -> AppResult<LocalCapeCatalog> {
+    let account = account_id.trim().to_string();
+    if account.is_empty() {
+        return Err("capes_upload_local_custom: accountId missing".to_string());
+    }
+    if !can_use_cape_tier(&app, "premium") {
+        return Err("Launcher Premium is required to upload a custom cape.".to_string());
+    }
+    let raw = image_data_url.trim();
+    if !raw.starts_with("data:image/png;base64,") {
+        return Err("Custom cape uploads must be PNG textures.".to_string());
+    }
+    let bytes = decode_data_url_to_bytes(raw)
+        .filter(|data| !data.is_empty())
+        .ok_or_else(|| "Custom cape upload could not be decoded.".to_string())?;
+
+    let safe_account = sanitize_cape_id(&account);
+    let file_name = format!("custom-cape-{safe_account}.png");
+    let asset_root = custom_capes_asset_root(&app)?;
+    fs::create_dir_all(&asset_root).map_err(into_error)?;
+    let full_path = asset_root.join(&file_name);
+    fs::write(&full_path, bytes).map_err(into_error)?;
+
+    let custom_item = LocalCapeItem {
+        id: custom_cape_id(&account),
+        name: "Custom cape".to_string(),
+        tier: "premium".to_string(),
+        account_id: Some(account.clone()),
+        source: Some("custom".to_string()),
+        file_name,
+        full_path: full_path.to_string_lossy().to_string(),
+        preview_data_url: raw.to_string(),
+        download_url: None,
+        file_data_url: Some(raw.to_string()),
+    };
+
+    let mut custom_db = read_custom_capes_db(&app)?;
+    custom_db.by_account_id.insert(account.clone(), custom_item.clone());
+    write_custom_capes_db(&app, &custom_db)?;
+
+    let mut selection_db = read_selection_db(&app)?;
+    selection_db
+        .by_account_id
+        .insert(account.clone(), Some(custom_item.id.clone()));
+    write_selection_db(&app, &selection_db)?;
+
+    let mut catalog = capes_list_local(app.clone()).await?;
+    merge_custom_capes_into_catalog(&app, &mut catalog);
+    let _ = write_capes_catalog_cache(&app, &catalog);
+    Ok(catalog)
 }
 
 #[command]
