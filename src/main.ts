@@ -8,6 +8,7 @@
 // - To trace behavior, start from element refs at top, then follow `.onclick` handlers and render/update functions.
 
 import "./index.css";
+import { convertFileSrc } from "@tauri-apps/api/core";
 import { backend } from "@/compat";
 import { CATALOG } from "../shared/modrinthCatalog";
 import { PACK_CATALOG } from "../shared/modrinthPackCatalog";
@@ -83,6 +84,7 @@ const viewPlayit = $("viewPlayit");
 const viewSettings = $("viewSettings");
 const capesPanelRoot = $("capesPanelRoot");
 const playitPanelRoot = $("playitPanelRoot");
+const contentViews = [viewHome, viewLibrary, viewInstance, viewDiscover, viewCapes, viewPlayit, viewSettings].filter(Boolean) as HTMLElement[];
 
 const instanceBackBtn = $("instanceBackBtn") as HTMLButtonElement;
 const instanceBreadcrumbs = document.getElementById("instanceBreadcrumbs") as HTMLElement | null;
@@ -284,6 +286,7 @@ const settingsTabWindow = $("settingsTabWindow");
 const settingsTabJava = $("settingsTabJava");
 const settingsTabHooks = $("settingsTabHooks");
 const settingsTabProfile = $("settingsTabProfile");
+const settingsPanelShell = viewSettings?.querySelector(".settingsPanel") as HTMLElement | null;
 
 const settingsPanelGeneral = $("settingsPanelGeneral");
 const settingsPanelTheme = $("settingsPanelTheme");
@@ -483,6 +486,7 @@ type InstanceContentUpdateState = {
   checkedAt?: number;
   error?: string;
 };
+type SettingsTabId = "general" | "theme" | "install" | "window" | "java" | "hooks" | "profile";
 let instanceSortMode: InstanceSortMode = "recent";
 let instanceGroupMode: InstanceGroupMode = "type";
 let instanceFilterMode: InstanceFilterMode = "all";
@@ -491,10 +495,12 @@ let librarySurface: LibrarySurface = "library";
 let selectedInstanceId: string | null = null;
 let selectedInstanceSnapshot: any | null = null;
 let lastLaunchedInstanceId: string | null = null;
+const launchingInstanceIds = new Set<string>();
 let selectedInstanceTab: InstancePageTab = "content";
 let instanceContentFilter: InstanceContentFilter = "all";
 let instanceWorldsFilter: InstanceWorldsFilter = "all";
 let logFilterMode: LogFilterMode = "all";
+let activeSettingsTab: SettingsTabId = "general";
 let discoverKind: DiscoverKind = "mods";
 let discoverPlatform: DiscoverPlatform = "all";
 let discoverSortMode: DiscoverSortMode = "relevance";
@@ -514,6 +520,8 @@ let activeInstanceContentMenuButton: HTMLButtonElement | null = null;
 const INSTANCE_SORT_MODE_SET = new Set<InstanceSortMode>(["recent", "name", "version", "loader"]);
 const INSTANCE_GROUP_MODE_SET = new Set<InstanceGroupMode>(["type", "source", "loader", "version", "sync", "none"]);
 const INSTANCE_FILTER_MODE_SET = new Set<InstanceFilterMode>(["all", "custom", "modpack", "imported", "synced", "local-only"]);
+const worldSyncInFlight = new Set<string>();
+let cloudWorldAutoSyncInFlight = false;
 const INSTANCE_CONTENT_FILTER_SET = new Set<InstanceContentFilter>(["all", "mods", "resourcepacks", "shaderpacks", "updates"]);
 const INSTANCE_WORLDS_FILTER_SET = new Set<InstanceWorldsFilter>(["all", "singleplayer", "servers"]);
 const LOG_FILTER_MODE_SET = new Set<LogFilterMode>(["all", "info", "warn", "error", "debug"]);
@@ -609,8 +617,13 @@ let startupReady = false;
 let startupRevealStarted = false;
 let startupEmergencyRevealTimer: number | null = null;
 let latestDiagnosis: any = null;
-let capesSkinViewer: any = null;
-let capesSkinControls: any = null;
+let activeContentView: HTMLElement | null = null;
+let contentTransitionToken = 0;
+
+const CONTENT_TRANSITION_MS = 220;
+const DIALOG_TRANSITION_MS = 200;
+const SETTINGS_PANEL_TRANSITION_MS = 240;
+const characterPreviewHandles = new WeakMap<HTMLElement, { viewer: any; controls: any }>();
 
 type UpdaterUiState = {
   status: "idle" | "checking" | "update-available" | "up-to-date" | "downloading" | "downloaded" | "error";
@@ -626,6 +639,41 @@ type CloudSyncUiState = {
   lastStatus: "idle" | "up-to-date" | "pushed" | "pulled" | "conflict" | "error";
   lastError: string | null;
   lastRemoteRevision: number | null;
+};
+
+type CloudWorldSyncSummaryUi = {
+  currentPlan: "free" | "premium";
+  subscriptionTier: "free" | "premium" | "founder";
+  planLabel: "Free" | "Premium";
+  syncedWorldCountUsed: number;
+  syncedWorldCountLimit: number;
+  storageUsedBytes: number;
+  storageLimitBytes: number;
+  perWorldSizeLimitBytes: number;
+  uploadsBlocked: boolean;
+  uploadsBlockedReason: string | null;
+  upsellCopy: string;
+};
+
+type CloudWorldSyncItemUi = {
+  id: string;
+  instanceId: string;
+  worldId: string;
+  worldName: string;
+  objectKey: string;
+  compressedSizeBytes: number;
+  etag: string | null;
+  createdAt: number;
+  updatedAt: number;
+  lastSyncedAt: number;
+};
+
+type CloudWorldSyncUiState = {
+  configured: boolean;
+  loading: boolean;
+  error: string | null;
+  summary: CloudWorldSyncSummaryUi;
+  items: CloudWorldSyncItemUi[];
 };
 
 type PlayitTunnelUi = {
@@ -670,6 +718,25 @@ let cloudSyncState: CloudSyncUiState = {
   lastStatus: "idle",
   lastError: null,
   lastRemoteRevision: null
+};
+let cloudWorldSyncState: CloudWorldSyncUiState = {
+  configured: true,
+  loading: false,
+  error: null,
+  summary: {
+    currentPlan: "free",
+    subscriptionTier: "free",
+    planLabel: "Free",
+    syncedWorldCountUsed: 0,
+    syncedWorldCountLimit: 1,
+    storageUsedBytes: 0,
+    storageLimitBytes: 4 * 1024 * 1024 * 1024,
+    perWorldSizeLimitBytes: 4 * 1024 * 1024 * 1024,
+    uploadsBlocked: false,
+    uploadsBlockedReason: null,
+    upsellCopy: "Free: Sync 1 world up to 4 GB."
+  },
+  items: []
 };
 let playitState: PlayitUiState = {
   linked: false,
@@ -1350,7 +1417,7 @@ const defaultSettings: AppSettings = {
   showSnapshots: false,
   autoUpdateMods: true,
   defaultMemoryMb: 4096,
-  fullscreen: false,
+  fullscreen: true,
   winW: 854,
   winH: 480,
   jvmArgs: "",
@@ -2430,6 +2497,11 @@ function getSettings(): AppSettings {
     const discoverPageSize = DISCOVER_PAGE_SIZE_SET.has(Number(raw.discoverPageSize))
       ? Number(raw.discoverPageSize)
       : defaultSettings.discoverPageSize;
+    const fullscreen = typeof raw.fullscreen === "boolean" ? raw.fullscreen : defaultSettings.fullscreen;
+    const winW =
+      Number.isFinite(Number(raw.winW)) && Number(raw.winW) > 0 ? Number(raw.winW) : defaultSettings.winW;
+    const winH =
+      Number.isFinite(Number(raw.winH)) && Number(raw.winH) > 0 ? Number(raw.winH) : defaultSettings.winH;
     return {
       ...raw,
       theme,
@@ -2439,6 +2511,9 @@ function getSettings(): AppSettings {
       cornerRadius,
       borderThickness,
       pixelFont,
+      fullscreen,
+      winW,
+      winH,
       settingsUpdatedAt,
       cloudSyncEnabled,
       cloudSyncAuto,
@@ -2679,13 +2754,16 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: str
   }
 }
 
-async function applyNativeWindowSettings(s: AppSettings) {
+async function applyNativeWindowSettings(s: AppSettings, opts?: { restoreFullscreen?: boolean }) {
   const { width, height } = normalizeStoredWindowSize(s.winW, s.winH);
+  const restoreFullscreen = opts?.restoreFullscreen !== false;
   try {
     if (!s.fullscreen) {
       await backend.windowSetSize(width, height);
     }
-    await backend.windowSetFullscreen(!!s.fullscreen);
+    if (restoreFullscreen) {
+      await backend.windowSetFullscreen(!!s.fullscreen);
+    }
     if (!s.fullscreen) {
       await backend.windowSetSize(width, height);
     }
@@ -2919,10 +2997,21 @@ async function showLauncherDialog(options: {
     backdrop.appendChild(panel);
     document.body.appendChild(backdrop);
 
+    let finished = false;
     const finish = (result: void | boolean | string | null) => {
-      backdrop.remove();
+      if (finished) return;
+      finished = true;
       document.removeEventListener("keydown", onKeyDown);
-      resolve(result);
+      const complete = () => {
+        backdrop.remove();
+        resolve(result);
+      };
+      if (prefersReducedMotion()) {
+        complete();
+        return;
+      }
+      backdrop.classList.remove("open");
+      window.setTimeout(complete, DIALOG_TRANSITION_MS);
     };
     const submit = () => {
       if (mode === "confirm") return finish(true);
@@ -2950,6 +3039,7 @@ async function showLauncherDialog(options: {
       if (ev.target === backdrop) cancel();
     });
     document.addEventListener("keydown", onKeyDown);
+    window.requestAnimationFrame(() => backdrop.classList.add("open"));
     if (mode === "prompt") {
       input.focus();
       input.select();
@@ -3399,18 +3489,97 @@ function ensureSponsoredRotation() {
   }, SPONSORED_ROTATE_MS);
 }
 
+function prefersReducedMotion() {
+  try {
+    return Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches);
+  } catch {
+    return false;
+  }
+}
+
+function getLibrarySurfaceView(surface = librarySurface) {
+  if (surface === "instance") return viewInstance;
+  if (surface === "discover") return viewDiscover;
+  return viewLibrary;
+}
+
+function getContentViewForPage(which: "home" | "library" | "capes" | "playit" | "settings") {
+  if (which === "home") return viewHome;
+  if (which === "library") return getLibrarySurfaceView();
+  if (which === "capes") return viewCapes;
+  if (which === "playit") return viewPlayit;
+  return viewSettings;
+}
+
+function updateLibraryTopbarToolsVisibility() {
+  if (!libraryTopbarTools) return;
+  libraryTopbarTools.style.display = activeView === "library" && librarySurface === "library" ? "" : "none";
+}
+
+function switchContentView(nextView: HTMLElement | null, immediate = false) {
+  if (!nextView) return;
+
+  const currentView =
+    activeContentView && activeContentView.style.display !== "none"
+      ? activeContentView
+      : contentViews.find((view) => view.style.display !== "none") || null;
+
+  if (!currentView || currentView === nextView || immediate || prefersReducedMotion()) {
+    contentTransitionToken += 1;
+    for (const view of contentViews) {
+      const isActive = view === nextView;
+      view.style.display = isActive ? "" : "none";
+      view.classList.toggle("contentPanelActive", isActive);
+      view.classList.remove("contentPanelEntering", "contentPanelLeaving");
+      view.setAttribute("aria-hidden", isActive ? "false" : "true");
+    }
+    activeContentView = nextView;
+    return;
+  }
+
+  const token = ++contentTransitionToken;
+  activeContentView = nextView;
+
+  nextView.style.display = "";
+  nextView.setAttribute("aria-hidden", "false");
+  nextView.classList.remove("contentPanelLeaving");
+  nextView.classList.add("contentPanelEntering");
+
+  currentView.style.display = "";
+  currentView.classList.remove("contentPanelEntering");
+  currentView.classList.add("contentPanelActive", "contentPanelLeaving");
+
+  for (const view of contentViews) {
+    if (view !== currentView && view !== nextView) {
+      view.style.display = "none";
+      view.classList.remove("contentPanelActive", "contentPanelEntering", "contentPanelLeaving");
+      view.setAttribute("aria-hidden", "true");
+    }
+  }
+
+  void nextView.offsetWidth;
+  window.requestAnimationFrame(() => {
+    if (token !== contentTransitionToken) return;
+    nextView.classList.add("contentPanelActive");
+    nextView.classList.remove("contentPanelEntering");
+    currentView.classList.remove("contentPanelActive");
+  });
+
+  window.setTimeout(() => {
+    if (token !== contentTransitionToken) return;
+    currentView.style.display = "none";
+    currentView.classList.remove("contentPanelLeaving");
+    currentView.setAttribute("aria-hidden", "true");
+    nextView.classList.add("contentPanelActive");
+    nextView.classList.remove("contentPanelEntering", "contentPanelLeaving");
+  }, CONTENT_TRANSITION_MS);
+}
+
 // Set view.
 function setView(which: "home" | "library" | "capes" | "playit" | "settings") {
   activeView = which;
-  const showingLibrary = which === "library";
-  viewHome.style.display = which === "home" ? "" : "none";
-  viewLibrary.style.display = showingLibrary && librarySurface === "library" ? "" : "none";
-  viewInstance.style.display = showingLibrary && librarySurface === "instance" ? "" : "none";
-  viewDiscover.style.display = showingLibrary && librarySurface === "discover" ? "" : "none";
-  viewCapes.style.display = which === "capes" ? "" : "none";
-  viewPlayit.style.display = which === "playit" ? "" : "none";
-  viewSettings.style.display = which === "settings" ? "" : "none";
-  if (libraryTopbarTools) libraryTopbarTools.style.display = showingLibrary && librarySurface === "library" ? "" : "none";
+  switchContentView(getContentViewForPage(which), !activeContentView);
+  updateLibraryTopbarToolsVisibility();
   navHome.classList.toggle("active", which === "home");
   navLibrary.classList.toggle("active", which === "library");
   navCapes.classList.toggle("active", which === "capes");
@@ -3427,11 +3596,12 @@ function setView(which: "home" | "library" | "capes" | "playit" | "settings") {
 
 async function renderSidebarCharacterPreview(
   skinSourceUrl: string | null,
-  capeSourceUrl: string | null
+  capeSourceUrl: string | null,
+  mode: "skin" | "cape" = "skin"
 ) {
   if (!sidebarCapesPreview || !sidebarCapesPreviewHost) return;
   sidebarCapesPreview.style.display = "";
-  await renderInteractiveCharacterPreview(sidebarCapesPreviewHost, skinSourceUrl, capeSourceUrl);
+  await renderInteractiveCharacterPreview(sidebarCapesPreviewHost, skinSourceUrl, capeSourceUrl, mode);
 }
 
 async function refreshSidebarCharacterPreview(forceRefreshOfficial = false) {
@@ -3486,8 +3656,7 @@ async function refreshSidebarCharacterPreview(forceRefreshOfficial = false) {
     capeState?.activeCapeId && capeState?.capes?.length
       ? capeState.capes.find((x) => x.id === capeState?.activeCapeId) ?? null
       : null;
-  const capeSource =
-    (activeLocalCape?.previewDataUrl || null) ?? (activeOfficialCape?.previewDataUrl || activeOfficialCape?.url || null);
+  const capeSource = getCapeViewerTextureSourceUrl(activeLocalCape) ?? (activeOfficialCape?.url || null);
   const skinSource = capeState?.skinDataUrl || capeState?.skinUrl || null;
   await renderSidebarCharacterPreview(skinSource, capeSource);
 }
@@ -3495,6 +3664,7 @@ async function refreshSidebarCharacterPreview(forceRefreshOfficial = false) {
 // Render capes view.
 async function renderCapesView(forceRefresh = false, officialStateOverride: any | null = null) {
   const previousScrollTop = viewCapes.scrollTop || 0;
+  disposeCharacterPreviewsWithin(capesPanelRoot);
   capesPanelRoot.innerHTML = "";
   const shell = document.createElement("div");
   shell.className = "capeChooser";
@@ -3648,15 +3818,9 @@ async function renderCapesView(forceRefresh = false, officialStateOverride: any 
     capeState?.activeCapeId && capeState?.capes?.length
       ? capeState.capes.find((x) => x.id === capeState?.activeCapeId) ?? null
       : null;
-  const mannequinCapeSource =
-    (activeLocalCape?.previewDataUrl || null) ??
-    (activeOfficialCape?.previewDataUrl || activeOfficialCape?.url || null);
+  const mannequinCapeTextureSource = getCapeViewerTextureSourceUrl(activeLocalCape) ?? (activeOfficialCape?.url || null);
   const mannequinSkinSource = capeState?.skinDataUrl || capeState?.skinUrl || null;
-  await renderSidebarCharacterPreview(mannequinSkinSource, mannequinCapeSource);
-
-  const syncSidebarCapePreview = async () => {
-    await refreshSidebarCharacterPreview(false);
-  };
+  await renderSidebarCharacterPreview(mannequinSkinSource, mannequinCapeTextureSource);
 
   const buildTile = (cfg: {
     label: string;
@@ -3664,6 +3828,11 @@ async function renderCapesView(forceRefresh = false, officialStateOverride: any 
     active: boolean;
     onSelect: () => Promise<void> | void;
     subLabel?: string;
+    previewMode?: "skin" | "cape";
+    interactivePreview?: {
+      skinSourceUrl: string | null;
+      capeSourceUrl: string | null;
+    };
   }) => {
     const tile = document.createElement("button");
     tile.className = `capeTile${cfg.active ? " active" : ""}`;
@@ -3683,16 +3852,31 @@ async function renderCapesView(forceRefresh = false, officialStateOverride: any 
 
     const preview = document.createElement("div");
     preview.className = "capeTilePreview";
-    if (cfg.imageUrl) {
+    const canUseInteractivePreview =
+      cfg.previewMode === "cape"
+        ? false
+        : !!cfg.interactivePreview?.skinSourceUrl;
+    if (cfg.active && canUseInteractivePreview) {
+      mountInteractiveTilePreview(
+        preview,
+        cfg.interactivePreview.skinSourceUrl,
+        cfg.interactivePreview.capeSourceUrl,
+        cfg.previewMode || "skin"
+      );
+    } else if (cfg.imageUrl) {
       const img = document.createElement("img");
-      img.className = "capeTileImg";
+      img.className = cfg.previewMode === "cape" ? "capeTileImg" : "capeRenderImg";
       img.onerror = () => {
         img.remove();
         const ghost = document.createElement("div");
         ghost.className = "capeTileGhost";
         preview.appendChild(ghost);
       };
-      void setCapePreviewImage(img, cfg.imageUrl);
+      if (cfg.previewMode === "cape") {
+        void setCapePreviewImage(img, cfg.imageUrl);
+      } else {
+        img.src = cfg.imageUrl;
+      }
       img.alt = `${cfg.label} cape`;
       preview.appendChild(img);
     } else {
@@ -3742,12 +3926,17 @@ async function renderCapesView(forceRefresh = false, officialStateOverride: any 
         label: "No Cape",
         imageUrl: null,
         active: !capeState.activeCapeId,
+        previewMode: "cape",
+        interactivePreview: {
+          skinSourceUrl: mannequinSkinSource,
+          capeSourceUrl: null
+        },
         onSelect: async () => {
           const nextState = await backend.capesSetOfficialActive(activeMcId, null);
           setOfficialCapeStateCache(activeMcId, nextState);
           capeState = nextState;
           setOfficialSelection(nextState.activeCapeId ?? null);
-          await syncSidebarCapePreview();
+          await renderCapesView(false, nextState);
         }
       });
     officialTiles.push({ capeId: null, setActive: noneTile.setActive });
@@ -3758,6 +3947,11 @@ async function renderCapesView(forceRefresh = false, officialStateOverride: any 
           label: item.name,
           imageUrl: item.previewDataUrl || null,
           active: !!item.active,
+          previewMode: "cape",
+          interactivePreview: {
+            skinSourceUrl: mannequinSkinSource,
+            capeSourceUrl: item.url || null
+          },
         onSelect: async () => {
           const nextState = await backend.capesSetOfficialActive(activeMcId, item.id);
           setOfficialCapeStateCache(activeMcId, nextState);
@@ -3771,7 +3965,7 @@ async function renderCapesView(forceRefresh = false, officialStateOverride: any 
           invalidateHomeData();
           capeState = nextState;
           setOfficialSelection(nextState.activeCapeId ?? null);
-          await syncSidebarCapePreview();
+          await renderCapesView(false, nextState);
         }
         });
       officialTiles.push({ capeId: item.id, setActive: tile.setActive });
@@ -3791,14 +3985,46 @@ async function renderCapesView(forceRefresh = false, officialStateOverride: any 
 
   const localSub = document.createElement("div");
   localSub.className = "capeSectionSub";
-  localSub.textContent = "Launcher cape catalog from your Fishbattery cloud account.";
+  localSub.textContent = hasPremium()
+    ? "Launcher cape catalog from your Fishbattery cloud account, plus one custom Premium cape upload per Minecraft account."
+    : "Launcher cape catalog from your Fishbattery cloud account.";
   localSection.appendChild(localSub);
+
+  if (activeMcId && hasPremium()) {
+    const localActions = document.createElement("div");
+    localActions.className = "row";
+    localActions.style.justifyContent = "flex-end";
+    localActions.style.marginTop = "8px";
+    const hasCustomCape = (localCapeCatalog?.items || []).some(
+      (item: any) => item?.source === "custom" && String(item?.accountId || "") === activeMcId
+    );
+    const btnUploadCustomCape = document.createElement("button");
+    btnUploadCustomCape.className = "btn";
+    btnUploadCustomCape.type = "button";
+    btnUploadCustomCape.textContent = hasCustomCape ? "Replace custom cape" : "Upload custom cape";
+    setButtonAssetIcon(btnUploadCustomCape, ICON_ASSETS.upload);
+    btnUploadCustomCape.onclick = () =>
+      void guarded(async () => {
+        const imageDataUrl = await pickPngTextureDataUrl();
+        if (!imageDataUrl) return;
+        await backend.capesUploadLocalCustom(activeMcId, imageDataUrl);
+        setStatus("Custom launcher cape uploaded and selected.");
+        await renderCapesView(false);
+      });
+    localActions.appendChild(btnUploadCustomCape);
+    localSection.appendChild(localActions);
+  }
 
   const localGrid = document.createElement("div");
   localGrid.className = "capeGrid";
   localSection.appendChild(localGrid);
 
-  const sortedLocalItems = [...(localCapeCatalog?.items || [])].sort((a, b) => {
+  const sortedLocalItems = [...(localCapeCatalog?.items || [])]
+    .filter((item: any) => item?.source !== "custom" || !item?.accountId || String(item.accountId) === activeMcId)
+    .sort((a: any, b: any) => {
+    const sourceRank = (item: any) => (item?.source === "custom" ? -1 : 0);
+    const sourceOrder = sourceRank(a) - sourceRank(b);
+    if (sourceOrder !== 0) return sourceOrder;
     const rank = (tier: "free" | "premium" | "founder") => (tier === "free" ? 0 : tier === "premium" ? 1 : 2);
     const tierOrder = rank(a.tier) - rank(b.tier);
     if (tierOrder !== 0) return tierOrder;
@@ -3822,11 +4048,16 @@ async function renderCapesView(forceRefresh = false, officialStateOverride: any 
         label: "No Fishbattery Cape",
         imageUrl: null,
         active: !selectedLocalCapeId,
+        previewMode: "cape",
+        interactivePreview: {
+          skinSourceUrl: mannequinSkinSource,
+          capeSourceUrl: null
+        },
         onSelect: async () => {
           if (activeMcId) await backend.capesSetLocalSelection(activeMcId, null);
           setLocalSelection(null);
           setStatus("Launcher cape selection cleared.");
-          await syncSidebarCapePreview();
+          await renderCapesView(false, capeState);
         }
       });
     localTiles.push({ capeId: null, setActive: noLocalTile.setActive });
@@ -3836,7 +4067,15 @@ async function renderCapesView(forceRefresh = false, officialStateOverride: any 
           label: localItem.name,
           imageUrl: localItem.previewDataUrl || null,
           active: selectedLocalCapeId === localItem.id,
-          subLabel: localCapeTierLabel(localItem.tier),
+          previewMode: "cape",
+          interactivePreview: {
+            skinSourceUrl: mannequinSkinSource,
+            capeSourceUrl: getCapeTextureSourceUrl(localItem)
+          },
+          subLabel:
+            localItem.source === "custom"
+              ? `${localCapeTierLabel(localItem.tier)} • Custom`
+              : localCapeTierLabel(localItem.tier),
         onSelect: async () => {
           if (activeMcId) await backend.capesSetLocalSelection(activeMcId, localItem.id);
           recordHomeUsage(HOME_CAPE_USAGE_KEY, {
@@ -3849,7 +4088,7 @@ async function renderCapesView(forceRefresh = false, officialStateOverride: any 
           invalidateHomeData();
           setLocalSelection(localItem.id);
           setStatus(`Selected launcher ${localItem.tier} cape: ${localItem.name}`);
-          await syncSidebarCapePreview();
+          await renderCapesView(false, capeState);
         }
         });
       localTiles.push({ capeId: localItem.id, setActive: tile.setActive });
@@ -3906,6 +4145,13 @@ async function renderCapesView(forceRefresh = false, officialStateOverride: any 
 
     const skinUiSelection = getSkinUiSelection(activeMcId);
     const selectionMode = skinUiSelection.mode === "default" ? "default" : "saved";
+    const savedSkins = getSavedSkins(activeMcId);
+    const activeSavedSkin = savedSkins.find((skin) => skin.id === skinUiSelection.activeSavedId) ?? null;
+    const activeDefaultSkin =
+      selectionMode === "default" ? MOJANG_DEFAULT_SKINS.find((def) => def.key === skinUiSelection.defaultKey) ?? null : null;
+    const currentSkinLabel =
+      activeSavedSkin?.name || activeDefaultSkin?.name || capeState.skins.find((item) => item.active)?.alias || "Active skin";
+    const currentSkinSource = activeSavedSkin?.dataUrl || activeDefaultSkin?.sourceUrl || mannequinSkinSource;
 
     const skinUploadInput = document.createElement("input");
     skinUploadInput.type = "file";
@@ -3966,7 +4212,6 @@ async function renderCapesView(forceRefresh = false, officialStateOverride: any 
     savedSkinGrid.appendChild(addSkinTile);
 
     const officialSkins = Array.isArray(capeState.skins) ? capeState.skins : [];
-    const savedSkins = getSavedSkins(activeMcId);
     savedSkins.forEach((skin, idx) => {
       const tile = document.createElement("button");
       const isActive = selectionMode === "saved" && skinUiSelection.activeSavedId === skin.id;
@@ -4007,12 +4252,15 @@ async function renderCapesView(forceRefresh = false, officialStateOverride: any 
 
       const preview = document.createElement("div");
       preview.className = "capeTilePreview skinTilePreview";
-      const img = document.createElement("img");
-      img.className = "skinTileImg";
-      img.alt = skin.name || `Skin ${idx + 1}`;
-      img.src = skin.dataUrl;
-      void setSkinPreviewImage(img, skin.dataUrl, skin.variant === "SLIM" ? "SLIM" : "CLASSIC");
-      preview.appendChild(img);
+      if (isActive) {
+        mountInteractiveTilePreview(preview, skin.dataUrl, mannequinCapeTextureSource);
+      } else {
+        const img = document.createElement("img");
+        img.className = "skinTileImg capeRenderImg";
+        img.alt = skin.name || `Skin ${idx + 1}`;
+        void setCharacterRenderImage(img, skin.dataUrl, mannequinCapeTextureSource, "skin");
+        preview.appendChild(img);
+      }
 
       const footer = document.createElement("div");
       footer.className = "capeTileFooter";
@@ -4111,12 +4359,15 @@ async function renderCapesView(forceRefresh = false, officialStateOverride: any 
 
       const preview = document.createElement("div");
       preview.className = "capeTilePreview skinTilePreview";
-      const img = document.createElement("img");
-      img.className = "skinTileImg";
-      img.alt = `${def.name} default skin`;
-      img.src = def.sourceUrl;
-      void setSkinPreviewImage(img, def.sourceUrl, def.variant);
-      preview.appendChild(img);
+      if (isActive) {
+        mountInteractiveTilePreview(preview, def.sourceUrl, mannequinCapeTextureSource);
+      } else {
+        const img = document.createElement("img");
+        img.className = "skinTileImg capeRenderImg";
+        img.alt = `${def.name} default skin`;
+        void setCharacterRenderImage(img, def.sourceUrl, mannequinCapeTextureSource, "skin");
+        preview.appendChild(img);
+      }
 
       const footer = document.createElement("div");
       footer.className = "capeTileFooter";
@@ -4144,6 +4395,17 @@ async function renderCapesView(forceRefresh = false, officialStateOverride: any 
 const capePreviewCache = new Map<string, string | null>();
 const skinPreviewCache = new Map<string, string | null>();
 const skinDefaultDataUrlCache = new Map<string, string>();
+const characterRenderCache = new Map<string, string | null>();
+let blankSkinDataUrlCache: string | null = null;
+
+function getBlankSkinDataUrl() {
+  if (blankSkinDataUrlCache) return blankSkinDataUrlCache;
+  const canvas = document.createElement("canvas");
+  canvas.width = 64;
+  canvas.height = 64;
+  blankSkinDataUrlCache = canvas.toDataURL("image/png");
+  return blankSkinDataUrlCache;
+}
 
 async function fetchImageAsDataUrl(sourceUrl: string): Promise<string> {
   const hit = skinDefaultDataUrlCache.get(sourceUrl);
@@ -4363,81 +4625,215 @@ async function setCapePreviewImage(imgEl: HTMLImageElement, sourceUrl: string) {
   }
 }
 
-// Dispose capes character preview.
-function disposeCapesCharacterPreview() {
+// Dispose character preview for a host.
+function disposeCharacterPreview(hostEl: HTMLElement | null) {
+  if (!hostEl) return;
+  const handle = characterPreviewHandles.get(hostEl);
+  if (!handle) return;
   try {
-    capesSkinControls?.dispose?.();
+    handle.controls?.dispose?.();
   } catch {}
-  capesSkinControls = null;
   try {
-    capesSkinViewer?.dispose?.();
+    handle.viewer?.dispose?.();
   } catch {}
-  capesSkinViewer = null;
+  characterPreviewHandles.delete(hostEl);
+}
+
+function disposeCharacterPreviewsWithin(rootEl: HTMLElement | null) {
+  if (!rootEl) return;
+  rootEl.querySelectorAll<HTMLElement>(".capeMannequinHost").forEach((host) => disposeCharacterPreview(host));
+}
+
+function getCapeTextureSourceUrl(capeItem: any): string | null {
+  const candidate = String(
+    capeItem?.fileDataUrl ||
+      capeItem?.downloadUrl ||
+      capeItem?.url ||
+      capeItem?.previewDataUrl ||
+      ""
+  ).trim();
+  return candidate || null;
+}
+
+function getCapeViewerTextureSourceUrl(capeItem: any): string | null {
+  const dataUrl = String(capeItem?.fileDataUrl || "").trim();
+  if (dataUrl) return dataUrl;
+  const fullPath = String(capeItem?.fullPath || "").trim();
+  if (fullPath) {
+    try {
+      return convertFileSrc(fullPath);
+    } catch {}
+  }
+  return getCapeTextureSourceUrl(capeItem);
+}
+
+function mountInteractiveTilePreview(
+  previewEl: HTMLElement,
+  skinSourceUrl: string | null,
+  capeSourceUrl: string | null,
+  mode: "skin" | "cape" = "skin"
+) {
+  previewEl.classList.add("capeTilePreviewInteractive");
+  previewEl.innerHTML = "";
+  previewEl.onclick = (e) => e.stopPropagation();
+  previewEl.ondblclick = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const host = document.createElement("div");
+  host.className = "capeMannequinHost capeTilePreviewHost";
+  previewEl.appendChild(host);
+
+  void renderInteractiveCharacterPreview(host, skinSourceUrl, capeSourceUrl, mode);
+}
+
+function configureCharacterViewer(viewer: any, mode: "skin" | "cape") {
+  viewer.background = null;
+  if (mode === "cape") {
+    viewer.fov = 26;
+    viewer.zoom = 0.72;
+    viewer.playerObject.rotation.y = Math.PI;
+    viewer.camera.position.set(0, 2, 32);
+    if (viewer.playerObject?.skin) viewer.playerObject.skin.visible = false;
+  } else {
+    viewer.fov = 34;
+    viewer.zoom = 0.48;
+    viewer.playerObject.rotation.y = 0;
+    viewer.camera.position.set(0, 0, 56);
+    if (viewer.playerObject?.skin) viewer.playerObject.skin.visible = true;
+  }
+
+  const controls = viewer.controls;
+  controls.enablePan = false;
+  controls.enableZoom = false;
+  controls.enableDamping = true;
+  controls.rotateSpeed = 0.9;
+  controls.target.set(0, mode === "cape" ? 2 : 0, 0);
+  controls.update();
+}
+
+async function buildCharacterRenderDataUrl(
+  skinSourceUrl: string | null,
+  capeSourceUrl: string | null,
+  mode: "skin" | "cape"
+): Promise<string | null> {
+  const skinSrc = String(skinSourceUrl || "").trim();
+  const capeSrc = String(capeSourceUrl || "").trim();
+  const cacheKey = `${mode}|${skinSrc}|${capeSrc}`;
+  if (characterRenderCache.has(cacheKey)) return characterRenderCache.get(cacheKey) ?? null;
+  if (mode === "skin" && !skinSrc) return null;
+  if (mode === "cape" && !capeSrc) return null;
+
+  const canvas = document.createElement("canvas");
+  canvas.width = mode === "cape" ? 160 : 176;
+  canvas.height = mode === "cape" ? 156 : 176;
+  const viewer = new (skinview3d as any).SkinViewer({
+    canvas,
+    width: canvas.width,
+    height: canvas.height,
+    preserveDrawingBuffer: true,
+    renderPaused: true
+  });
+
+  try {
+    if (mode === "skin") {
+      await viewer.loadSkin(skinSrc);
+      if (capeSrc) {
+        try {
+          await viewer.loadCape(capeSrc, { backEquipment: "cape" });
+        } catch {}
+      }
+    } else {
+      await viewer.loadSkin(getBlankSkinDataUrl(), { model: "default" });
+      await viewer.loadCape(capeSrc, { backEquipment: "cape" });
+      if (viewer.playerObject?.skin) viewer.playerObject.skin.visible = false;
+    }
+    configureCharacterViewer(viewer, mode);
+    viewer.render();
+    const dataUrl = canvas.toDataURL("image/png");
+    characterRenderCache.set(cacheKey, dataUrl);
+    return dataUrl;
+  } catch {
+    characterRenderCache.set(cacheKey, null);
+    return null;
+  } finally {
+    try {
+      viewer.dispose();
+    } catch {}
+  }
+}
+
+async function setCharacterRenderImage(
+  imgEl: HTMLImageElement,
+  skinSourceUrl: string | null,
+  capeSourceUrl: string | null,
+  mode: "skin" | "cape"
+) {
+  const preview = await buildCharacterRenderDataUrl(skinSourceUrl, capeSourceUrl, mode);
+  if (preview) {
+    imgEl.src = preview;
+    return;
+  }
+  imgEl.src = mode === "cape" ? String(capeSourceUrl || "") : String(skinSourceUrl || "");
 }
 
 // Render interactive character preview.
 async function renderInteractiveCharacterPreview(
   hostEl: HTMLElement,
   skinSourceUrl: string | null,
-  capeSourceUrl: string | null
+  capeSourceUrl: string | null,
+  mode: "skin" | "cape" = "skin"
 ) {
-  disposeCapesCharacterPreview();
+  disposeCharacterPreview(hostEl);
   hostEl.innerHTML = "";
 
   const skinSrc = String(skinSourceUrl || "").trim();
-  if (!skinSrc) {
+  const capeSrc = String(capeSourceUrl || "").trim();
+  if ((mode === "skin" && !skinSrc) || (mode === "cape" && !capeSrc)) {
     const empty = document.createElement("div");
     empty.className = "capeMannequinEmpty";
-    empty.textContent = "No skin";
+    empty.textContent = mode === "cape" ? "No cape" : "No skin";
     hostEl.appendChild(empty);
     return;
   }
 
-  const capeSrc = String(capeSourceUrl || "").trim();
   const canvas = document.createElement("canvas");
   canvas.className = "capeMannequinCanvas";
   hostEl.appendChild(canvas);
 
-  const width = Math.max(180, hostEl.clientWidth || 180);
-  const height = Math.max(220, hostEl.clientHeight || 220);
+  const width = Math.max(96, hostEl.clientWidth || 96);
+  const height = Math.max(128, hostEl.clientHeight || 128);
   const viewer = new (skinview3d as any).SkinViewer({
     canvas,
     width,
     height
   });
-  capesSkinViewer = viewer;
 
   try {
-    await viewer.loadSkin(skinSrc);
-    if (capeSrc) {
+    if (mode === "skin") {
+      await viewer.loadSkin(skinSrc);
       try {
-        await viewer.loadCape(capeSrc);
-        if (viewer.playerObject?.cape) viewer.playerObject.cape.visible = true;
+        if (capeSrc) {
+          await viewer.loadCape(capeSrc, { backEquipment: "cape" });
+          if (viewer.playerObject?.cape) viewer.playerObject.cape.visible = true;
+        } else if (viewer.playerObject?.cape) {
+          viewer.playerObject.cape.visible = false;
+        }
       } catch (err) {
         console.warn("Cape preview load failed, continuing without cape", err);
         if (viewer.playerObject?.cape) viewer.playerObject.cape.visible = false;
       }
-    } else if (viewer.playerObject?.cape) {
-      viewer.playerObject.cape.visible = false;
+    } else {
+      await viewer.loadSkin(getBlankSkinDataUrl(), { model: "default" });
+      await viewer.loadCape(capeSrc, { backEquipment: "cape" });
+      if (viewer.playerObject?.skin) viewer.playerObject.skin.visible = false;
     }
-
-    viewer.background = null;
-    viewer.fov = 42;
-    viewer.zoom = 0.58;
-    viewer.playerObject.rotation.y = Math.PI;
-    viewer.camera.position.set(26, 0, 48);
-
-    const controls = viewer.controls;
-    capesSkinControls = controls;
-    controls.enablePan = false;
-    controls.enableZoom = false;
-    controls.enableDamping = true;
-    controls.rotateSpeed = 0.9;
-    controls.target.set(0, 0, 0);
-    controls.update();
+    configureCharacterViewer(viewer, mode);
+    characterPreviewHandles.set(hostEl, { viewer, controls: viewer.controls });
   } catch (err) {
     console.error("Character preview failed", err);
-    disposeCapesCharacterPreview();
+    disposeCharacterPreview(hostEl);
     hostEl.innerHTML = "";
     const fail = document.createElement("div");
     fail.className = "capeMannequinEmpty";
@@ -4446,14 +4842,54 @@ async function renderInteractiveCharacterPreview(
   }
 }
 
+async function appendCharacterPreviewRow(
+  parentEl: HTMLElement,
+  cfg: {
+    title: string;
+    text: string;
+    help: string;
+    skinSourceUrl: string | null;
+    capeSourceUrl: string | null;
+    mode?: "skin" | "cape";
+  }
+) {
+  const row = document.createElement("div");
+  row.className = "capeMannequinRow";
+
+  const stage = document.createElement("div");
+  stage.className = "capeMannequinStage";
+  const host = document.createElement("div");
+  host.className = "capeMannequinHost";
+  stage.appendChild(host);
+
+  const meta = document.createElement("div");
+  meta.className = "capeMannequinMeta";
+  const title = document.createElement("div");
+  title.className = "capeMannequinTitle";
+  title.textContent = cfg.title;
+  const text = document.createElement("div");
+  text.className = "capeMannequinText";
+  text.textContent = cfg.text;
+  const help = document.createElement("div");
+  help.className = "capeMannequinHelp";
+  help.textContent = cfg.help;
+  meta.append(title, text, help);
+
+  row.append(stage, meta);
+  parentEl.appendChild(row);
+  await renderInteractiveCharacterPreview(host, cfg.skinSourceUrl, cfg.capeSourceUrl, cfg.mode || "skin");
+}
+
 // Open modal.
 function openModal(which: ModalTabId = "general") {
+  modalBackdrop.setAttribute("aria-hidden", "false");
   modalBackdrop.classList.add("open");
   setModalTab(which);
 }
 
 // Close modal.
 function closeModal() {
+  modalBackdrop.setAttribute("aria-hidden", "true");
   modalBackdrop.classList.remove("open");
 }
 
@@ -4498,11 +4934,37 @@ function setCreateFlowStage(nextStage: CreateFlowStage) {
   const showIntro = isCreateMode && nextStage === "select";
   if (createFlowIntro) createFlowIntro.style.display = showIntro ? "" : "none";
   if (createFlowWorkspace) createFlowWorkspace.style.display = showIntro ? "none" : "";
+  if (!prefersReducedMotion()) {
+    const activeSection = showIntro ? createFlowIntro : createFlowWorkspace;
+    if (activeSection) {
+      activeSection.classList.remove("modalSectionAnimated");
+      void activeSection.offsetWidth;
+      activeSection.classList.add("modalSectionAnimated");
+    }
+  }
   if (btnCreateFlowBack) btnCreateFlowBack.style.display = isCreateMode && !showIntro ? "" : "none";
   if (createSourceField) createSourceField.style.display = modalMode === "edit" ? "none" : showIntro ? "none" : "";
   modalCreate.style.display = showIntro ? "none" : "";
   modalCancel.textContent = showIntro ? "Close" : "Cancel";
   updateCreateFlowHeader();
+}
+
+function animateSettingsPanelSwap(activePanel: HTMLElement | null) {
+  if (!activePanel) return;
+  if (prefersReducedMotion()) {
+    settingsPanelShell?.classList.remove("settingsPanelAnimating");
+    activePanel.classList.remove("setPanelAnimated");
+    return;
+  }
+  settingsPanelShell?.classList.remove("settingsPanelAnimating");
+  activePanel.classList.remove("setPanelAnimated");
+  void activePanel.offsetWidth;
+  settingsPanelShell?.classList.add("settingsPanelAnimating");
+  activePanel.classList.add("setPanelAnimated");
+  window.setTimeout(() => {
+    settingsPanelShell?.classList.remove("settingsPanelAnimating");
+    activePanel.classList.remove("setPanelAnimated");
+  }, SETTINGS_PANEL_TRANSITION_MS);
 }
 
 function editedInstanceLoader(): LoaderKind {
@@ -4922,6 +5384,39 @@ async function collectHomeData(force = false) {
     })
     .slice(0, 5);
 
+  const localWorldByInstanceAndId = new Map<string, any>();
+  for (const result of worldSettled) {
+    if (result.status !== "fulfilled") continue;
+    const instanceId = String(result.value.instance?.id || "");
+    for (const world of Array.isArray(result.value.data?.worlds) ? result.value.data.worlds : []) {
+      const worldId = String(world?.id || world?.folderName || "").trim();
+      if (!instanceId || !worldId) continue;
+      localWorldByInstanceAndId.set(`${instanceId}::${worldId}`, world);
+    }
+  }
+
+  const syncedWorlds = cloudWorldSyncState.items
+    .map((item) => {
+      const instance = instances.find((inst: any) => String(inst?.id || "") === String(item.instanceId || ""));
+      if (!instance) return null;
+      const localWorld = localWorldByInstanceAndId.get(`${String(item.instanceId || "")}::${String(item.worldId || "")}`) || null;
+      const timestamp = Math.max(
+        Number(localWorld?.lastPlayedAt || 0),
+        Number(item?.updatedAt || 0),
+        Number(item?.lastSyncedAt || 0)
+      );
+      return {
+        kind: "cloud-world" as const,
+        instance,
+        cloudWorld: item,
+        localWorld,
+        timestamp
+      };
+    })
+    .filter((item): item is { kind: "cloud-world"; instance: any; cloudWorld: any; localWorld: any; timestamp: number } => !!item)
+    .sort((left, right) => right.timestamp - left.timestamp)
+    .slice(0, 3);
+
   const recentActivity = [
     ...recentWorlds.map((item) => ({
       kind: "world" as const,
@@ -4984,6 +5479,7 @@ async function collectHomeData(force = false) {
   const data = {
     latestInstances,
     recentActivity,
+    syncedWorlds,
     discoverPacks,
     instanceIcons
   };
@@ -5042,6 +5538,15 @@ async function renderHomeView(force = false) {
   if (homeImportPack) homeImportPack.onclick = () => btnImport.click();
 
   const data = await collectHomeData(force);
+  if (generation !== renderHomeGeneration) return;
+  const homeLaunchInstances = Array.from(
+    new Map(
+      [...data.latestInstances, ...data.recentActivity.map((item: any) => item.instance)]
+        .filter((inst: any) => !!String(inst?.id || "").trim())
+        .map((inst: any) => [String(inst.id || ""), inst])
+    ).values()
+  );
+  const homeRunningSnapshot = await getRunningSnapshot(homeLaunchInstances);
   if (generation !== renderHomeGeneration) return;
 
   homePanelRoot.innerHTML = "";
@@ -5138,13 +5643,20 @@ async function renderHomeView(force = false) {
       meta.append(cardTitle, cardSub);
 
       const playBtn = document.createElement("button");
-      playBtn.className = "btn btnPrimary";
+      playBtn.className = "btn";
       playBtn.type = "button";
-      playBtn.textContent = "Play";
-      setButtonAssetIcon(playBtn, ICON_ASSETS.play);
+      applyInstanceLaunchButtonState(playBtn, getInstanceLaunchVisualState(String(inst.id || ""), homeRunningSnapshot));
       playBtn.onclick = (ev) => {
         ev.stopPropagation();
-        void guarded(async () => launchForInstance(inst));
+        void guarded(async () => {
+          const instanceId = String(inst.id || "");
+          if (getInstanceLaunchVisualState(instanceId, homeRunningSnapshot) !== "idle") {
+            await backend.launchStop(instanceId);
+            refreshVisibleLaunchAffordances(instanceId);
+            return;
+          }
+          await launchForInstance(inst);
+        });
       };
 
       card.append(icon, meta, playBtn);
@@ -5216,15 +5728,27 @@ async function renderHomeView(force = false) {
       meta.append(strong, detail, context);
 
       const action = document.createElement("button");
-      action.className = item.kind === "server" ? "btn btnPrimary" : "btn";
+      action.className = "btn";
       action.type = "button";
-      action.textContent = item.kind === "server" ? "Join" : "Play";
-      setButtonAssetIcon(action, ICON_ASSETS.play);
+      applyInstanceLaunchButtonState(
+        action,
+        getInstanceLaunchVisualState(String(item.instance?.id || ""), homeRunningSnapshot),
+        item.kind === "server" ? "Join" : "Play"
+      );
       action.onclick = (ev) => {
         ev.stopPropagation();
-        void guarded(async () =>
-          launchForInstance(item.instance, item.kind === "server" ? String(item.server?.address || "").trim() : undefined)
-        );
+        void guarded(async () => {
+          const instanceId = String(item.instance?.id || "");
+          if (getInstanceLaunchVisualState(instanceId, homeRunningSnapshot) !== "idle") {
+            await backend.launchStop(instanceId);
+            refreshVisibleLaunchAffordances(instanceId);
+            return;
+          }
+          await launchForInstance(
+            item.instance,
+            item.kind === "server" ? String(item.server?.address || "").trim() : undefined
+          );
+        });
       };
 
       card.append(thumb, meta, action);
@@ -5233,6 +5757,87 @@ async function renderHomeView(force = false) {
   }
   activitySection.body.appendChild(activityList);
   grid.appendChild(activitySection.section);
+
+  const syncedWorldsSection = createHomeSection("Synced worlds", "Worlds you picked for cloud sync across devices.", {
+    label: "Cloud sync",
+    onClick: () => {
+      void guarded(async () => {
+        const target = data.syncedWorlds[0]?.instance || state.instances?.instances?.[0] || null;
+        if (target) await openInstancePage(target, "worlds");
+      });
+    }
+  });
+  syncedWorldsSection.section.classList.add("homeSectionSpan2");
+  const syncedWorldsList = document.createElement("div");
+  syncedWorldsList.className = "homeRecentList";
+  if (!data.syncedWorlds.length) {
+    const empty = document.createElement("div");
+    empty.className = "homeEmpty";
+    empty.textContent = "Pick a world with Sync to cloud and it will show up here.";
+    syncedWorldsList.appendChild(empty);
+  } else {
+    for (const item of data.syncedWorlds) {
+      const card = document.createElement("div");
+      card.className = "homeRecentCard";
+      card.tabIndex = 0;
+      card.setAttribute("role", "button");
+      card.onclick = () => void openInstancePage(item.instance, "worlds");
+      card.onkeydown = (ev: KeyboardEvent) => {
+        if (ev.key !== "Enter" && ev.key !== " ") return;
+        ev.preventDefault();
+        void openInstancePage(item.instance, "worlds");
+      };
+
+      const thumb = document.createElement("div");
+      thumb.className = "homeCompactThumb";
+      if (item.localWorld?.iconDataUrl) {
+        const img = document.createElement("img");
+        img.src = item.localWorld.iconDataUrl;
+        img.alt = `${item.cloudWorld?.worldName || "World"} icon`;
+        thumb.appendChild(img);
+      } else {
+        renderInstanceIconInto(thumb, item.instance, data.instanceIcons.get(String(item.instance?.id || "")) || null);
+      }
+
+      const meta = document.createElement("div");
+      meta.className = "homeCompactMeta";
+      const strong = document.createElement("strong");
+      strong.textContent = item.cloudWorld?.worldName || item.cloudWorld?.worldId || "Synced world";
+      const detail = document.createElement("div");
+      detail.className = "homeCardSub";
+      detail.textContent = item.localWorld
+        ? `${
+            isWorldFullySyncedToCloud(item.localWorld, item.cloudWorld) ? "Synced to cloud" : "Cloud sync needs update"
+          } • ${formatBytes(Number(item.cloudWorld?.compressedSizeBytes || 0))}`
+        : `Cloud only • ${formatBytes(Number(item.cloudWorld?.compressedSizeBytes || 0))}`;
+      const context = document.createElement("div");
+      context.className = "homeCardSub";
+      context.textContent = `From ${item.instance?.name || "Instance"} • ${formatRelativeTimestamp(Number(item.timestamp || 0))}`;
+      meta.append(strong, detail, context);
+
+      const action = document.createElement("button");
+      action.className = "btn";
+      action.type = "button";
+      action.textContent = item.localWorld ? "Open" : "Download";
+      action.onclick = (ev) => {
+        ev.stopPropagation();
+        void guarded(async () => {
+          if (item.localWorld) {
+            await openInstancePage(item.instance, "worlds");
+            return;
+          }
+          await downloadCloudSyncedWorld(item.cloudWorld, item.instance, false);
+          invalidateHomeData();
+          await renderHomeView(true);
+        });
+      };
+
+      card.append(thumb, meta, action);
+      syncedWorldsList.appendChild(card);
+    }
+  }
+  syncedWorldsSection.body.appendChild(syncedWorldsList);
+  grid.appendChild(syncedWorldsSection.section);
 
   const discoverSection = createHomeSection("Discover modpacks", "A mixed quick-pick feed from Modrinth and CurseForge.", {
     label: "Browse imports",
@@ -5384,11 +5989,10 @@ function getLaunchContextInstanceId() {
 
 function setLibrarySurface(nextSurface: LibrarySurface) {
   librarySurface = nextSurface;
-  const inLibrary = viewLibrary.style.display !== "none";
-  viewLibrary.style.display = inLibrary && nextSurface === "library" ? "" : "none";
-  viewInstance.style.display = inLibrary && nextSurface === "instance" ? "" : "none";
-  viewDiscover.style.display = inLibrary && nextSurface === "discover" ? "" : "none";
-  libraryTopbarTools.style.display = inLibrary && nextSurface === "library" ? "" : "none";
+  if (activeView === "library") {
+    switchContentView(getLibrarySurfaceView());
+  }
+  updateLibraryTopbarToolsVisibility();
 }
 
 function setInstanceTab(nextTab: InstancePageTab) {
@@ -5911,6 +6515,55 @@ async function pickImageAsDataUrl(): Promise<string | null> {
   });
 }
 
+async function pickPngTextureDataUrl(): Promise<string | null> {
+  return new Promise((resolve) => {
+    const inp = document.createElement("input");
+    inp.type = "file";
+    inp.accept = ".png,image/png";
+    inp.style.position = "fixed";
+    inp.style.left = "-99999px";
+    inp.style.top = "0";
+    let settled = false;
+
+    const finish = (value: string | null) => {
+      if (settled) return;
+      settled = true;
+      try {
+        inp.remove();
+      } catch {}
+      resolve(value);
+    };
+
+    inp.onchange = () => {
+      const file = inp.files?.[0];
+      if (!file) {
+        finish(null);
+        return;
+      }
+      const name = String(file.name || "").toLowerCase();
+      const isPng = file.type === "image/png" || /\.png$/i.test(name);
+      if (!isPng) {
+        alert("Cape textures must be PNG files.");
+        finish(null);
+        return;
+      }
+      if (file.size > 2 * 1024 * 1024) {
+        alert("Cape texture is too large. Please choose one smaller than 2 MB.");
+        finish(null);
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = () => finish(typeof reader.result === "string" ? reader.result : null);
+      reader.onerror = () => finish(null);
+      reader.readAsDataURL(file);
+    };
+
+    inp.addEventListener("cancel", () => finish(null));
+    document.body.appendChild(inp);
+    inp.click();
+  });
+}
+
 async function normalizeBackgroundImageDataUrl(file: File): Promise<string | null> {
   const readAsDataUrl = (f: File) =>
     new Promise<string | null>((resolve) => {
@@ -6346,12 +6999,94 @@ function cloudSyncStatusText(state: CloudSyncUiState) {
   return "Cloud sync is idle.";
 }
 
+function findCloudSyncedWorld(instanceId: string, worldId: string): CloudWorldSyncItemUi | null {
+  return (
+    cloudWorldSyncState.items.find(
+      (item) => String(item.instanceId || "") === String(instanceId || "") && String(item.worldId || "") === String(worldId || "")
+    ) || null
+  );
+}
+
+function cloudWorldSyncKey(instanceId: string, worldId: string) {
+  return `${String(instanceId || "")}::${String(worldId || "")}`;
+}
+
+function isWorldFullySyncedToCloud(world: any, cloudItem: CloudWorldSyncItemUi | null) {
+  if (!cloudItem) return false;
+  const localTimestamp = Math.max(
+    Number(world?.lastPlayedAt || 0),
+    Number(world?.updatedAt || 0),
+    Number(world?.createdAt || 0)
+  );
+  const cloudTimestamp = Math.max(Number(cloudItem?.updatedAt || 0), Number(cloudItem?.lastSyncedAt || 0));
+  return localTimestamp > 0 && cloudTimestamp > 0 && localTimestamp <= cloudTimestamp;
+}
+
+async function refreshCloudWorldSyncState() {
+  if (!state.launcherAccount?.activeAccountId) {
+    cloudWorldSyncState = {
+      ...cloudWorldSyncState,
+      loading: false,
+      error: null,
+      items: [],
+      summary: {
+        currentPlan: "free",
+        subscriptionTier: "free",
+        planLabel: "Free",
+        syncedWorldCountUsed: 0,
+        syncedWorldCountLimit: 1,
+        storageUsedBytes: 0,
+        storageLimitBytes: 4 * 1024 * 1024 * 1024,
+        perWorldSizeLimitBytes: 4 * 1024 * 1024 * 1024,
+        uploadsBlocked: false,
+        uploadsBlockedReason: null,
+        upsellCopy: "Free: Sync 1 world up to 4 GB."
+      }
+    };
+    invalidateHomeData();
+    return;
+  }
+  cloudWorldSyncState.loading = true;
+  try {
+    const next = await backend.cloudWorldSyncGetState();
+    cloudWorldSyncState = {
+      configured: next?.configured !== false,
+      loading: false,
+      error: null,
+      summary: next?.summary || cloudWorldSyncState.summary,
+      items: Array.isArray(next?.items) ? next.items : []
+    };
+    invalidateHomeData();
+  } catch (err: any) {
+    cloudWorldSyncState = {
+      ...cloudWorldSyncState,
+      loading: false,
+      error: String(err?.message ?? err ?? "Could not load world sync usage.")
+    };
+  }
+}
+
+function createUsageBar(value: number, max: number, color = "var(--accent)") {
+  const wrap = document.createElement("div");
+  wrap.style.height = "8px";
+  wrap.style.borderRadius = "999px";
+  wrap.style.background = "rgba(255,255,255,.08)";
+  wrap.style.overflow = "hidden";
+  const fill = document.createElement("div");
+  fill.style.height = "100%";
+  fill.style.width = `${Math.max(0, Math.min(100, max > 0 ? (value / max) * 100 : 0))}%`;
+  fill.style.borderRadius = "inherit";
+  fill.style.background = color;
+  wrap.appendChild(fill);
+  return wrap;
+}
+
 // Apply remote synced settings.
 function applyRemoteSyncedSettings(patch: Record<string, unknown> | null | undefined) {
   if (!patch || typeof patch !== "object") return;
   setSettings(patch as Partial<AppSettings>, { touchUpdatedAt: false });
   applyUiPreferencesFromSettings(getSettings());
-  void applyNativeWindowSettings(getSettings());
+  void applyNativeWindowSettings(getSettings(), { restoreFullscreen: false });
   ensureCloudSyncTimer();
 }
 
@@ -6421,6 +7156,122 @@ async function runCloudSync(manual: boolean, forcedPolicy?: "prefer-local" | "pr
   }
 }
 
+async function syncWorldToCloud(inst: any, world: any, options?: { silent?: boolean }) {
+  if (!state.launcherAccount?.activeAccountId) {
+    await showLauncherAlert("Sign in to your Fishbattery account to sync worlds.");
+    return;
+  }
+  const instanceId = String(inst?.id || "");
+  const worldId = String(world?.id || world?.folderName || "");
+  const syncKey = cloudWorldSyncKey(instanceId, worldId);
+  worldSyncInFlight.add(syncKey);
+  try {
+    if (selectedInstanceId === instanceId && selectedInstanceTab === "worlds") {
+      await renderInstanceWorldsPage(inst);
+    }
+    const result = await backend.cloudWorldSyncUploadWorld({
+      instanceId,
+      worldId,
+      worldName: String(world?.name || world?.folderName || "World")
+    });
+    cloudWorldSyncState.summary = result.summary;
+    await refreshCloudWorldSyncState();
+    await renderSettingsPanels();
+    if (selectedInstanceId === instanceId && selectedInstanceTab === "worlds") {
+      await renderInstanceWorldsPage(inst);
+    }
+    if (!options?.silent) {
+      await showLauncherAlert(result.message);
+    }
+  } finally {
+    worldSyncInFlight.delete(syncKey);
+    if (selectedInstanceId === instanceId && selectedInstanceTab === "worlds") {
+      await renderInstanceWorldsPage(inst);
+    }
+  }
+}
+
+async function autoSyncPickedWorldsIfNeeded() {
+  if (cloudWorldAutoSyncInFlight) return;
+  if (!getSettings().cloudSyncEnabled || !getSettings().cloudSyncAuto) return;
+  if (!state.launcherAccount?.activeAccountId) return;
+  if (!cloudWorldSyncState.configured) return;
+  if (cloudWorldSyncState.summary.uploadsBlocked) return;
+  if (!cloudWorldSyncState.items.length) return;
+
+  cloudWorldAutoSyncInFlight = true;
+  try {
+    await refreshCloudWorldSyncState();
+    const byInstance = new Map<string, CloudWorldSyncItemUi[]>();
+    for (const item of cloudWorldSyncState.items) {
+      const instanceId = String(item.instanceId || "").trim();
+      if (!instanceId) continue;
+      const list = byInstance.get(instanceId) || [];
+      list.push(item);
+      byInstance.set(instanceId, list);
+    }
+
+    for (const [instanceId, pickedWorlds] of byInstance) {
+      let localWorldsState: any = null;
+      try {
+        localWorldsState = await backend.instanceWorldsList(instanceId);
+      } catch (err: any) {
+        appendLog(`[cloud-world-sync] Could not inspect local worlds for ${instanceId}: ${String(err?.message ?? err)}`);
+        continue;
+      }
+      const localWorlds = Array.isArray(localWorldsState?.worlds) ? localWorldsState.worlds : [];
+      const inst =
+        state.instances?.instances?.find((entry: any) => String(entry?.id || "") === instanceId) || { id: instanceId };
+
+      for (const picked of pickedWorlds) {
+        const localWorld =
+          localWorlds.find(
+            (world: any) => String(world?.id || world?.folderName || "") === String(picked.worldId || "")
+          ) || null;
+        if (!localWorld) continue;
+        if (isWorldFullySyncedToCloud(localWorld, picked)) continue;
+        try {
+          await syncWorldToCloud(inst, localWorld, { silent: true });
+        } catch (err: any) {
+          appendLog(
+            `[cloud-world-sync] Auto-sync failed for ${instanceId}/${String(picked.worldId || "")}: ${String(err?.message ?? err)}`
+          );
+        }
+      }
+    }
+  } finally {
+    cloudWorldAutoSyncInFlight = false;
+  }
+}
+
+async function removeCloudSyncedWorld(item: CloudWorldSyncItemUi, inst?: any) {
+  const confirmed = await showLauncherConfirm(
+    `Remove sync for "${item.worldName || item.worldId || "this world"}"?\n\nThis keeps the local world on this device, deletes the cloud copy from Fishbattery, and frees up cloud storage for another world.`
+  );
+  if (!confirmed) return;
+  const result = await backend.cloudWorldSyncRemoveWorld(String(item.id || ""));
+  cloudWorldSyncState.summary = result.summary;
+  await refreshCloudWorldSyncState();
+  await renderSettingsPanels();
+  if (inst && selectedInstanceId === String(inst?.id || "") && selectedInstanceTab === "worlds") {
+    await renderInstanceWorldsPage(inst);
+  }
+  await showLauncherAlert(result.message);
+}
+
+async function downloadCloudSyncedWorld(item: CloudWorldSyncItemUi, inst: any, overwriteExisting: boolean) {
+  await backend.cloudWorldSyncDownloadWorld({
+    syncWorldId: String(item.id || ""),
+    instanceId: String(inst?.id || ""),
+    worldId: String(item.worldId || ""),
+    overwriteExisting
+  });
+  if (selectedInstanceId === String(inst?.id || "") && selectedInstanceTab === "worlds") {
+    await renderInstanceWorldsPage(inst);
+  }
+  await showLauncherAlert(`Downloaded "${item.worldName || item.worldId || "World"}" from cloud sync.`);
+}
+
 // Ensure cloud sync timer.
 function ensureCloudSyncTimer() {
   if (cloudSyncIntervalId != null) {
@@ -6433,6 +7284,7 @@ function ensureCloudSyncTimer() {
   cloudSyncIntervalId = window.setInterval(() => {
     void guarded(async () => {
       await runCloudSync(false);
+      await autoSyncPickedWorldsIfNeeded();
       renderSettingsPanels();
     });
   }, 5 * 60 * 1000);
@@ -6455,7 +7307,7 @@ function ensureRunningStatusPoll() {
       const nextSignature = buildRunningSignature(allInstances, runningSnapshot);
       if (nextSignature !== lastRunningSignature) {
         lastRunningSignature = nextSignature;
-        await renderInstances();
+        refreshVisibleLaunchAffordances();
       }
     });
   }, 3000);
@@ -6884,6 +7736,15 @@ function renderSettingsPanels() {
   const s = getSettings();
   const premium = hasPremium();
   const currentInstance = getPreferredInstanceContext();
+  const panels: Record<SettingsTabId, HTMLElement> = {
+    general: settingsPanelGeneral,
+    theme: settingsPanelTheme,
+    install: settingsPanelInstall,
+    window: settingsPanelWindow,
+    java: settingsPanelJava,
+    hooks: settingsPanelHooks,
+    profile: settingsPanelProfile
+  };
 
   if (!premium && PREMIUM_THEMES.has(s.theme)) {
     setSettings({ theme: defaultSettings.theme });
@@ -7295,6 +8156,98 @@ function renderSettingsPanels() {
       : "Cloud sync priority: Standard (Premium includes priority syncing)";
     settingsPanelInstall.appendChild(syncPriorityMeta);
 
+    const worldSyncCard = document.createElement("div");
+    worldSyncCard.className = "setRow";
+    worldSyncCard.style.flexDirection = "column";
+    worldSyncCard.style.alignItems = "stretch";
+    worldSyncCard.style.gap = "10px";
+
+    const worldSyncHeader = document.createElement("div");
+    worldSyncHeader.className = "row";
+    worldSyncHeader.style.justifyContent = "space-between";
+    worldSyncHeader.style.alignItems = "center";
+    const worldSyncTitle = document.createElement("div");
+    worldSyncTitle.className = "setLabel";
+    worldSyncTitle.textContent = "World sync storage";
+    const worldSyncPlan = document.createElement("div");
+    worldSyncPlan.className = "muted";
+    worldSyncPlan.style.fontSize = "12px";
+    worldSyncPlan.textContent = `Plan: ${cloudWorldSyncState.summary.planLabel}`;
+    worldSyncHeader.append(worldSyncTitle, worldSyncPlan);
+    worldSyncCard.appendChild(worldSyncHeader);
+
+    const worldSyncCopy = document.createElement("div");
+    worldSyncCopy.className = "setHelp";
+    worldSyncCopy.textContent = `${cloudWorldSyncState.summary.upsellCopy} Pick a world manually from the Worlds tab, then Fishbattery will keep that picked world updated in the cloud every 5 minutes when changes are detected.`;
+    worldSyncCard.appendChild(worldSyncCopy);
+
+    if (cloudWorldSyncState.error) {
+      const error = document.createElement("div");
+      error.className = "setHelp";
+      error.style.color = "#ffb4b4";
+      error.textContent = cloudWorldSyncState.error;
+      worldSyncCard.appendChild(error);
+    } else if (!cloudWorldSyncState.configured) {
+      const unavailable = document.createElement("div");
+      unavailable.className = "setHelp";
+      unavailable.textContent = "World sync storage is not configured right now.";
+      worldSyncCard.appendChild(unavailable);
+    } else {
+      const worldsLabel = document.createElement("div");
+      worldsLabel.className = "muted";
+      worldsLabel.style.fontSize = "12px";
+      worldsLabel.textContent = `Worlds used: ${cloudWorldSyncState.summary.syncedWorldCountUsed} / ${cloudWorldSyncState.summary.syncedWorldCountLimit}`;
+      worldSyncCard.appendChild(worldsLabel);
+      worldSyncCard.appendChild(
+        createUsageBar(
+          cloudWorldSyncState.summary.syncedWorldCountUsed,
+          cloudWorldSyncState.summary.syncedWorldCountLimit,
+          "linear-gradient(90deg, #62c8ff, #2ccf89)"
+        )
+      );
+
+      const storageLabel = document.createElement("div");
+      storageLabel.className = "muted";
+      storageLabel.style.fontSize = "12px";
+      storageLabel.textContent = `Storage used: ${formatBytes(cloudWorldSyncState.summary.storageUsedBytes)} / ${formatBytes(cloudWorldSyncState.summary.storageLimitBytes)}`;
+      worldSyncCard.appendChild(storageLabel);
+      worldSyncCard.appendChild(
+        createUsageBar(
+          cloudWorldSyncState.summary.storageUsedBytes,
+          cloudWorldSyncState.summary.storageLimitBytes,
+          "linear-gradient(90deg, #ffcf5a, #ff8b5e)"
+        )
+      );
+
+      const perWorldLabel = document.createElement("div");
+      perWorldLabel.className = "setHelp";
+      perWorldLabel.textContent = `Per-world limit: ${formatBytes(cloudWorldSyncState.summary.perWorldSizeLimitBytes)}.`;
+      worldSyncCard.appendChild(perWorldLabel);
+
+      if (cloudWorldSyncState.summary.uploadsBlocked) {
+        const blocked = document.createElement("div");
+        blocked.className = "setHelp";
+        blocked.style.color = "#ffd49c";
+        blocked.textContent =
+          cloudWorldSyncState.summary.uploadsBlockedReason ||
+          "Cloud world uploads are blocked until your usage is back within plan limits.";
+        worldSyncCard.appendChild(blocked);
+      }
+
+      if (
+        cloudWorldSyncState.summary.currentPlan === "free" &&
+        (cloudWorldSyncState.summary.uploadsBlocked ||
+          cloudWorldSyncState.summary.syncedWorldCountUsed >= cloudWorldSyncState.summary.syncedWorldCountLimit)
+      ) {
+        const upgradeHint = document.createElement("div");
+        upgradeHint.className = "setHelp";
+        upgradeHint.textContent = "Upgrade to Premium for up to 10 synced worlds and 40 GB total storage.";
+        worldSyncCard.appendChild(upgradeHint);
+      }
+    }
+
+    settingsPanelInstall.appendChild(worldSyncCard);
+
     const actions = document.createElement("div");
     actions.className = "row";
     actions.style.justifyContent = "flex-start";
@@ -7507,7 +8460,7 @@ function renderSettingsPanels() {
   clearPanel(settingsPanelWindow);
   settingsPanelWindow.appendChild(makeH3("Window"));
   {
-    const { row } = makeRow("Fullscreen", "Apply fullscreen immediately and remember it for next launch.");
+    const { row } = makeRow("Fullscreen", "Remember fullscreen for launch. Toggling also applies it right now.");
     const sw = makeToggle(s.fullscreen, async (v) => {
       try {
         const applied = await backend.windowSetFullscreen(v);
@@ -7623,6 +8576,12 @@ function renderSettingsPanels() {
   loading.className = "setHelp";
   loading.textContent = "Loading profile summary...";
   settingsPanelProfile.appendChild(loading);
+
+  for (const [panelKey, panelEl] of Object.entries(panels) as Array<[SettingsTabId, HTMLElement]>) {
+    const isActive = panelKey === activeSettingsTab;
+    panelEl.style.display = isActive ? "" : "none";
+    panelEl.classList.toggle("setPanelActive", isActive);
+  }
 }
 
 // Render profile settings panel.
@@ -7872,7 +8831,7 @@ async function renderProfileSettingsPanel() {
 }
 
 // Set settings tab.
-function setSettingsTab(tab: "general" | "theme" | "install" | "window" | "java" | "hooks" | "profile") {
+function setSettingsTab(tab: SettingsTabId) {
   const btns: Record<string, HTMLElement> = {
     general: settingsTabGeneral,
     theme: settingsTabTheme,
@@ -7890,13 +8849,18 @@ function setSettingsTab(tab: "general" | "theme" | "install" | "window" | "java"
     window: settingsPanelWindow,
     java: settingsPanelJava,
     hooks: settingsPanelHooks,
-    profile: settingsPanelProfile
+      profile: settingsPanelProfile
   };
 
+  activeSettingsTab = tab;
   for (const k of Object.keys(btns)) btns[k].classList.toggle("active", k === tab);
-  for (const k of Object.keys(panels)) panels[k].style.display = k === tab ? "" : "none";
-
   renderSettingsPanels();
+  for (const k of Object.keys(panels)) {
+    const isActive = k === tab;
+    panels[k].style.display = isActive ? "" : "none";
+    panels[k].classList.toggle("setPanelActive", isActive);
+  }
+  animateSettingsPanelSwap(panels[tab]);
   if (tab === "install") {
     void refreshPlayitState(true).then(() => {
       if (settingsTabInstall.classList.contains("active")) renderSettingsPanels();
@@ -9024,6 +9988,9 @@ async function renderInstanceWorldsPage(inst: any) {
     `instanceWorldsList(${String(inst?.id || "")})`
   ).catch(() => ({ worlds: [], savesPath: "" }));
   const worlds = Array.isArray(worldsState?.worlds) ? worldsState.worlds : [];
+  const syncedWorldsForInstance = cloudWorldSyncState.items.filter(
+    (item) => String(item.instanceId || "") === String(inst?.id || "")
+  );
   const data = await withTimeout(backend.serversList(inst.id), 4000, `serversList(${String(inst?.id || "")})`).catch(
     () => ({ servers: [], preferredServerId: null })
   );
@@ -9038,12 +10005,25 @@ async function renderInstanceWorldsPage(inst: any) {
     const haystack = [server.name, server.address, server.notes].filter(Boolean).join(" ").toLowerCase();
     return !search || haystack.includes(search);
   });
+  const remoteOnlyWorlds = syncedWorldsForInstance.filter((item) => {
+    const existsLocally = worlds.some(
+      (world: any) => String(world?.id || world?.folderName || "") === String(item.worldId || "")
+    );
+    if (existsLocally) return false;
+    if (instanceWorldsFilter === "servers") return false;
+    const haystack = [item.worldName, item.worldId].filter(Boolean).join(" ").toLowerCase();
+    return !search || haystack.includes(search);
+  });
 
   instanceWorldsSummary.textContent =
-    `${filteredWorlds.length} world${filteredWorlds.length === 1 ? "" : "s"} • ${filteredServers.length} saved server${filteredServers.length === 1 ? "" : "s"} • Singleplayer saves stay scoped to this instance.`;
+    `${filteredWorlds.length} world${filteredWorlds.length === 1 ? "" : "s"} • ${filteredServers.length} saved server${filteredServers.length === 1 ? "" : "s"} • ${syncedWorldsForInstance.length} cloud sync item${syncedWorldsForInstance.length === 1 ? "" : "s"}.`;
   instanceWorldsListPage.innerHTML = "";
 
   for (const world of filteredWorlds) {
+    const cloudItem = findCloudSyncedWorld(String(inst?.id || ""), String(world?.id || world?.folderName || ""));
+    const syncKey = cloudWorldSyncKey(String(inst?.id || ""), String(world?.id || world?.folderName || ""));
+    const isSyncing = worldSyncInFlight.has(syncKey);
+    const isSynced = isWorldFullySyncedToCloud(world, cloudItem);
     const row = document.createElement("div");
     row.className = "instanceWorldRow";
 
@@ -9067,7 +10047,14 @@ async function renderInstanceWorldsPage(inst: any) {
     desc.textContent = `Folder: ${world.folderName || world.name || "world"}`;
     const sub = document.createElement("div");
     sub.className = "instanceInstalledSubline";
-    sub.textContent = `Singleplayer world • ${formatRelativeTimestamp(Number(world.lastPlayedAt || 0))}`;
+    const subBits = [
+      `Singleplayer world`,
+      formatRelativeTimestamp(Number(world.lastPlayedAt || 0)),
+      cloudItem
+        ? `${isWorldFullySyncedToCloud(world, cloudItem) ? "Synced to cloud" : "Cloud sync needs update"} • ${formatBytes(Number(cloudItem.compressedSizeBytes || 0))}`
+        : "Local only"
+    ].filter(Boolean);
+    sub.textContent = subBits.join(" • ");
     meta.append(title, desc, sub);
     identity.append(thumb, meta);
 
@@ -9078,6 +10065,87 @@ async function renderInstanceWorldsPage(inst: any) {
     openBtn.textContent = "Open folder";
     openBtn.onclick = () => void backend.instanceWorldOpenFolder(inst.id, String(world.id || world.folderName || ""));
     actions.appendChild(openBtn);
+    const syncBtn = document.createElement("button");
+    syncBtn.className = cloudItem && !isSynced ? "btn" : "btn btnPrimary";
+    syncBtn.textContent = isSyncing
+      ? "Syncing..."
+      : isSynced
+        ? "Synced to cloud"
+        : cloudItem
+          ? "Update cloud sync"
+          : "Sync to cloud";
+    syncBtn.disabled =
+      isSyncing ||
+      isSynced ||
+      !state.launcherAccount?.activeAccountId ||
+      !cloudWorldSyncState.configured ||
+      cloudWorldSyncState.loading ||
+      cloudWorldSyncState.summary.uploadsBlocked;
+    syncBtn.title = cloudWorldSyncState.summary.uploadsBlockedReason || "";
+    syncBtn.onclick = () =>
+      void guarded(async () => {
+        await syncWorldToCloud(inst, world);
+      });
+    actions.appendChild(syncBtn);
+    if (cloudItem) {
+      const removeBtn = document.createElement("button");
+      removeBtn.className = "btn";
+      removeBtn.textContent = "Remove sync";
+      removeBtn.onclick = () =>
+        void guarded(async () => {
+          await removeCloudSyncedWorld(cloudItem, inst);
+        });
+      actions.appendChild(removeBtn);
+    }
+    row.append(identity, actions);
+    instanceWorldsListPage.appendChild(row);
+  }
+
+  for (const item of remoteOnlyWorlds) {
+    const row = document.createElement("div");
+    row.className = "instanceWorldRow";
+
+    const identity = document.createElement("div");
+    identity.className = "instanceWorldIdentity";
+
+    const thumb = document.createElement("div");
+    thumb.className = "instanceWorldThumb instanceWorldThumbSingle";
+    thumb.textContent = "CL";
+
+    const meta = document.createElement("div");
+    meta.className = "instanceWorldMeta";
+    const title = document.createElement("strong");
+    title.textContent = item.worldName || item.worldId || "Cloud world";
+    const desc = document.createElement("div");
+    desc.className = "instanceInstalledDescription";
+    desc.textContent = "Stored in cloud sync. Download it to use it on this device.";
+    const sub = document.createElement("div");
+    sub.className = "instanceInstalledSubline";
+    sub.textContent = `Cloud-synced world • ${formatBytes(Number(item.compressedSizeBytes || 0))} • ${formatRelativeTimestamp(Number(item.updatedAt || item.lastSyncedAt || 0))}`;
+    meta.append(title, desc, sub);
+    identity.append(thumb, meta);
+
+    const actions = document.createElement("div");
+    actions.className = "instanceInstalledActions";
+
+    const downloadBtn = document.createElement("button");
+    downloadBtn.className = "btn btnPrimary";
+    downloadBtn.textContent = "Download";
+    downloadBtn.onclick = () =>
+      void guarded(async () => {
+        await downloadCloudSyncedWorld(item, inst, false);
+      });
+    actions.appendChild(downloadBtn);
+
+    const removeBtn = document.createElement("button");
+    removeBtn.className = "btn";
+    removeBtn.textContent = "Remove sync";
+    removeBtn.onclick = () =>
+      void guarded(async () => {
+        await removeCloudSyncedWorld(item, inst);
+      });
+    actions.appendChild(removeBtn);
+
     row.append(identity, actions);
     instanceWorldsListPage.appendChild(row);
   }
@@ -9203,31 +10271,29 @@ async function renderInstancePage() {
     instanceHeroBadges.appendChild(badge);
   }
 
-  let isRunning = false;
-  const setInstancePlayButtonState = (running: boolean) => {
-    isRunning = running;
-    instancePlayBtn.textContent = running ? "Stop" : "Play";
-    instancePlayBtn.classList.toggle("btnPrimary", !running);
-    instancePlayBtn.classList.toggle("btnDanger", running);
-    setButtonAssetIcon(instancePlayBtn, running ? ICON_ASSETS.stop : ICON_ASSETS.play);
+  let playState: InstanceLaunchVisualState = getInstanceLaunchVisualState(instanceId);
+  const setInstancePlayButtonState = (state: InstanceLaunchVisualState) => {
+    playState = state;
+    applyInstanceLaunchButtonState(instancePlayBtn, state);
   };
-  setInstancePlayButtonState(false);
+  setInstancePlayButtonState(playState);
   instancePlayBtn.onclick = () =>
     void guarded(async () => {
-      if (isRunning) {
-        setInstancePlayButtonState(false);
+      if (playState !== "idle") {
+        setInstancePlayButtonState("idle");
         try {
           await backend.launchStop(instanceId);
         } catch (err) {
-          setInstancePlayButtonState(true);
+          setInstancePlayButtonState(getInstanceLaunchVisualState(instanceId));
           throw err;
         }
+        setInstanceLaunchPending(instanceId, false);
       } else {
-        setInstancePlayButtonState(true);
+        setInstancePlayButtonState("launching");
         try {
           await launchForInstance(inst);
         } catch (err) {
-          setInstancePlayButtonState(false);
+          setInstancePlayButtonState("idle");
           throw err;
         }
       }
@@ -9296,12 +10362,12 @@ async function renderInstancePage() {
     .then((running) => {
       if (renderGeneration !== renderInstancePageGeneration) return;
       if (String(selectedInstanceId || "") !== instanceId) return;
-      setInstancePlayButtonState(!!running);
+      setInstancePlayButtonState(running ? "running" : getInstanceLaunchVisualState(instanceId));
     })
     .catch(() => {
       if (renderGeneration !== renderInstancePageGeneration) return;
       if (String(selectedInstanceId || "") !== instanceId) return;
-      setInstancePlayButtonState(false);
+      setInstancePlayButtonState(getInstanceLaunchVisualState(instanceId));
     });
 
   if (selectedInstanceTab === "content") {
@@ -9860,63 +10926,72 @@ async function renderDiscoverPage() {
 // Launch for instance.
 async function launchForInstance(inst: any, serverAddress?: string) {
   const instanceId = String(inst?.id || "").trim();
+  let keepLaunchPending = false;
   if (instanceId) {
     lastLaunchedInstanceId = instanceId;
+    setInstanceLaunchPending(instanceId, true);
   }
-  const accounts = state.accounts?.accounts ?? [];
-  const accountId = inst.accountId || state.accounts?.activeId || (accounts[0]?.id ?? null);
-  if (!accountId) {
-    appendLog("[ui] No account selected.");
-    return;
-  }
+  try {
+    const accounts = state.accounts?.accounts ?? [];
+    const accountId = inst.accountId || state.accounts?.activeId || (accounts[0]?.id ?? null);
+    if (!accountId) {
+      appendLog("[ui] No account selected.");
+      return;
+    }
 
-  const s = getSettings();
-  const validation = await backend.modsValidate(inst.id);
-  const allIssues = validation.issues || [];
-  const blockingIssues = allIssues.filter(isBlockingValidationIssue);
-  const advisoryIssues = allIssues.filter((issue) => !isBlockingValidationIssue(issue));
-  if (blockingIssues.length) {
-    const detail = blockingIssues
-      .slice(0, 8)
-      .map((x) => `- ${x.title}`)
-      .join("\n");
-    const launchAnyway = await showLauncherConfirm(
-      `Critical mod conflicts detected:\n${detail}\n\nUse "Update Mods" or fix duplicates first.\nLaunch anyway?`
+    const s = getSettings();
+    const validation = await backend.modsValidate(inst.id);
+    const allIssues = validation.issues || [];
+    const blockingIssues = allIssues.filter(isBlockingValidationIssue);
+    const advisoryIssues = allIssues.filter((issue) => !isBlockingValidationIssue(issue));
+    if (blockingIssues.length) {
+      const detail = blockingIssues
+        .slice(0, 8)
+        .map((x) => `- ${x.title}`)
+        .join("\n");
+      const launchAnyway = await showLauncherConfirm(
+        `Critical mod conflicts detected:\n${detail}\n\nUse "Update Mods" or fix duplicates first.\nLaunch anyway?`
+      );
+      if (!launchAnyway) return;
+    } else if ((validation.issues || []).length) {
+      appendLog("[validation] Advisory issues detected. Open Mods tab for details.");
+    }
+
+    appendLog(
+      serverAddress
+        ? `[server] Launching ${inst.name} for ${serverAddress}...`
+        : `[ui] Launching ${inst.name}...`
     );
-    if (!launchAnyway) return;
-  } else if ((validation.issues || []).length) {
-    appendLog("[validation] Advisory issues detected. Open Mods tab for details.");
-  }
-
-  appendLog(
-    serverAddress
-      ? `[server] Launching ${inst.name} for ${serverAddress}...`
-      : `[ui] Launching ${inst.name}...`
-  );
-  renderLaunchDiagnosis(null);
-  const launchRes = await backend.launch(inst.id, accountId, {
-    jvmArgs: inst.jvmArgsOverride || s.jvmArgs,
-    preLaunch: s.preLaunch,
-    postExit: s.postExit,
-    serverAddress
-  });
-  if (launchRes?.ok) {
-    recordHomeUsage(HOME_INSTANCE_USAGE_KEY, {
-      id: String(inst.id || ""),
-      label: String(inst.name || "Instance"),
-      subtitle: `${humanizeLoader(getInstanceDisplayLoader(inst))} ${inst.mcVersion || "unknown"}`,
-      sourceLabel: getInstanceSourceLabel(inst),
-      imageUrl: null
+    renderLaunchDiagnosis(null);
+    const launchRes = await backend.launch(inst.id, accountId, {
+      jvmArgs: inst.jvmArgsOverride || s.jvmArgs,
+      preLaunch: s.preLaunch,
+      postExit: s.postExit,
+      serverAddress
     });
-    invalidateHomeData();
-    if (activeView === "home") void renderHomeView(true);
-  }
-  if (!launchRes?.ok) {
-    const errText = String(launchRes?.error || "Unknown launch failure");
-    appendLog(`[launcher] ${errText}`);
-    setStatus(errText);
-    const diag = await runLaunchDiagnosis(inst.id);
-    await maybeOfferRollback(inst.id, diag);
+    if (launchRes?.ok) {
+      keepLaunchPending = true;
+      recordHomeUsage(HOME_INSTANCE_USAGE_KEY, {
+        id: String(inst.id || ""),
+        label: String(inst.name || "Instance"),
+        subtitle: `${humanizeLoader(getInstanceDisplayLoader(inst))} ${inst.mcVersion || "unknown"}`,
+        sourceLabel: getInstanceSourceLabel(inst),
+        imageUrl: null
+      });
+      invalidateHomeData();
+      if (activeView === "home") void renderHomeView(true);
+    }
+    if (!launchRes?.ok) {
+      const errText = String(launchRes?.error || "Unknown launch failure");
+      appendLog(`[launcher] ${errText}`);
+      setStatus(errText);
+      const diag = await runLaunchDiagnosis(inst.id);
+      await maybeOfferRollback(inst.id, diag);
+    }
+  } finally {
+    if (instanceId && !keepLaunchPending) {
+      setInstanceLaunchPending(instanceId, false);
+    }
   }
 }
 
@@ -10590,6 +11665,7 @@ async function promptLauncherSignInOnStartup() {
 async function refreshLauncherSubscription() {
   if (!state.launcherAccount?.activeAccountId) {
     state.launcherSubscription = null;
+    await refreshCloudWorldSyncState();
     return;
   }
   try {
@@ -10597,6 +11673,7 @@ async function refreshLauncherSubscription() {
   } catch {
     state.launcherSubscription = null;
   }
+  await refreshCloudWorldSyncState();
 }
 
 type LauncherAuthFormResult =
@@ -11635,6 +12712,8 @@ type RunningSnapshot = {
   byId: Map<string, boolean>;
 };
 
+type InstanceLaunchVisualState = "idle" | "launching" | "running";
+
 function buildRunningSignature(instances: any[], snapshot: RunningSnapshot): string {
   if (!instances.length) return "";
   return instances
@@ -11678,9 +12757,60 @@ async function getRunningSnapshot(instances: any[]): Promise<RunningSnapshot> {
   for (const check of checks) {
     if (!check.id) continue;
     byId.set(check.id, check.running);
-    if (check.running) count += 1;
+    if (check.running) {
+      launchingInstanceIds.delete(check.id);
+      count += 1;
+    }
   }
   return { count, byId };
+}
+
+function getInstanceLaunchVisualState(instanceId: string, snapshot?: RunningSnapshot | null): InstanceLaunchVisualState {
+  const id = String(instanceId || "").trim();
+  if (!id) return "idle";
+  if (snapshot?.byId.get(id)) return "running";
+  if (launchingInstanceIds.has(id)) return "launching";
+  return "idle";
+}
+
+function applyInstanceLaunchButtonState(
+  btn: HTMLButtonElement | null,
+  state: InstanceLaunchVisualState,
+  idleLabel = "Play",
+  idleIcon = ICON_ASSETS.play
+) {
+  if (!btn) return;
+  const active = state !== "idle";
+  btn.dataset.baseLabel = active ? "Stop" : idleLabel;
+  btn.classList.toggle("btnPrimary", !active);
+  btn.classList.toggle("btnDanger", active);
+  btn.classList.toggle("isLaunching", state === "launching");
+  btn.classList.toggle("isRunning", state === "running");
+  btn.setAttribute("aria-busy", state === "launching" ? "true" : "false");
+  setButtonAssetIcon(btn, active ? ICON_ASSETS.stop : idleIcon);
+}
+
+function refreshVisibleLaunchAffordances(instanceId?: string) {
+  if (activeView === "home") {
+    void renderHomeView(true);
+  }
+  if (activeView !== "library") return;
+  if (librarySurface === "library") {
+    void renderInstances();
+    return;
+  }
+  if (!instanceId || String(selectedInstanceId || "") === String(instanceId || "")) {
+    void renderInstancePage();
+  }
+}
+
+function setInstanceLaunchPending(instanceId: string, pending: boolean) {
+  const id = String(instanceId || "").trim();
+  if (!id) return;
+  const changed = pending ? !launchingInstanceIds.has(id) : launchingInstanceIds.delete(id);
+  if (pending) launchingInstanceIds.add(id);
+  if (!changed) return;
+  refreshVisibleLaunchAffordances(id);
 }
 
 // Open instance editor/workspace with a selected tab.
@@ -11774,7 +12904,9 @@ async function renderInstances() {
   const createInstanceCard = (i: any) => {
     const card = document.createElement("div");
     const instanceType = deriveInstanceType(i);
-    const isRunning = !!runningSnapshot.byId.get(String(i.id || ""));
+    const instanceId = String(i.id || "");
+    const launchState = getInstanceLaunchVisualState(instanceId, runningSnapshot);
+    const isLaunchActive = launchState !== "idle";
     const displayLoader = getInstanceDisplayLoader(i);
     const humanLoader = humanizeLoader(displayLoader);
     const sourceLabel = getInstanceSourceLabel(i);
@@ -11792,7 +12924,8 @@ async function renderInstances() {
       void openInstancePage(i, "content");
     };
     card.classList.toggle("active", String(i.id || "") === String(highlightedId || ""));
-    card.classList.toggle("running", isRunning);
+    card.classList.toggle("running", launchState === "running");
+    card.classList.toggle("launching", launchState === "launching");
 
     const inner = document.createElement("div");
     inner.className = "cardInner instanceCardInner";
@@ -11822,10 +12955,12 @@ async function renderInstances() {
     title.title = i.name ?? "Instance";
     titleRow.appendChild(title);
 
-    if (isRunning) {
+    if (isLaunchActive) {
       const chip = document.createElement("span");
-      chip.className = "instanceStatusChip instanceStatusChipRunning";
-      chip.textContent = "Running";
+      chip.className = `instanceStatusChip ${
+        launchState === "launching" ? "instanceStatusChipLaunching" : "instanceStatusChipRunning"
+      }`;
+      chip.textContent = launchState === "launching" ? "Launching" : "Running";
       titleRow.appendChild(chip);
     }
 
@@ -11856,14 +12991,12 @@ async function renderInstances() {
 
     const btnPlay = document.createElement("button");
     btnPlay.className = "instanceHoverPlay";
-    btnPlay.innerHTML = `
-      <span class="btnIcon btnIconMask" style="--btn-icon-url:url('${ICON_ASSETS.play}')"></span>
-      <span>${isRunning ? "Stop" : "Play"}</span>
-    `;
+    applyInstanceLaunchButtonState(btnPlay, launchState);
     btnPlay.onclick = async (ev) => {
       ev.stopPropagation();
-      if (isRunning) {
+      if (getInstanceLaunchVisualState(instanceId, runningSnapshot) !== "idle") {
         await backend.launchStop(i.id);
+        refreshVisibleLaunchAffordances(instanceId);
       } else {
         await launchForInstance(i);
       }
@@ -14170,6 +15303,7 @@ backend.onLaunchLog((line) => {
   }
   if (lower.includes("[launcher] game exited")) {
     if (active) {
+      setInstanceLaunchPending(String(active), false);
       void disablePlayitAutoTunnelForInstance(String(active), "game exited");
     }
     resetPlayitAutoTunnelState();

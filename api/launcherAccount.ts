@@ -228,7 +228,7 @@ function shouldInvalidateLocalSession(statusCode: number, message: string): bool
 
 async function requestAuth(
   path: string,
-  init: { method: "GET" | "POST" | "PUT" | "PATCH"; body?: Record<string, unknown>; accessToken?: string }
+  init: { method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE"; body?: Record<string, unknown>; accessToken?: string }
 ): Promise<AuthResponse> {
   const base = getApiBase();
   if (!base) throw new Error("Launcher account API is not configured.");
@@ -276,7 +276,7 @@ async function requestAuth(
 
 export async function requestLauncherAccountAuthed(
   path: string,
-  init: { method: "GET" | "POST" | "PUT" | "PATCH"; body?: Record<string, unknown> }
+  init: { method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE"; body?: Record<string, unknown> }
 ): Promise<AuthResponse> {
   const session = loadSession();
   if (!session?.accessToken) throw new Error("Not signed in.");

@@ -127,9 +127,13 @@ declare global {
           id: string;
           name: string;
           tier: "free" | "premium" | "founder";
+          accountId?: string | null;
+          source?: string | null;
           fileName: string;
           fullPath: string;
           previewDataUrl: string;
+          downloadUrl?: string | null;
+          fileDataUrl?: string | null;
         }>;
       }>;
       capesGetLocalSelection: (accountId: string) => Promise<{
@@ -139,6 +143,19 @@ declare global {
       capesSetLocalSelection: (accountId: string, capeId: string | null) => Promise<{
         accountId: string;
         capeId: string | null;
+      }>;
+      capesUploadLocalCustom: (accountId: string, imageDataUrl: string) => Promise<{
+        roots: string[];
+        items: Array<{
+          id: string;
+          name: string;
+          tier: "free" | "premium" | "founder";
+          accountId?: string | null;
+          source?: string | null;
+          fileName: string;
+          fullPath: string;
+          previewDataUrl: string;
+        }>;
       }>;
       windowSetTitleBarTheme: (color: string, symbolColor: string) => Promise<boolean>;
 
@@ -235,7 +252,9 @@ declare global {
         error: string | null;
       }>;
       launcherAccountGetSubscriptionStatus: () => Promise<{
-        tier: "free" | "premium" | "founder";
+          tier: "free" | "premium" | "founder";
+          accountId?: string | null;
+          source?: string | null;
         premium: boolean;
         source: "server";
         features: {
@@ -286,6 +305,90 @@ declare global {
           remoteSettingsUpdatedAt: number;
           remoteInstancesUpdatedAt: number;
         };
+      }>;
+      cloudWorldSyncGetState: () => Promise<{
+        configured: boolean;
+        summary: {
+          currentPlan: "free" | "premium";
+          subscriptionTier: "free" | "premium" | "founder";
+          planLabel: "Free" | "Premium";
+          syncedWorldCountUsed: number;
+          syncedWorldCountLimit: number;
+          storageUsedBytes: number;
+          storageLimitBytes: number;
+          perWorldSizeLimitBytes: number;
+          uploadsBlocked: boolean;
+          uploadsBlockedReason: string | null;
+          upsellCopy: string;
+        };
+        items: Array<{
+          id: string;
+          instanceId: string;
+          worldId: string;
+          worldName: string;
+          objectKey: string;
+          compressedSizeBytes: number;
+          etag: string | null;
+          createdAt: number;
+          updatedAt: number;
+          lastSyncedAt: number;
+        }>;
+      }>;
+      cloudWorldSyncUploadWorld: (payload: {
+        instanceId: string;
+        worldId: string;
+        worldName?: string;
+      }) => Promise<{
+        message: string;
+        item: {
+          id: string;
+          instanceId: string;
+          worldId: string;
+          worldName: string;
+          objectKey: string;
+          compressedSizeBytes: number;
+          etag: string | null;
+          createdAt: number;
+          updatedAt: number;
+          lastSyncedAt: number;
+        } | null;
+        summary: {
+          currentPlan: "free" | "premium";
+          subscriptionTier: "free" | "premium" | "founder";
+          planLabel: "Free" | "Premium";
+          syncedWorldCountUsed: number;
+          syncedWorldCountLimit: number;
+          storageUsedBytes: number;
+          storageLimitBytes: number;
+          perWorldSizeLimitBytes: number;
+          uploadsBlocked: boolean;
+          uploadsBlockedReason: string | null;
+          upsellCopy: string;
+        };
+      }>;
+      cloudWorldSyncRemoveWorld: (syncWorldId: string) => Promise<{
+        message: string;
+        summary: {
+          currentPlan: "free" | "premium";
+          subscriptionTier: "free" | "premium" | "founder";
+          planLabel: "Free" | "Premium";
+          syncedWorldCountUsed: number;
+          syncedWorldCountLimit: number;
+          storageUsedBytes: number;
+          storageLimitBytes: number;
+          perWorldSizeLimitBytes: number;
+          uploadsBlocked: boolean;
+          uploadsBlockedReason: string | null;
+          upsellCopy: string;
+        };
+      }>;
+      cloudWorldSyncDownloadWorld: (payload: {
+        syncWorldId: string;
+        instanceId: string;
+        worldId: string;
+        overwriteExisting?: boolean;
+      }) => Promise<{
+        downloadedBytes: number;
       }>;
       playitExchangeSetupCode: (code: string) => Promise<{
         ok: true;

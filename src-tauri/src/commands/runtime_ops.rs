@@ -6,6 +6,9 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
+use futures_util::TryStreamExt;
+use http_body::Frame;
+use http_body_util::StreamBody;
 use rfd::FileDialog;
 use rusqlite::Connection;
 use serde::de::DeserializeOwned;
@@ -13,6 +16,8 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use tauri::command;
 use tauri::Manager;
+use tokio::fs::File as TokioFile;
+use tokio_util::io::ReaderStream;
 use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, ZipArchive, ZipWriter};
 
@@ -1145,6 +1150,39 @@ fn collect_files_recursive(root: &Path, current: &Path, out: &mut Vec<PathBuf>) 
     Ok(())
 }
 
+fn world_sync_temp_root() -> AppResult<PathBuf> {
+    let dir = std::env::temp_dir().join("fishbattery-launcher").join("world-sync");
+    fs::create_dir_all(&dir).map_err(into_error)?;
+    Ok(dir)
+}
+
+fn extract_world_sync_archive(archive_path: &Path, target_dir: &Path) -> AppResult<()> {
+    let mut archive =
+        ZipArchive::new(fs::File::open(archive_path).map_err(into_error)?).map_err(into_error)?;
+    fs::create_dir_all(target_dir).map_err(into_error)?;
+    for i in 0..archive.len() {
+        let mut entry = archive.by_index(i).map_err(into_error)?;
+        let entry_name = entry.name().replace('\\', "/");
+        if entry_name.trim().is_empty() {
+            continue;
+        }
+        if !is_safe_relative_archive_path(&entry_name) {
+            continue;
+        }
+        let target = target_dir.join(&entry_name);
+        if entry.is_dir() {
+            fs::create_dir_all(&target).map_err(into_error)?;
+            continue;
+        }
+        if let Some(parent) = target.parent() {
+            fs::create_dir_all(parent).map_err(into_error)?;
+        }
+        let mut out = fs::File::create(&target).map_err(into_error)?;
+        std::io::copy(&mut entry, &mut out).map_err(into_error)?;
+    }
+    Ok(())
+}
+
 fn make_import_instance_id() -> String {
     format!("imp-{}", now_ms())
 }
@@ -1687,6 +1725,180 @@ pub fn instance_worlds_list(app: tauri::AppHandle, instance_id: String) -> AppRe
       "instanceId": safe_id,
       "savesPath": saves_dir.to_string_lossy().to_string(),
       "worlds": worlds
+    }))
+}
+
+#[command]
+pub fn instance_world_sync_prepare_archive(
+    app: tauri::AppHandle,
+    instance_id: String,
+    world_id: String,
+) -> AppResult<Value> {
+    let safe_id = validate_id(&instance_id)?;
+    let world_folder = safe_basename(&world_id);
+    if world_folder.trim().is_empty() {
+        return Err("instanceWorldSyncPrepareArchive: invalid world id".to_string());
+    }
+    let world_dir = instance_dir(&app, &safe_id)?.join("saves").join(&world_folder);
+    if !world_dir.exists() || !world_dir.is_dir() {
+        return Err("instanceWorldSyncPrepareArchive: world folder not found".to_string());
+    }
+
+    let mut files = Vec::new();
+    collect_files_recursive(&world_dir, &world_dir, &mut files)?;
+    if files.is_empty() {
+        return Err("instanceWorldSyncPrepareArchive: world folder is empty".to_string());
+    }
+
+    let temp_root = world_sync_temp_root()?;
+    let archive_path = temp_root.join(format!(
+        "{}-{}-{}.zip",
+        sanitize_file_name(&safe_id),
+        sanitize_file_name(&world_folder),
+        now_ms()
+    ));
+    let mut zip = ZipWriter::new(fs::File::create(&archive_path).map_err(into_error)?);
+    let opts = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+
+    for path in files {
+        let rel = path
+            .strip_prefix(&world_dir)
+            .map_err(into_error)?
+            .to_string_lossy()
+            .replace('\\', "/");
+        if !is_safe_relative_archive_path(&rel) {
+            continue;
+        }
+        zip.start_file(rel, opts).map_err(into_error)?;
+        let mut input = fs::File::open(&path).map_err(into_error)?;
+        std::io::copy(&mut input, &mut zip).map_err(into_error)?;
+    }
+    zip.finish().map_err(into_error)?;
+
+    let archive_meta = fs::metadata(&archive_path).map_err(into_error)?;
+    Ok(json!({
+      "instanceId": safe_id,
+      "worldId": world_folder,
+      "worldName": world_folder,
+      "archivePath": archive_path.to_string_lossy().to_string(),
+      "compressedSizeBytes": archive_meta.len()
+    }))
+}
+
+#[command]
+pub async fn world_sync_upload_archive(
+    file_path: String,
+    upload_url: String,
+    content_type: Option<String>,
+) -> AppResult<Value> {
+    let path = PathBuf::from(file_path.trim());
+    if !path.exists() || !path.is_file() {
+        return Err("worldSyncUploadArchive: archive file not found".to_string());
+    }
+    let file = TokioFile::open(&path).await.map_err(into_error)?;
+    let size = file.metadata().await.map_err(into_error)?.len();
+    let stream = ReaderStream::new(file);
+    let body = reqwest::Body::wrap(StreamBody::new(stream.map_ok(Frame::data)));
+    let client = reqwest::Client::new();
+    let response = client
+        .put(upload_url.trim())
+        .header(
+            reqwest::header::CONTENT_TYPE,
+            content_type.unwrap_or_else(|| "application/zip".to_string()),
+        )
+        .header(reqwest::header::CONTENT_LENGTH, size.to_string())
+        .body(body)
+        .send()
+        .await
+        .map_err(into_error)?;
+    let status = response.status();
+    if !status.is_success() {
+        return Err(format!(
+            "worldSyncUploadArchive: upload failed with status {}",
+            status.as_u16()
+        ));
+    }
+    let etag = response
+        .headers()
+        .get(reqwest::header::ETAG)
+        .and_then(|v| v.to_str().ok())
+        .map(|v| v.trim_matches('"').to_string());
+    fs::remove_file(&path).map_err(into_error)?;
+    Ok(json!({
+      "ok": true,
+      "uploadedBytes": size,
+      "etag": etag
+    }))
+}
+
+#[command]
+pub fn world_sync_remove_temp_file(file_path: String) -> AppResult<Value> {
+    let path = PathBuf::from(file_path.trim());
+    if path.exists() && path.is_file() {
+        fs::remove_file(&path).map_err(into_error)?;
+    }
+    Ok(json!({ "ok": true }))
+}
+
+#[command]
+pub async fn world_sync_download_and_extract(
+    app: tauri::AppHandle,
+    instance_id: String,
+    world_id: String,
+    download_url: String,
+    overwrite_existing: bool,
+) -> AppResult<Value> {
+    let safe_id = validate_id(&instance_id)?;
+    let world_folder = safe_basename(&world_id);
+    if world_folder.trim().is_empty() {
+        return Err("worldSyncDownloadAndExtract: invalid world id".to_string());
+    }
+    let saves_dir = instance_dir(&app, &safe_id)?.join("saves");
+    fs::create_dir_all(&saves_dir).map_err(into_error)?;
+    let target_dir = saves_dir.join(&world_folder);
+    if target_dir.exists() {
+        if !overwrite_existing {
+            return Err("worldSyncDownloadAndExtract: local world already exists".to_string());
+        }
+        fs::remove_dir_all(&target_dir).map_err(into_error)?;
+    }
+
+    let temp_root = world_sync_temp_root()?;
+    let archive_path = temp_root.join(format!(
+        "{}-{}-download-{}.zip",
+        sanitize_file_name(&safe_id),
+        sanitize_file_name(&world_folder),
+        now_ms()
+    ));
+    let client = reqwest::Client::new();
+    let mut response = client
+        .get(download_url.trim())
+        .send()
+        .await
+        .map_err(into_error)?
+        .error_for_status()
+        .map_err(into_error)?;
+    let mut out = TokioFile::create(&archive_path).await.map_err(into_error)?;
+    let mut downloaded_bytes = 0u64;
+    while let Some(chunk) = response.chunk().await.map_err(into_error)? {
+        tokio::io::AsyncWriteExt::write_all(&mut out, &chunk)
+            .await
+            .map_err(into_error)?;
+        downloaded_bytes += chunk.len() as u64;
+    }
+    tokio::io::AsyncWriteExt::flush(&mut out)
+        .await
+        .map_err(into_error)?;
+    drop(out);
+
+    extract_world_sync_archive(&archive_path, &target_dir)?;
+    fs::remove_file(&archive_path).map_err(into_error)?;
+    Ok(json!({
+      "ok": true,
+      "instanceId": safe_id,
+      "worldId": world_folder,
+      "path": target_dir.to_string_lossy().to_string(),
+      "downloadedBytes": downloaded_bytes
     }))
 }
 

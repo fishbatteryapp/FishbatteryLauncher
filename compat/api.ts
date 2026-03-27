@@ -1,6 +1,12 @@
 import { invoke } from "@tauri-apps/api/core";
 import { cloudSyncGetState, cloudSyncSyncNow } from "@/api/cloudSync";
 import {
+  cloudWorldSyncDownloadWorld,
+  cloudWorldSyncGetState,
+  cloudWorldSyncRemoveWorld,
+  cloudWorldSyncUploadWorld
+} from "@/api/cloudWorlds";
+import {
   launcherAccountBillingPortal,
   launcherAccountCheckout,
   launcherAccountGetState,
@@ -43,6 +49,16 @@ const explicitApiMethods: Record<string, (...args: any[]) => Promise<unknown>> =
     policy?: "ask" | "newer-wins" | "prefer-local" | "prefer-cloud";
     resolveConflict?: boolean;
   }) => cloudSyncSyncNow(payload),
+  cloudWorldSyncGetState: () => cloudWorldSyncGetState(),
+  cloudWorldSyncUploadWorld: (payload: { instanceId: string; worldId: string; worldName?: string }) =>
+    cloudWorldSyncUploadWorld(payload),
+  cloudWorldSyncRemoveWorld: (syncWorldId: string) => cloudWorldSyncRemoveWorld(syncWorldId),
+  cloudWorldSyncDownloadWorld: (payload: {
+    syncWorldId: string;
+    instanceId: string;
+    worldId: string;
+    overwriteExisting?: boolean;
+  }) => cloudWorldSyncDownloadWorld(payload),
   profileGetSummary: () => profileGetSummary(),
   profileGetVisibility: () => profileGetVisibility(),
   profileSetVisibility: (publicEnabled: boolean) => profileSetVisibility(publicEnabled),
