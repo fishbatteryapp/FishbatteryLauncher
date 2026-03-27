@@ -1041,6 +1041,43 @@ fn find_existing_mod_file(
     Ok(None)
 }
 
+fn find_existing_content_file(
+    app: &tauri::AppHandle,
+    instance_id: &str,
+    kind: &str,
+    name: &str,
+) -> AppResult<Option<PathBuf>> {
+    if kind == "mods" {
+        return find_existing_mod_file(app, instance_id, name);
+    }
+    let dir = ensure_content_dir(app, instance_id, kind)?;
+    let target = safe_basename(name);
+    let target_lower = target.to_ascii_lowercase();
+    let direct = dir.join(&target);
+    if direct.exists() && direct.is_file() {
+        return Ok(Some(direct));
+    }
+    let entries = match fs::read_dir(&dir) {
+        Ok(v) => v,
+        Err(_) => return Ok(None),
+    };
+    for ent in entries.flatten() {
+        let path = ent.path();
+        let meta = match ent.metadata() {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+        if !meta.is_file() {
+            continue;
+        }
+        let fname = ent.file_name().to_string_lossy().to_string();
+        if fname.to_ascii_lowercase() == target_lower {
+            return Ok(Some(path));
+        }
+    }
+    Ok(None)
+}
+
 fn ensure_content_dir(app: &tauri::AppHandle, instance_id: &str, kind: &str) -> AppResult<PathBuf> {
     if kind == "mods" {
         return resolve_instance_mods_dir(app, instance_id);
@@ -1359,18 +1396,6 @@ pub fn instances_create(app: tauri::AppHandle, cfg: Value) -> AppResult<Value> {
 }
 
 #[command]
-pub fn instances_set_active(app: tauri::AppHandle, id: Option<String>) -> AppResult<Value> {
-    let mut db = read_db(&app)?;
-    db["activeInstanceId"] = match id {
-        Some(v) => Value::String(validate_id(&v)?),
-        None => Value::Null,
-    };
-    db["updatedAt"] = json!(now_ms());
-    write_db(&app, &db)?;
-    Ok(db)
-}
-
-#[command]
 pub fn instances_update(app: tauri::AppHandle, id: String, patch: Value) -> AppResult<Value> {
     let safe_id = validate_id(&id)?;
     let mut db = read_db(&app)?;
@@ -1488,28 +1513,181 @@ pub fn instances_open_folder(app: tauri::AppHandle, id: String) -> AppResult<Str
     let safe_id = validate_id(&id)?;
     let dir = instance_dir(&app, &safe_id)?;
     fs::create_dir_all(&dir).map_err(into_error)?;
+    open_directory_in_shell(&dir)?;
+    Ok(dir.to_string_lossy().to_string())
+}
+
+fn open_directory_in_shell(dir: &Path) -> AppResult<()> {
     #[cfg(target_os = "windows")]
     {
         std::process::Command::new("explorer")
-            .arg(&dir)
+            .arg(dir)
             .spawn()
             .map_err(into_error)?;
     }
     #[cfg(target_os = "macos")]
     {
         std::process::Command::new("open")
-            .arg(&dir)
+            .arg(dir)
             .spawn()
             .map_err(into_error)?;
     }
     #[cfg(all(unix, not(target_os = "macos")))]
     {
         std::process::Command::new("xdg-open")
-            .arg(&dir)
+            .arg(dir)
             .spawn()
             .map_err(into_error)?;
     }
-    Ok(String::new())
+    Ok(())
+}
+
+#[command]
+pub fn instances_open_subfolder(
+    app: tauri::AppHandle,
+    id: String,
+    folder: String,
+) -> AppResult<String> {
+    let safe_id = validate_id(&id)?;
+    let folder_norm = folder.trim().to_ascii_lowercase();
+    let dir = match folder_norm.as_str() {
+        "" | "root" | "instance" => instance_dir(&app, &safe_id)?,
+        "mods" => resolve_instance_mods_dir(&app, &safe_id)?,
+        "resourcepacks" | "shaderpacks" => ensure_content_dir(&app, &safe_id, &folder_norm)?,
+        "saves" | "worlds" => {
+            let dir = instance_dir(&app, &safe_id)?.join("saves");
+            fs::create_dir_all(&dir).map_err(into_error)?;
+            dir
+        }
+        _ => return Err("instancesOpenSubfolder: invalid folder".to_string()),
+    };
+    open_directory_in_shell(&dir)?;
+    Ok(dir.to_string_lossy().to_string())
+}
+
+#[command]
+pub fn instance_world_open_folder(
+    app: tauri::AppHandle,
+    instance_id: String,
+    world_id: String,
+) -> AppResult<String> {
+    let safe_id = validate_id(&instance_id)?;
+    let world_folder = safe_basename(&world_id);
+    if world_folder.trim().is_empty() {
+        return Err("instanceWorldOpenFolder: invalid world id".to_string());
+    }
+    let saves_dir = instance_dir(&app, &safe_id)?.join("saves");
+    fs::create_dir_all(&saves_dir).map_err(into_error)?;
+    let dir = saves_dir.join(world_folder);
+    if !dir.exists() || !dir.is_dir() {
+        return Err("instanceWorldOpenFolder: world folder not found".to_string());
+    }
+    open_directory_in_shell(&dir)?;
+    Ok(dir.to_string_lossy().to_string())
+}
+
+#[command]
+pub fn content_reveal_file(
+    app: tauri::AppHandle,
+    instance_id: String,
+    kind: String,
+    name: String,
+) -> AppResult<String> {
+    let safe_id = validate_id(&instance_id)?;
+    let kind_norm = kind.trim().to_ascii_lowercase();
+    let path = find_existing_content_file(&app, &safe_id, &kind_norm, &name)?
+        .ok_or_else(|| "Content file not found".to_string())?;
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("explorer")
+            .arg("/select,")
+            .arg(&path)
+            .spawn()
+            .map_err(into_error)?;
+    }
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg("-R")
+            .arg(&path)
+            .spawn()
+            .map_err(into_error)?;
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        let parent = path.parent().unwrap_or(path.as_path());
+        std::process::Command::new("xdg-open")
+            .arg(parent)
+            .spawn()
+            .map_err(into_error)?;
+    }
+    Ok(path.to_string_lossy().to_string())
+}
+
+#[command]
+pub fn instance_worlds_list(app: tauri::AppHandle, instance_id: String) -> AppResult<Value> {
+    let safe_id = validate_id(&instance_id)?;
+    let saves_dir = instance_dir(&app, &safe_id)?.join("saves");
+    fs::create_dir_all(&saves_dir).map_err(into_error)?;
+
+    let mut worlds = Vec::new();
+    for entry in fs::read_dir(&saves_dir).map_err(into_error)? {
+        let entry = entry.map_err(into_error)?;
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+        let level_dat = path.join("level.dat");
+        if !level_dat.exists() {
+            continue;
+        }
+
+        let metadata = fs::metadata(&level_dat)
+            .or_else(|_| fs::metadata(&path))
+            .map_err(into_error)?;
+        let last_played_at = metadata
+            .modified()
+            .ok()
+            .and_then(|ts| ts.duration_since(UNIX_EPOCH).ok())
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(0);
+
+        let icon_path = path.join("icon.png");
+        let icon_data_url = if icon_path.exists() {
+            match fs::read(&icon_path) {
+                Ok(bytes) if !bytes.is_empty() => Some(format!(
+                    "data:image/png;base64,{}",
+                    STANDARD.encode(bytes)
+                )),
+                _ => None,
+            }
+        } else {
+            None
+        };
+
+        let folder_name = entry.file_name().to_string_lossy().to_string();
+        worlds.push(json!({
+          "id": folder_name,
+          "name": folder_name,
+          "folderName": entry.file_name().to_string_lossy().to_string(),
+          "path": path.to_string_lossy().to_string(),
+          "iconDataUrl": icon_data_url,
+          "lastPlayedAt": last_played_at,
+          "hasIcon": icon_path.exists()
+        }));
+    }
+
+    worlds.sort_by(|a, b| {
+        let a_ts = a.get("lastPlayedAt").and_then(|v| v.as_u64()).unwrap_or(0);
+        let b_ts = b.get("lastPlayedAt").and_then(|v| v.as_u64()).unwrap_or(0);
+        b_ts.cmp(&a_ts)
+    });
+
+    Ok(json!({
+      "instanceId": safe_id,
+      "savesPath": saves_dir.to_string_lossy().to_string(),
+      "worlds": worlds
+    }))
 }
 
 #[command]
@@ -2028,16 +2206,238 @@ fn lockfile_apply_result() -> Value {
     })
 }
 
+async fn apply_pack_archive_to_instance_from_path(
+    app: tauri::AppHandle,
+    safe_id: String,
+    zip_path: PathBuf,
+    payload: Value,
+) -> AppResult<Value> {
+    let mut archive =
+        ZipArchive::new(fs::File::open(&zip_path).map_err(into_error)?).map_err(into_error)?;
+    let mut names = Vec::new();
+    for i in 0..archive.len() {
+        let entry = archive.by_index(i).map_err(into_error)?;
+        names.push(entry.name().replace('\\', "/"));
+    }
+
+    let has_modrinth = names.iter().any(|n| n == "modrinth.index.json");
+    let has_curseforge = names.iter().any(|n| n == "manifest.json");
+    let detected_format = if has_modrinth {
+        "modrinth"
+    } else if has_curseforge {
+        "curseforge"
+    } else {
+        "generic"
+    };
+
+    let current = find_instance_record(&app, &safe_id)?;
+    let mut mc_version = current
+        .get("mcVersion")
+        .and_then(|v| v.as_str())
+        .map(str::to_string)
+        .unwrap_or_else(|| "1.21.1".to_string());
+    let mut loader = current
+        .get("loader")
+        .and_then(|v| v.as_str())
+        .map(str::to_string)
+        .unwrap_or_else(|| "vanilla".to_string());
+    let mut notes: Vec<String> = Vec::new();
+    let mut modrinth_index: Option<MrpackIndex> = None;
+    let mut curseforge_manifest: Option<Value> = None;
+
+    if detected_format == "modrinth" {
+        if let Ok(mut idx) = archive.by_name("modrinth.index.json") {
+            let mut raw = String::new();
+            idx.read_to_string(&mut raw).map_err(into_error)?;
+            if let Ok(parsed) = serde_json::from_str::<Value>(&raw) {
+                if let Some(v) = parsed
+                    .get("dependencies")
+                    .and_then(|d| d.get("minecraft"))
+                    .and_then(|x| x.as_str())
+                {
+                    mc_version = v.to_string();
+                }
+                if let Some(deps) = parsed.get("dependencies").and_then(|d| d.as_object()) {
+                    for candidate in ["fabric-loader", "quilt-loader", "neoforge", "forge"] {
+                        if deps.get(candidate).is_some() {
+                            loader = match candidate {
+                                "fabric-loader" => "fabric",
+                                "quilt-loader" => "quilt",
+                                "neoforge" => "neoforge",
+                                "forge" => "forge",
+                                _ => "vanilla",
+                            }
+                            .to_string();
+                            break;
+                        }
+                    }
+                }
+            }
+            if let Ok(parsed_index) = serde_json::from_str::<MrpackIndex>(&raw) {
+                modrinth_index = Some(parsed_index);
+            }
+            notes.push(
+                "Modrinth archive applied into the current instance with dependency resolution."
+                    .to_string(),
+            );
+        }
+    } else if detected_format == "curseforge" {
+        if let Ok(mut mf) = archive.by_name("manifest.json") {
+            let mut raw = String::new();
+            mf.read_to_string(&mut raw).map_err(into_error)?;
+            if let Ok(manifest) = serde_json::from_str::<Value>(&raw) {
+                if let Some(v) = manifest
+                    .get("minecraft")
+                    .and_then(|x| x.get("version"))
+                    .and_then(|x| x.as_str())
+                {
+                    mc_version = v.to_string();
+                }
+                loader = detect_loader_from_curseforge_manifest(&manifest);
+                curseforge_manifest = Some(manifest);
+            }
+            notes.push(
+                "CurseForge manifest applied into the current instance with dependency resolution."
+                    .to_string(),
+            );
+        }
+    } else {
+        notes.push("Generic archive applied into the current instance.".to_string());
+    }
+
+    let out_root = instance_dir(&app, &safe_id)?;
+    if let Some(index) = modrinth_index.as_ref() {
+        let downloaded = import_modrinth_archive_dependencies(&out_root, index).await?;
+        if downloaded > 0 {
+            notes.push(format!(
+                "Downloaded {downloaded} files from Modrinth archive metadata."
+            ));
+        }
+    }
+    if let Some(manifest) = curseforge_manifest.as_ref() {
+        let downloaded = import_curseforge_manifest_dependencies(&app, &out_root, manifest).await?;
+        if downloaded > 0 {
+            notes.push(format!(
+                "Downloaded {downloaded} required files from CurseForge manifest."
+            ));
+        }
+    }
+    let mut extracted_any = false;
+    for i in 0..archive.len() {
+        let mut entry = archive.by_index(i).map_err(into_error)?;
+        if !entry.is_file() {
+            continue;
+        }
+        let entry_name = entry.name().replace('\\', "/");
+        let rel_opt = archive_entry_relative_path(&entry_name, detected_format);
+        let Some(rel) = rel_opt else {
+            continue;
+        };
+        if rel.trim().is_empty() || !is_safe_relative_archive_path(&rel) {
+            continue;
+        }
+        let out = out_root.join(rel);
+        if let Some(parent) = out.parent() {
+            fs::create_dir_all(parent).map_err(into_error)?;
+        }
+        let mut writer = fs::File::create(out).map_err(into_error)?;
+        std::io::copy(&mut entry, &mut writer).map_err(into_error)?;
+        extracted_any = true;
+    }
+    if !extracted_any {
+        return Err("pack_archive_apply_to_instance: archive has no importable files".to_string());
+    }
+
+    let mut patch = json!({
+      "mcVersion": mc_version,
+      "loader": loader,
+      "fabricLoaderVersion": Value::Null,
+      "quiltLoaderVersion": Value::Null,
+      "forgeVersion": Value::Null,
+      "neoforgeVersion": Value::Null
+    });
+    if loader != "vanilla" {
+        let resolved = loader_pick_version(loader.clone(), mc_version.clone()).await?;
+        match loader.as_str() {
+            "fabric" => patch["fabricLoaderVersion"] = json!(resolved),
+            "quilt" => patch["quiltLoaderVersion"] = json!(resolved),
+            "forge" => patch["forgeVersion"] = json!(resolved),
+            "neoforge" => patch["neoforgeVersion"] = json!(resolved),
+            _ => {}
+        }
+    }
+    if let Some(memory_mb) = payload
+        .get("defaults")
+        .and_then(|v| v.get("memoryMb"))
+        .and_then(|v| v.as_u64())
+    {
+        patch["memoryMb"] = json!(memory_mb);
+    }
+
+    let updated = instances_update(app.clone(), safe_id, patch)?;
+    Ok(json!({
+      "ok": true,
+      "canceled": false,
+      "result": {
+        "instance": updated,
+        "detectedFormat": detected_format,
+        "notes": notes
+      }
+    }))
+}
+
 #[command]
-pub fn instances_import_into(app: tauri::AppHandle, instance_id: String) -> AppResult<Value> {
+pub async fn instances_import_into(app: tauri::AppHandle, instance_id: String) -> AppResult<Value> {
     let safe_id = validate_id(&instance_id)?;
     let picked = FileDialog::new()
-        .set_title("Import Into Instance")
-        .add_filter("Zip archive", &["zip"])
+        .set_title("Import Archive Into Instance")
+        .add_filter("Archives", &["zip", "mrpack"])
         .pick_file();
     let Some(zip_path) = picked else {
         return Ok(json!({ "ok": false, "canceled": true }));
     };
+
+    let mut import_probe =
+        ZipArchive::new(fs::File::open(&zip_path).map_err(into_error)?).map_err(into_error)?;
+    let mut probe_names = Vec::new();
+    for i in 0..import_probe.len() {
+        let entry = import_probe.by_index(i).map_err(into_error)?;
+        probe_names.push(entry.name().replace('\\', "/"));
+    }
+    let is_mrpack = zip_path
+        .extension()
+        .and_then(|v| v.to_str())
+        .map(|v| v.eq_ignore_ascii_case("mrpack"))
+        .unwrap_or(false);
+    let has_instance_entries = probe_names.iter().any(|n| n.starts_with("instance/"));
+    let has_modrinth_index = probe_names.iter().any(|n| n == "modrinth.index.json");
+    let has_curseforge_manifest = probe_names.iter().any(|n| n == "manifest.json");
+    if !has_instance_entries && (is_mrpack || has_modrinth_index || has_curseforge_manifest) {
+        let applied = apply_pack_archive_to_instance_from_path(
+            app.clone(),
+            safe_id.clone(),
+            zip_path,
+            json!({ "provider": "auto", "defaults": {} }),
+        )
+        .await?;
+        return Ok(json!({
+          "ok": true,
+          "canceled": false,
+          "instance": applied
+            .get("result")
+            .and_then(|v| v.get("instance"))
+            .cloned()
+            .unwrap_or(Value::Null),
+          "lockfileApplied": false,
+          "lockfileResult": Value::Null,
+          "importKind": "pack",
+          "detectedFormat": applied
+            .get("result")
+            .and_then(|v| v.get("detectedFormat"))
+            .cloned()
+            .unwrap_or(Value::Null)
+        }));
+    }
 
     let mut archive =
         ZipArchive::new(fs::File::open(&zip_path).map_err(into_error)?).map_err(into_error)?;
@@ -2134,7 +2534,9 @@ pub fn instances_import_into(app: tauri::AppHandle, instance_id: String) -> AppR
       "canceled": false,
       "instance": instance,
       "lockfileApplied": lockfile_applied,
-      "lockfileResult": lockfile_result
+      "lockfileResult": lockfile_result,
+      "importKind": "instance",
+      "detectedFormat": Value::Null
     }))
 }
 
@@ -2540,7 +2942,7 @@ pub async fn local_mods_metadata(
         if !trimmed.is_empty() {
             unique.insert(trimmed);
         }
-        if unique.len() >= 30 {
+        if unique.len() >= 250 {
             break;
         }
     }
@@ -2727,7 +3129,7 @@ pub async fn local_packs_metadata(
         if !trimmed.is_empty() {
             unique.insert(trimmed);
         }
-        if unique.len() >= 30 {
+        if unique.len() >= 250 {
             break;
         }
     }
@@ -2815,6 +3217,470 @@ pub async fn local_packs_metadata(
     }
 
     Ok(json!({ "items": out }))
+}
+
+#[derive(Clone)]
+struct LocalContentGroup {
+    kind: String,
+    title: String,
+    source: Option<String>,
+    project_id: Option<String>,
+    names: Vec<String>,
+}
+
+fn upsert_local_content_group(
+    groups: &mut HashMap<String, LocalContentGroup>,
+    kind: &str,
+    file_name: String,
+    title: String,
+    source: Option<String>,
+    project_id: Option<String>,
+) {
+    let source_key = source
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| value.to_ascii_lowercase())
+        .unwrap_or_else(|| "local".to_string());
+    let key = project_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| format!("{kind}:{source_key}:{value}"))
+        .unwrap_or_else(|| format!("{kind}:local:{}", sanitize_project_token(&title)));
+    if let Some(existing) = groups.get_mut(&key) {
+        if !existing.names.iter().any(|name| name.eq_ignore_ascii_case(&file_name)) {
+            existing.names.push(file_name);
+        }
+        if existing.project_id.is_none() && project_id.is_some() {
+            existing.project_id = project_id;
+        }
+        if existing.source.is_none() && source.is_some() {
+            existing.source = source;
+        }
+        if existing.title.trim().is_empty() && !title.trim().is_empty() {
+            existing.title = title;
+        }
+        return;
+    }
+    groups.insert(
+        key,
+        LocalContentGroup {
+            kind: kind.to_string(),
+            title,
+            source,
+            project_id,
+            names: vec![file_name],
+        },
+    );
+}
+
+fn content_names_include_latest(
+    current_names: &[String],
+    managed_name: &str,
+    upstream_file_name: &str,
+) -> bool {
+    let managed_disabled = format!("{managed_name}.disabled");
+    let upstream_disabled = format!("{upstream_file_name}.disabled");
+    current_names.iter().any(|name| {
+        name.eq_ignore_ascii_case(managed_name)
+            || name.eq_ignore_ascii_case(&managed_disabled)
+            || name.eq_ignore_ascii_case(upstream_file_name)
+            || name.eq_ignore_ascii_case(&upstream_disabled)
+    })
+}
+
+async fn resolve_latest_curseforge_mod(
+    client: &reqwest::Client,
+    api_key: &str,
+    project_id: &str,
+    mc_version: &str,
+    loader: &str,
+) -> AppResult<Option<Value>> {
+    let mod_id = parse_curseforge_numeric_id(project_id)?;
+    let files_resp: Value = client
+        .get(format!(
+            "https://api.curseforge.com/v1/mods/{mod_id}/files?pageSize=100&index=0"
+        ))
+        .header("user-agent", MODRINTH_USER_AGENT)
+        .header("x-api-key", api_key)
+        .send()
+        .await
+        .map_err(into_error)?
+        .error_for_status()
+        .map_err(into_error)?
+        .json()
+        .await
+        .map_err(into_error)?;
+    let files = files_resp
+        .get("data")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+    let selected = files
+        .iter()
+        .find(|file| {
+            file.get("isAvailable")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(true)
+                && curseforge_file_matches(file, mc_version, loader)
+        })
+        .cloned()
+        .or_else(|| {
+            files.iter()
+                .find(|file| file.get("isAvailable").and_then(|v| v.as_bool()).unwrap_or(true))
+                .cloned()
+        });
+    let Some(file) = selected else {
+        return Ok(None);
+    };
+    let file_id = file.get("id").and_then(|v| v.as_u64()).map(|value| value.to_string());
+    let file_name = file
+        .get("fileName")
+        .and_then(|v| v.as_str())
+        .unwrap_or("curseforge-mod.jar")
+        .to_string();
+    let version_name = file
+        .get("displayName")
+        .and_then(|v| v.as_str())
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or(file_name.as_str())
+        .to_string();
+    Ok(Some(json!({
+      "projectId": mod_id.to_string(),
+      "versionId": file_id,
+      "versionName": version_name,
+      "fileName": file_name
+    })))
+}
+
+#[command]
+pub async fn instance_content_check_updates(
+    app: tauri::AppHandle,
+    instance_id: String,
+) -> AppResult<Value> {
+    let safe_id = validate_id(&instance_id)?;
+    let db = read_db(&app)?;
+    let inst = instance_entry(&db, &safe_id).ok_or_else(|| "Instance not found".to_string())?;
+    let (mc, loader) = instance_mc_and_loader(inst, None);
+    let loader_norm = loader.trim().to_ascii_lowercase();
+    let loader_filter = match loader_norm.as_str() {
+        "fabric" | "quilt" | "forge" | "neoforge" => Some(loader_norm.as_str()),
+        _ => None,
+    };
+
+    let mods_rows = content_list(app.clone(), safe_id.clone(), "mods".to_string())?;
+    let resourcepack_rows = content_list(app.clone(), safe_id.clone(), "resourcepacks".to_string())?;
+    let shaderpack_rows = content_list(app.clone(), safe_id.clone(), "shaderpacks".to_string())?;
+
+    let mods = mods_rows.as_array().cloned().unwrap_or_default();
+    let resourcepacks = resourcepack_rows.as_array().cloned().unwrap_or_default();
+    let shaderpacks = shaderpack_rows.as_array().cloned().unwrap_or_default();
+
+    let mod_names = mods
+        .iter()
+        .filter_map(|row| row.get("name").and_then(|v| v.as_str()).map(str::to_string))
+        .collect::<Vec<String>>();
+    let resourcepack_names = resourcepacks
+        .iter()
+        .filter_map(|row| row.get("name").and_then(|v| v.as_str()).map(str::to_string))
+        .collect::<Vec<String>>();
+    let shaderpack_names = shaderpacks
+        .iter()
+        .filter_map(|row| row.get("name").and_then(|v| v.as_str()).map(str::to_string))
+        .collect::<Vec<String>>();
+
+    let mod_meta_rows = local_mods_metadata(app.clone(), safe_id.clone(), mod_names).await?;
+    let resourcepack_meta_rows =
+        local_packs_metadata(app.clone(), safe_id.clone(), "resourcepacks".to_string(), resourcepack_names).await?;
+    let shaderpack_meta_rows =
+        local_packs_metadata(app.clone(), safe_id.clone(), "shaderpacks".to_string(), shaderpack_names).await?;
+
+    let mod_meta_by_name = mod_meta_rows
+        .get("items")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|row| {
+            let file_name = row.get("fileName").and_then(|v| v.as_str())?.to_ascii_lowercase();
+            Some((file_name, row))
+        })
+        .collect::<HashMap<String, Value>>();
+    let resourcepack_meta_by_name = resourcepack_meta_rows
+        .get("items")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|row| {
+            let file_name = row.get("fileName").and_then(|v| v.as_str())?.to_ascii_lowercase();
+            Some((file_name, row))
+        })
+        .collect::<HashMap<String, Value>>();
+    let shaderpack_meta_by_name = shaderpack_meta_rows
+        .get("items")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|row| {
+            let file_name = row.get("fileName").and_then(|v| v.as_str())?.to_ascii_lowercase();
+            Some((file_name, row))
+        })
+        .collect::<HashMap<String, Value>>();
+
+    let mut groups = HashMap::<String, LocalContentGroup>::new();
+    for row in mods {
+        let Some(file_name) = row.get("name").and_then(|v| v.as_str()).map(str::to_string) else {
+            continue;
+        };
+        let meta = mod_meta_by_name.get(&file_name.to_ascii_lowercase());
+        let fallback = local_mod_query_from_file_name(&file_name);
+        let title = meta
+            .and_then(|value| value.get("title"))
+            .and_then(|v| v.as_str())
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string)
+            .unwrap_or_else(|| {
+                if fallback.trim().is_empty() {
+                    file_name
+                        .trim_end_matches(".disabled")
+                        .trim_end_matches(".jar")
+                        .to_string()
+                } else {
+                    fallback
+                }
+            });
+        let source = meta
+            .and_then(|value| value.get("source"))
+            .and_then(|v| v.as_str())
+            .map(|value| value.trim().to_ascii_lowercase())
+            .filter(|value| !value.is_empty());
+        let project_id = meta
+            .and_then(|value| value.get("projectId"))
+            .and_then(|v| v.as_str())
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string);
+        upsert_local_content_group(&mut groups, "mods", file_name, title, source, project_id);
+    }
+    for (kind, rows, meta_by_name) in [
+        ("resourcepacks", resourcepacks, resourcepack_meta_by_name),
+        ("shaderpacks", shaderpacks, shaderpack_meta_by_name),
+    ] {
+        for row in rows {
+            let Some(file_name) = row.get("name").and_then(|v| v.as_str()).map(str::to_string) else {
+                continue;
+            };
+            let meta = meta_by_name.get(&file_name.to_ascii_lowercase());
+            let fallback = local_pack_query_from_file_name(kind, &file_name);
+            let title = meta
+                .and_then(|value| value.get("title"))
+                .and_then(|v| v.as_str())
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(str::to_string)
+                .unwrap_or_else(|| {
+                    if fallback.trim().is_empty() {
+                        file_name
+                            .trim_end_matches(".disabled")
+                            .trim_end_matches(".zip")
+                            .to_string()
+                    } else {
+                        fallback
+                    }
+                });
+            let source = meta
+                .and_then(|value| value.get("source"))
+                .and_then(|v| v.as_str())
+                .map(|value| value.trim().to_ascii_lowercase())
+                .filter(|value| !value.is_empty());
+            let project_id = meta
+                .and_then(|value| value.get("projectId"))
+                .and_then(|v| v.as_str())
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(str::to_string);
+            upsert_local_content_group(&mut groups, kind, file_name, title, source, project_id);
+        }
+    }
+
+    let client = reqwest::Client::new();
+    let cf_key = curseforge_api_key(&app);
+    let mut items = Vec::<Value>::new();
+    let mut updateable_count = 0usize;
+
+    let mut grouped_items = groups.into_values().collect::<Vec<_>>();
+    grouped_items.sort_by(|left, right| left.title.to_ascii_lowercase().cmp(&right.title.to_ascii_lowercase()));
+
+    for group in grouped_items {
+        let source = group
+            .source
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(|value| value.to_ascii_lowercase());
+        let project_id = group
+            .project_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string);
+
+        let mut item = json!({
+          "kind": group.kind,
+          "title": group.title,
+          "source": source.clone(),
+          "projectId": project_id.clone(),
+          "currentFileNames": group.names,
+          "latestVersionId": Value::Null,
+          "latestVersionName": Value::Null,
+          "latestFileName": Value::Null,
+          "canUpdate": false,
+          "updateAvailable": false,
+          "reason": Value::Null
+        });
+
+        let Some(source_norm) = source.clone() else {
+            item["reason"] = json!("No platform metadata was found for this file.");
+            items.push(item);
+            continue;
+        };
+        let Some(project_id_value) = project_id.clone() else {
+            item["reason"] = json!("No platform project could be resolved for this file.");
+            items.push(item);
+            continue;
+        };
+
+        if source_norm == "modrinth" {
+            let latest = resolve_latest_modrinth(
+                &client,
+                &project_id_value,
+                &mc,
+                if group.kind == "mods" { loader_filter } else { None },
+            )
+            .await?;
+            let Some(latest_value) = latest else {
+                item["reason"] = json!(if group.kind == "mods" {
+                    format!("No compatible {loader_norm} build found for Minecraft {mc}.")
+                } else {
+                    format!("No compatible build found for Minecraft {mc}.")
+                });
+                items.push(item);
+                continue;
+            };
+            let latest_file_name = latest_value
+                .get("fileName")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            let latest_version_name = latest_value
+                .get("versionName")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            let latest_version_id = latest_value
+                .get("versionId")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            let managed_name = if group.kind == "mods" {
+                safe_modrinth_file_name(&project_id_value, latest_file_name)
+            } else {
+                safe_modrinth_content_file_name(
+                    if group.kind == "shaderpacks" {
+                        "shaderpack"
+                    } else {
+                        "resourcepack"
+                    },
+                    &project_id_value,
+                    latest_file_name,
+                )
+            };
+            let update_available =
+                !content_names_include_latest(item["currentFileNames"].as_array().and_then(|values| {
+                    Some(
+                        values
+                            .iter()
+                            .filter_map(|value| value.as_str().map(str::to_string))
+                            .collect::<Vec<String>>(),
+                    )
+                }).unwrap_or_default().as_slice(), &managed_name, latest_file_name);
+            item["latestVersionId"] = json!(latest_version_id);
+            item["latestVersionName"] = json!(latest_version_name);
+            item["latestFileName"] = json!(managed_name);
+            item["canUpdate"] = json!(true);
+            item["updateAvailable"] = json!(update_available);
+            if update_available {
+                updateable_count += 1;
+            }
+            items.push(item);
+            continue;
+        }
+
+        if source_norm == "curseforge" && group.kind == "mods" {
+            let Some(api_key) = cf_key.as_deref() else {
+                item["reason"] = json!("CurseForge API key is not configured.");
+                items.push(item);
+                continue;
+            };
+            let latest = resolve_latest_curseforge_mod(
+                &client,
+                api_key,
+                &project_id_value,
+                &mc,
+                &loader_norm,
+            )
+            .await?;
+            let Some(latest_value) = latest else {
+                item["reason"] = json!(format!(
+                    "No compatible {loader_norm} build found for Minecraft {mc}."
+                ));
+                items.push(item);
+                continue;
+            };
+            let latest_file_name = latest_value
+                .get("fileName")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            let latest_version_name = latest_value
+                .get("versionName")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            let latest_version_id = latest_value
+                .get("versionId")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            let managed_name = safe_curseforge_file_name(&project_id_value, latest_file_name);
+            let update_available =
+                !content_names_include_latest(item["currentFileNames"].as_array().and_then(|values| {
+                    Some(
+                        values
+                            .iter()
+                            .filter_map(|value| value.as_str().map(str::to_string))
+                            .collect::<Vec<String>>(),
+                    )
+                }).unwrap_or_default().as_slice(), &managed_name, latest_file_name);
+            item["latestVersionId"] = json!(latest_version_id);
+            item["latestVersionName"] = json!(latest_version_name);
+            item["latestFileName"] = json!(managed_name);
+            item["canUpdate"] = json!(true);
+            item["updateAvailable"] = json!(update_available);
+            if update_available {
+                updateable_count += 1;
+            }
+            items.push(item);
+            continue;
+        }
+
+        item["reason"] = json!("Updates are not supported for this platform.");
+        items.push(item);
+    }
+
+    Ok(json!({
+      "checkedAt": now_ms(),
+      "items": items,
+      "updateableCount": updateable_count
+    }))
 }
 
 #[command]
@@ -3255,6 +4121,117 @@ pub fn servers_set_preferred(
     } else {
         state["preferredServerId"] = Value::Null;
     }
+    write_json_file(&p, &state)?;
+    Ok(state)
+}
+
+#[command]
+pub async fn servers_refresh_status(
+    app: tauri::AppHandle,
+    instance_id: String,
+    force: Option<bool>,
+) -> AppResult<Value> {
+    let safe_id = validate_id(&instance_id)?;
+    let p = servers_path(&app, &safe_id)?;
+    let mut state: Value = read_json_file(
+        &p,
+        json!({
+          "preferredServerId": Value::Null,
+          "servers": []
+        }),
+    );
+    let now = now_ms();
+    let ttl_ms = 5 * 60 * 1000;
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(8))
+        .build()
+        .map_err(into_error)?;
+
+    if let Some(servers) = state.get_mut("servers").and_then(|v| v.as_array_mut()) {
+        for server in servers.iter_mut() {
+            let address = server
+                .get("address")
+                .and_then(|v| v.as_str())
+                .map(str::trim)
+                .unwrap_or("");
+            if address.is_empty() {
+                continue;
+            }
+            let checked_at = server
+                .get("statusCheckedAt")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+            if !force.unwrap_or(false) && checked_at > 0 && now.saturating_sub(checked_at) < ttl_ms {
+                continue;
+            }
+
+            let endpoint = format!(
+                "https://api.mcsrvstat.us/3/{}",
+                urlencoding::encode(address)
+            );
+            let payload = match client
+                .get(endpoint)
+                .header("user-agent", MODRINTH_USER_AGENT)
+                .send()
+                .await
+            {
+                Ok(resp) => match resp.error_for_status() {
+                    Ok(ok) => ok.json::<Value>().await.ok(),
+                    Err(_) => None,
+                },
+                Err(_) => None,
+            };
+
+            server["statusCheckedAt"] = json!(now);
+            if let Some(data) = payload {
+                server["iconDataUrl"] = data.get("icon").cloned().unwrap_or(Value::Null);
+                server["statusOnline"] = json!(data.get("online").and_then(|v| v.as_bool()).unwrap_or(false));
+                server["statusPlayerCount"] = json!(
+                    data.get("players")
+                        .and_then(|v| v.get("online"))
+                        .and_then(|v| v.as_u64())
+                );
+                server["statusPlayerMax"] = json!(
+                    data.get("players")
+                        .and_then(|v| v.get("max"))
+                        .and_then(|v| v.as_u64())
+                );
+                server["statusVersion"] = json!(
+                    data.get("version")
+                        .and_then(|v| v.as_str())
+                        .or_else(|| data.get("version").and_then(|v| v.get("name_clean")).and_then(|v| v.as_str()))
+                );
+                server["statusMotd"] = json!(
+                    data.get("motd")
+                        .and_then(|v| v.get("clean"))
+                        .and_then(|v| v.as_array())
+                        .map(|rows| {
+                            rows.iter()
+                                .filter_map(|row| row.as_str().map(str::trim))
+                                .filter(|row| !row.is_empty())
+                                .collect::<Vec<_>>()
+                                .join(" • ")
+                        })
+                        .filter(|text| !text.trim().is_empty())
+                        .or_else(|| {
+                            data.get("motd")
+                                .and_then(|v| v.get("clean"))
+                                .and_then(|v| v.as_str())
+                                .map(str::trim)
+                                .filter(|text| !text.is_empty())
+                                .map(str::to_string)
+                        })
+                );
+            } else {
+                server["statusOnline"] = Value::Null;
+                server["statusPlayerCount"] = Value::Null;
+                server["statusPlayerMax"] = Value::Null;
+                server["statusVersion"] = Value::Null;
+                server["statusMotd"] = Value::Null;
+            }
+        }
+    }
+
     write_json_file(&p, &state)?;
     Ok(state)
 }
@@ -4437,6 +5414,7 @@ async fn resolve_latest_modrinth(
 
         return Ok(Some(json!({
           "projectId": project_id,
+          "versionId": v.get("id").and_then(|x| x.as_str()).unwrap_or(""),
           "versionName": v.get("version_number").and_then(|x| x.as_str()).unwrap_or("unknown"),
           "changelog": v.get("changelog").and_then(|x| x.as_str()).unwrap_or(""),
           "fileName": file_name,
@@ -6099,6 +7077,10 @@ fn modrinth_mod_prefix(project_id: &str) -> String {
     format!("mr_{}__", sanitize_project_token(project_id))
 }
 
+fn curseforge_mod_prefix(project_id: &str) -> String {
+    format!("cf_{}__", sanitize_project_token(project_id))
+}
+
 fn safe_modrinth_file_name(project_id: &str, upstream_file_name: &str) -> String {
     let upstream = upstream_file_name
         .chars()
@@ -6111,6 +7093,20 @@ fn safe_modrinth_file_name(project_id: &str, upstream_file_name: &str) -> String
         })
         .collect::<String>();
     format!("{}{}", modrinth_mod_prefix(project_id), upstream)
+}
+
+fn safe_curseforge_file_name(project_id: &str, upstream_file_name: &str) -> String {
+    let upstream = upstream_file_name
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '.' || c == '-' || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect::<String>();
+    format!("{}{}", curseforge_mod_prefix(project_id), upstream)
 }
 
 fn modrinth_content_kind_label(kind: &str) -> AppResult<&'static str> {
@@ -6216,6 +7212,98 @@ fn installed_modrinth_project_ids(mods_dir: &Path) -> HashSet<String> {
     out
 }
 
+fn installed_project_ids_from_metadata(cache: &Value, kind: &str, source: &str) -> HashSet<String> {
+    cache.get(kind)
+        .and_then(|v| v.as_object())
+        .map(|items| {
+            items.values()
+                .filter(|meta| {
+                    meta.get("source")
+                        .and_then(|v| v.as_str())
+                        .map(|value| value.eq_ignore_ascii_case(source))
+                        .unwrap_or(false)
+                })
+                .filter_map(|meta| meta.get("projectId").and_then(|v| v.as_str()).map(str::to_string))
+                .collect::<HashSet<String>>()
+        })
+        .unwrap_or_default()
+}
+
+fn installed_curseforge_project_ids(mods_dir: &Path, cache: &Value) -> HashSet<String> {
+    let mut out = installed_project_ids_from_metadata(cache, "mods", "curseforge");
+    if !mods_dir.exists() {
+        return out;
+    }
+    let Ok(entries) = fs::read_dir(mods_dir) else {
+        return out;
+    };
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().to_string();
+        if !name.starts_with("cf_") {
+            continue;
+        }
+        if !(name.ends_with(".jar") || name.ends_with(".jar.disabled")) {
+            continue;
+        }
+        if let Some(pos) = name.find("__") {
+            let token = &name["cf_".len()..pos];
+            if !token.trim().is_empty() {
+                out.insert(token.to_string());
+            }
+        }
+    }
+    out
+}
+
+fn parse_curseforge_numeric_id(input: &str) -> AppResult<u64> {
+    let base = input.trim();
+    if base.is_empty() {
+        return Err("curseforge: projectId missing".to_string());
+    }
+    let stripped = base.strip_prefix("cf-").unwrap_or(base);
+    let digits = stripped
+        .chars()
+        .skip_while(|c| !c.is_ascii_digit())
+        .take_while(|c| c.is_ascii_digit())
+        .collect::<String>();
+    let value = if digits.is_empty() { stripped } else { digits.as_str() };
+    value
+        .parse::<u64>()
+        .map_err(|_| format!("curseforge: invalid projectId ({input})"))
+}
+
+fn curseforge_loader_label(code: u64) -> &'static str {
+    match code {
+        4 => "fabric",
+        5 => "quilt",
+        6 => "forge",
+        11 => "neoforge",
+        _ => "vanilla",
+    }
+}
+
+fn curseforge_file_matches(file: &Value, mc: &str, loader: &str) -> bool {
+    let game_versions = file
+        .get("gameVersions")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|x| x.as_str().map(str::to_string))
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    let matches_mc = if mc.trim().is_empty() {
+        true
+    } else {
+        game_versions.iter().any(|value| value == mc)
+    };
+    if !matches_mc {
+        return false;
+    }
+    let detected_loader = detect_loader_from_curseforge_versions(&game_versions);
+    loader == "vanilla" || detected_loader == loader || detected_loader == "vanilla"
+}
+
 #[command]
 pub async fn modrinth_mods_search(
     app: tauri::AppHandle,
@@ -6224,6 +7312,9 @@ pub async fn modrinth_mods_search(
     mc_version: Option<String>,
     loader: Option<String>,
     limit: Option<u32>,
+    offset: Option<u32>,
+    index: Option<String>,
+    category: Option<String>,
 ) -> AppResult<Value> {
     let safe_id = validate_id(&instance_id)?;
     let db = read_db(&app)?;
@@ -6257,12 +7348,35 @@ pub async fn modrinth_mods_search(
                 .to_ascii_lowercase()
         });
     let q = query.trim().to_string();
-    let capped = limit.unwrap_or(20).clamp(1, 40);
-    let index = if q.is_empty() {
-        "downloads"
-    } else {
-        "relevance"
+    let capped = limit.unwrap_or(20).clamp(1, 100);
+    let page_offset = offset.unwrap_or(0);
+    let index = match index
+        .as_deref()
+        .map(|v| v.trim().to_ascii_lowercase())
+        .unwrap_or_else(|| {
+            if q.is_empty() {
+                "downloads".to_string()
+            } else {
+                "relevance".to_string()
+            }
+        })
+        .as_str()
+    {
+        "downloads" => "downloads",
+        "updated" => "updated",
+        "newest" => "newest",
+        "follows" => "follows",
+        _ => "relevance",
     };
+    let category = category
+        .and_then(|value| {
+            let trimmed = value.trim().to_ascii_lowercase();
+            if trimmed.is_empty() || trimmed == "all" {
+                None
+            } else {
+                Some(trimmed)
+            }
+        });
 
     let mut facet_groups = vec![vec!["project_type:mod".to_string()]];
     if !mc.trim().is_empty() {
@@ -6271,12 +7385,16 @@ pub async fn modrinth_mods_search(
     if loader_hint != "vanilla" {
         facet_groups.push(vec![format!("categories:{loader_hint}")]);
     }
+    if let Some(category_value) = category.as_deref() {
+        facet_groups.push(vec![format!("categories:{category_value}")]);
+    }
     let facets = serde_json::to_string(&facet_groups).map_err(into_error)?;
 
     let url = format!(
-        "https://api.modrinth.com/v2/search?query={}&limit={}&index={}&facets={}",
+        "https://api.modrinth.com/v2/search?query={}&limit={}&offset={}&index={}&facets={}",
         urlencoding::encode(&q),
         capped,
+        page_offset,
         index,
         urlencoding::encode(&facets)
     );
@@ -6301,20 +7419,19 @@ pub async fn modrinth_mods_search(
         if project_id.trim().is_empty() {
             continue;
         }
-        let compatible = match resolve_latest_modrinth(
-            &client,
-            &project_id,
-            mc.as_str(),
-            Some(loader_hint.as_str()),
-        )
-        .await
-        {
-            Ok(Some(version)) => version,
-            Ok(None) | Err(_) => continue,
-        };
         let token = sanitize_project_token(&project_id);
+        let categories = h
+            .get("display_categories")
+            .and_then(|v| v.as_array())
+            .cloned()
+            .or_else(|| h.get("categories").and_then(|v| v.as_array()).cloned())
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|entry| entry.as_str().map(|value| value.to_string()))
+            .collect::<Vec<String>>();
         hits.push(json!({
           "projectId": project_id,
+          "source": "modrinth",
           "title": h.get("title").and_then(|v| v.as_str()).unwrap_or("Unknown Mod"),
           "description": h.get("description").and_then(|v| v.as_str()).unwrap_or(""),
           "iconUrl": h.get("icon_url").and_then(|v| v.as_str()),
@@ -6322,12 +7439,24 @@ pub async fn modrinth_mods_search(
           "downloads": h.get("downloads").and_then(|v| v.as_u64()).unwrap_or(0),
           "follows": h.get("follows").and_then(|v| v.as_u64()).unwrap_or(0),
           "dateModified": h.get("date_modified").and_then(|v| v.as_str()),
-          "latestVersionId": compatible.get("id").and_then(|v| v.as_str()),
+          "latestVersionId": h.get("latest_version").and_then(|v| v.as_str()),
+          "categories": categories,
           "installed": installed.contains(&token)
         }));
     }
 
-    Ok(json!({ "hits": hits }))
+    let total_hits = data
+        .get("total_hits")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(hits.len() as u64);
+
+    Ok(json!({
+      "hits": hits,
+      "offset": page_offset,
+      "limit": capped,
+      "totalHits": total_hits,
+      "hasNextPage": (page_offset as u64) + (capped as u64) < total_hits
+    }))
 }
 
 #[command]
@@ -6522,9 +7651,17 @@ pub async fn modrinth_content_search(
     query: String,
     mc_version: Option<String>,
     limit: Option<u32>,
+    offset: Option<u32>,
+    index: Option<String>,
+    category: Option<String>,
 ) -> AppResult<Value> {
     let safe_id = validate_id(&instance_id)?;
     let kind_label = modrinth_content_kind_label(&kind)?;
+    let search_project_type = if kind_label == "shaderpack" {
+        "shader"
+    } else {
+        kind_label
+    };
     let db = read_db(&app)?;
     let inst = instance_entry(&db, &safe_id).ok_or_else(|| "Instance not found".to_string())?;
     let mc = mc_version
@@ -6542,22 +7679,49 @@ pub async fn modrinth_content_search(
                 .to_string()
         });
     let q = query.trim().to_string();
-    let capped = limit.unwrap_or(20).clamp(1, 40);
-    let index = if q.is_empty() {
-        "downloads"
-    } else {
-        "relevance"
+    let capped = limit.unwrap_or(20).clamp(1, 100);
+    let page_offset = offset.unwrap_or(0);
+    let index = match index
+        .as_deref()
+        .map(|v| v.trim().to_ascii_lowercase())
+        .unwrap_or_else(|| {
+            if q.is_empty() {
+                "downloads".to_string()
+            } else {
+                "relevance".to_string()
+            }
+        })
+        .as_str()
+    {
+        "downloads" => "downloads",
+        "updated" => "updated",
+        "newest" => "newest",
+        "follows" => "follows",
+        _ => "relevance",
     };
+    let category = category
+        .and_then(|value| {
+            let trimmed = value.trim().to_ascii_lowercase();
+            if trimmed.is_empty() || trimmed == "all" {
+                None
+            } else {
+                Some(trimmed)
+            }
+        });
 
-    let facets = serde_json::to_string(&vec![
-        vec![format!("project_type:{kind_label}")],
+    let mut facet_groups = vec![
+        vec![format!("project_type:{search_project_type}")],
         vec![format!("versions:{mc}")],
-    ])
-    .map_err(into_error)?;
+    ];
+    if let Some(category_value) = category.as_deref() {
+        facet_groups.push(vec![format!("categories:{category_value}")]);
+    }
+    let facets = serde_json::to_string(&facet_groups).map_err(into_error)?;
     let url = format!(
-        "https://api.modrinth.com/v2/search?query={}&limit={}&index={}&facets={}",
+        "https://api.modrinth.com/v2/search?query={}&limit={}&offset={}&index={}&facets={}",
         urlencoding::encode(&q),
         capped,
+        page_offset,
         index,
         urlencoding::encode(&facets)
     );
@@ -6581,15 +7745,20 @@ pub async fn modrinth_content_search(
         if project_id.trim().is_empty() {
             continue;
         }
-        let compatible =
-            match resolve_latest_modrinth(&client, &project_id, mc.as_str(), None).await {
-                Ok(Some(version)) => version,
-                Ok(None) | Err(_) => continue,
-            };
         let token = sanitize_project_token(&project_id);
+        let categories = h
+            .get("display_categories")
+            .and_then(|v| v.as_array())
+            .cloned()
+            .or_else(|| h.get("categories").and_then(|v| v.as_array()).cloned())
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|entry| entry.as_str().map(|value| value.to_string()))
+            .collect::<Vec<String>>();
         hits.push(json!({
           "projectId": project_id,
           "kind": kind_label,
+          "source": "modrinth",
           "title": h.get("title").and_then(|v| v.as_str()).unwrap_or("Unknown Pack"),
           "description": h.get("description").and_then(|v| v.as_str()).unwrap_or(""),
           "iconUrl": h.get("icon_url").and_then(|v| v.as_str()),
@@ -6597,12 +7766,353 @@ pub async fn modrinth_content_search(
           "downloads": h.get("downloads").and_then(|v| v.as_u64()).unwrap_or(0),
           "follows": h.get("follows").and_then(|v| v.as_u64()).unwrap_or(0),
           "dateModified": h.get("date_modified").and_then(|v| v.as_str()),
-          "latestVersionId": compatible.get("id").and_then(|v| v.as_str()),
+          "latestVersionId": h.get("latest_version").and_then(|v| v.as_str()),
+          "categories": categories,
           "installed": installed.contains(&token)
         }));
     }
 
-    Ok(json!({ "hits": hits }))
+    let total_hits = data
+        .get("total_hits")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(hits.len() as u64);
+
+    Ok(json!({
+      "hits": hits,
+      "offset": page_offset,
+      "limit": capped,
+      "totalHits": total_hits,
+      "hasNextPage": (page_offset as u64) + (capped as u64) < total_hits
+    }))
+}
+
+#[command]
+pub async fn curseforge_mods_search(
+    app: tauri::AppHandle,
+    instance_id: String,
+    query: String,
+    mc_version: Option<String>,
+    loader: Option<String>,
+    limit: Option<u32>,
+    offset: Option<u32>,
+    category: Option<String>,
+) -> AppResult<Value> {
+    let api_key = curseforge_api_key(&app).ok_or_else(|| {
+        "curseforgeModsSearch: missing CurseForge API key. Set FISHBATTERY_CURSEFORGE_API_KEY or create secrets/curseforge-api-key.txt".to_string()
+    })?;
+    let safe_id = validate_id(&instance_id)?;
+    let db = read_db(&app)?;
+    let inst = instance_entry(&db, &safe_id).ok_or_else(|| "Instance not found".to_string())?;
+    let mc = mc_version
+        .and_then(|v| if v.trim().is_empty() { None } else { Some(v.trim().to_string()) })
+        .unwrap_or_else(|| {
+            inst.get("mcVersion")
+                .and_then(|v| v.as_str())
+                .unwrap_or("1.21.1")
+                .to_string()
+        });
+    let loader_hint = loader
+        .and_then(|v| if v.trim().is_empty() { None } else { Some(v.trim().to_ascii_lowercase()) })
+        .unwrap_or_else(|| {
+            inst.get("loader")
+                .and_then(|v| v.as_str())
+                .unwrap_or("fabric")
+                .to_ascii_lowercase()
+        });
+    let q = query.trim().to_string();
+    let capped = limit.unwrap_or(20).clamp(1, 100);
+    let page_offset = offset.unwrap_or(0);
+    let category = category
+        .and_then(|value| {
+            let trimmed = value.trim().to_ascii_lowercase();
+            if trimmed.is_empty() || trimmed == "all" {
+                None
+            } else {
+                Some(trimmed)
+            }
+        });
+
+    let client = reqwest::Client::new();
+    let mut req = client
+        .get("https://api.curseforge.com/v1/mods/search")
+        .header("user-agent", MODRINTH_USER_AGENT)
+        .header("x-api-key", api_key)
+        .query(&[
+            ("gameId", "432"),
+            ("classId", "6"),
+            ("pageSize", &capped.to_string()),
+            ("index", &page_offset.to_string()),
+            ("sortOrder", "desc"),
+        ]);
+    if !q.is_empty() {
+        req = req.query(&[("searchFilter", q.as_str())]);
+    } else {
+        req = req.query(&[("sortField", "2")]);
+    }
+    if !mc.trim().is_empty() {
+        req = req.query(&[("gameVersion", mc.as_str())]);
+    }
+    let payload: Value = req
+        .send()
+        .await
+        .map_err(into_error)?
+        .error_for_status()
+        .map_err(into_error)?
+        .json()
+        .await
+        .map_err(into_error)?;
+
+    let mods_dir = instance_dir(&app, &safe_id)?.join("mods");
+    let cache = read_content_metadata(&app, &safe_id)?;
+    let installed = installed_curseforge_project_ids(&mods_dir, &cache);
+
+    let hits_in = payload
+        .get("data")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+    let mut hits = Vec::<Value>::new();
+    for item in hits_in {
+        let project_id = item
+            .get("id")
+            .and_then(|v| v.as_u64())
+            .map(|v| v.to_string())
+            .unwrap_or_default();
+        if project_id.is_empty() {
+            continue;
+        }
+        let categories = item
+            .get("categories")
+            .and_then(|v| v.as_array())
+            .cloned()
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|entry| entry.get("slug").and_then(|v| v.as_str()).map(str::to_string))
+            .collect::<Vec<String>>();
+        if let Some(category_value) = category.as_deref() {
+            if !categories.iter().any(|value| value.eq_ignore_ascii_case(category_value)) {
+                continue;
+            }
+        }
+        let file_id = item
+            .get("latestFilesIndexes")
+            .and_then(|v| v.as_array())
+            .and_then(|rows| {
+                rows.iter().find(|entry| {
+                    let game_version = entry.get("gameVersion").and_then(|v| v.as_str()).unwrap_or("");
+                    let loader_code = entry.get("modLoader").and_then(|v| v.as_u64()).unwrap_or(0);
+                    let loader_name = curseforge_loader_label(loader_code);
+                    (mc.trim().is_empty() || game_version == mc)
+                        && (loader_hint == "vanilla" || loader_name == loader_hint || loader_name == "vanilla")
+                }).or_else(|| rows.first())
+            })
+            .and_then(|entry| entry.get("fileId").and_then(|v| v.as_u64()))
+            .map(|v| v.to_string());
+        hits.push(json!({
+          "projectId": project_id.clone(),
+          "source": "curseforge",
+          "title": item.get("name").and_then(|v| v.as_str()).unwrap_or("Unknown Mod"),
+          "description": item.get("summary").and_then(|v| v.as_str()).unwrap_or(""),
+          "iconUrl": item.get("logo").and_then(|v| v.get("url")).and_then(|v| v.as_str()),
+          "author": item.get("authors").and_then(|v| v.as_array()).and_then(|arr| arr.first()).and_then(|a| a.get("name")).and_then(|v| v.as_str()).unwrap_or("unknown"),
+          "downloads": item.get("downloadCount").and_then(|v| v.as_u64()).unwrap_or(0),
+          "follows": item.get("thumbsUpCount").and_then(|v| v.as_u64()).unwrap_or(0),
+          "dateModified": item.get("dateModified").and_then(|v| v.as_str()),
+          "latestVersionId": file_id,
+          "categories": categories,
+          "installed": installed.contains(&project_id)
+        }));
+    }
+
+    let total_hits = payload
+        .get("pagination")
+        .and_then(|v| v.get("totalCount"))
+        .and_then(|v| v.as_u64())
+        .unwrap_or(hits.len() as u64);
+
+    Ok(json!({
+      "hits": hits,
+      "offset": page_offset,
+      "limit": capped,
+      "totalHits": total_hits,
+      "hasNextPage": (page_offset as u64) + (capped as u64) < total_hits
+    }))
+}
+
+#[command]
+pub async fn curseforge_mods_install(
+    app: tauri::AppHandle,
+    instance_id: String,
+    project_id: String,
+    file_id: Option<String>,
+) -> AppResult<Value> {
+    let api_key = curseforge_api_key(&app).ok_or_else(|| {
+        "curseforgeModsInstall: missing CurseForge API key. Set FISHBATTERY_CURSEFORGE_API_KEY or create secrets/curseforge-api-key.txt".to_string()
+    })?;
+    let safe_id = validate_id(&instance_id)?;
+    let db = read_db(&app)?;
+    let inst = instance_entry(&db, &safe_id).ok_or_else(|| "Instance not found".to_string())?;
+    let mc = inst
+        .get("mcVersion")
+        .and_then(|v| v.as_str())
+        .unwrap_or("1.21.1")
+        .to_string();
+    let loader = inst
+        .get("loader")
+        .and_then(|v| v.as_str())
+        .unwrap_or("fabric")
+        .to_ascii_lowercase();
+    let mod_id = parse_curseforge_numeric_id(&project_id)?;
+
+    let client = reqwest::Client::new();
+    let mod_detail: Value = client
+        .get(format!("https://api.curseforge.com/v1/mods/{mod_id}"))
+        .header("user-agent", MODRINTH_USER_AGENT)
+        .header("x-api-key", &api_key)
+        .send()
+        .await
+        .map_err(into_error)?
+        .error_for_status()
+        .map_err(into_error)?
+        .json()
+        .await
+        .map_err(into_error)?;
+    let mod_data = mod_detail.get("data").cloned().unwrap_or_else(|| json!({}));
+
+    let selected_file: Value = if let Some(raw_file_id) = file_id.as_deref() {
+        let numeric_file_id = raw_file_id
+            .trim()
+            .parse::<u64>()
+            .map_err(|_| format!("curseforgeModsInstall: invalid fileId ({raw_file_id})"))?;
+        let file_detail: Value = client
+            .get(format!("https://api.curseforge.com/v1/mods/{mod_id}/files/{numeric_file_id}"))
+            .header("user-agent", MODRINTH_USER_AGENT)
+            .header("x-api-key", &api_key)
+            .send()
+            .await
+            .map_err(into_error)?
+            .error_for_status()
+            .map_err(into_error)?
+            .json()
+            .await
+            .map_err(into_error)?;
+        file_detail.get("data").cloned().unwrap_or_else(|| json!({}))
+    } else {
+        let files_resp: Value = client
+            .get(format!("https://api.curseforge.com/v1/mods/{mod_id}/files?pageSize=100&index=0"))
+            .header("user-agent", MODRINTH_USER_AGENT)
+            .header("x-api-key", &api_key)
+            .send()
+            .await
+            .map_err(into_error)?
+            .error_for_status()
+            .map_err(into_error)?
+            .json()
+            .await
+            .map_err(into_error)?;
+        let files = files_resp
+            .get("data")
+            .and_then(|v| v.as_array())
+            .cloned()
+            .unwrap_or_default();
+        files
+            .iter()
+            .find(|file| {
+                file.get("isAvailable")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(true)
+                    && curseforge_file_matches(file, &mc, &loader)
+            })
+            .cloned()
+            .or_else(|| {
+                files.iter()
+                    .find(|file| file.get("isAvailable").and_then(|v| v.as_bool()).unwrap_or(true))
+                    .cloned()
+            })
+            .ok_or_else(|| format!("No compatible CurseForge file found for {mc} ({loader})"))?
+    };
+
+    let selected_file_id = selected_file
+        .get("id")
+        .and_then(|v| v.as_u64())
+        .ok_or_else(|| "curseforgeModsInstall: invalid selected file".to_string())?;
+    let upstream = selected_file
+        .get("fileName")
+        .and_then(|v| v.as_str())
+        .unwrap_or("curseforge-mod.jar")
+        .to_string();
+    let download_url = if let Some(url) = selected_file.get("downloadUrl").and_then(|v| v.as_str()) {
+        url.to_string()
+    } else {
+        let url_resp: Value = client
+            .get(format!(
+                "https://api.curseforge.com/v1/mods/{mod_id}/files/{selected_file_id}/download-url"
+            ))
+            .header("user-agent", MODRINTH_USER_AGENT)
+            .header("x-api-key", &api_key)
+            .send()
+            .await
+            .map_err(into_error)?
+            .error_for_status()
+            .map_err(into_error)?
+            .json()
+            .await
+            .map_err(into_error)?;
+        url_resp
+            .get("data")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| "curseforgeModsInstall: missing download URL".to_string())?
+            .to_string()
+    };
+
+    let bytes = client
+        .get(download_url)
+        .header("user-agent", MODRINTH_USER_AGENT)
+        .send()
+        .await
+        .map_err(into_error)?
+        .error_for_status()
+        .map_err(into_error)?
+        .bytes()
+        .await
+        .map_err(into_error)?;
+
+    let mods_dir = instance_dir(&app, &safe_id)?.join("mods");
+    fs::create_dir_all(&mods_dir).map_err(into_error)?;
+    let prefix = curseforge_mod_prefix(&project_id);
+    for entry in fs::read_dir(&mods_dir).map_err(into_error)? {
+        let entry = entry.map_err(into_error)?;
+        let name = entry.file_name().to_string_lossy().to_string();
+        if name.starts_with(&prefix) && (name.ends_with(".jar") || name.ends_with(".jar.disabled")) {
+            let _ = fs::remove_file(entry.path());
+        }
+    }
+    let placed_name = safe_curseforge_file_name(&project_id, &upstream);
+    let placed_path = mods_dir.join(&placed_name);
+    fs::write(&placed_path, &bytes).map_err(into_error)?;
+
+    let mut cache = read_content_metadata(&app, &safe_id).unwrap_or_else(|_| json!({}));
+    content_metadata_put(
+        &mut cache,
+        "mods",
+        &placed_name,
+        json!({
+          "title": mod_data.get("name").and_then(|v| v.as_str()).unwrap_or("Installed Mod"),
+          "description": mod_data.get("summary").and_then(|v| v.as_str()).unwrap_or(""),
+          "iconUrl": mod_data.get("logo").and_then(|v| v.get("url")).and_then(|v| v.as_str()),
+          "author": mod_data.get("authors").and_then(|v| v.as_array()).and_then(|arr| arr.first()).and_then(|a| a.get("name")).and_then(|v| v.as_str()).unwrap_or("unknown"),
+          "source": "curseforge",
+          "projectId": mod_id.to_string()
+        }),
+    );
+    let _ = write_content_metadata(&app, &safe_id, &cache);
+
+    Ok(json!({
+      "ok": true,
+      "projectId": mod_id.to_string(),
+      "fileId": selected_file_id.to_string(),
+      "fileName": placed_name
+    }))
 }
 
 #[command]
@@ -8064,179 +9574,7 @@ pub async fn pack_archive_apply_to_instance(
     let Some(zip_path) = picked else {
         return Ok(json!({ "ok": false, "canceled": true }));
     };
-
-    let mut archive =
-        ZipArchive::new(fs::File::open(&zip_path).map_err(into_error)?).map_err(into_error)?;
-    let mut names = Vec::new();
-    for i in 0..archive.len() {
-        let entry = archive.by_index(i).map_err(into_error)?;
-        names.push(entry.name().replace('\\', "/"));
-    }
-
-    let has_modrinth = names.iter().any(|n| n == "modrinth.index.json");
-    let has_curseforge = names.iter().any(|n| n == "manifest.json");
-    let detected_format = if has_modrinth {
-        "modrinth"
-    } else if has_curseforge {
-        "curseforge"
-    } else {
-        "generic"
-    };
-
-    let current = find_instance_record(&app, &safe_id)?;
-    let mut mc_version = current
-        .get("mcVersion")
-        .and_then(|v| v.as_str())
-        .map(str::to_string)
-        .unwrap_or_else(|| "1.21.1".to_string());
-    let mut loader = current
-        .get("loader")
-        .and_then(|v| v.as_str())
-        .map(str::to_string)
-        .unwrap_or_else(|| "vanilla".to_string());
-    let mut notes: Vec<String> = Vec::new();
-    let mut modrinth_index: Option<MrpackIndex> = None;
-    let mut curseforge_manifest: Option<Value> = None;
-
-    if detected_format == "modrinth" {
-        if let Ok(mut idx) = archive.by_name("modrinth.index.json") {
-            let mut raw = String::new();
-            idx.read_to_string(&mut raw).map_err(into_error)?;
-            if let Ok(parsed) = serde_json::from_str::<Value>(&raw) {
-                if let Some(v) = parsed
-                    .get("dependencies")
-                    .and_then(|d| d.get("minecraft"))
-                    .and_then(|x| x.as_str())
-                {
-                    mc_version = v.to_string();
-                }
-                if let Some(deps) = parsed.get("dependencies").and_then(|d| d.as_object()) {
-                    for candidate in ["fabric-loader", "quilt-loader", "neoforge", "forge"] {
-                        if deps.get(candidate).is_some() {
-                            loader = match candidate {
-                                "fabric-loader" => "fabric",
-                                "quilt-loader" => "quilt",
-                                "neoforge" => "neoforge",
-                                "forge" => "forge",
-                                _ => "vanilla",
-                            }
-                            .to_string();
-                            break;
-                        }
-                    }
-                }
-            }
-            if let Ok(parsed_index) = serde_json::from_str::<MrpackIndex>(&raw) {
-                modrinth_index = Some(parsed_index);
-            }
-            notes.push(
-                "Modrinth archive applied into the current instance with dependency resolution."
-                    .to_string(),
-            );
-        }
-    } else if detected_format == "curseforge" {
-        if let Ok(mut mf) = archive.by_name("manifest.json") {
-            let mut raw = String::new();
-            mf.read_to_string(&mut raw).map_err(into_error)?;
-            if let Ok(manifest) = serde_json::from_str::<Value>(&raw) {
-                if let Some(v) = manifest
-                    .get("minecraft")
-                    .and_then(|x| x.get("version"))
-                    .and_then(|x| x.as_str())
-                {
-                    mc_version = v.to_string();
-                }
-                loader = detect_loader_from_curseforge_manifest(&manifest);
-                curseforge_manifest = Some(manifest);
-            }
-            notes.push(
-                "CurseForge manifest applied into the current instance with dependency resolution."
-                    .to_string(),
-            );
-        }
-    } else {
-        notes.push("Generic archive applied into the current instance.".to_string());
-    }
-
-    let out_root = instance_dir(&app, &safe_id)?;
-    if let Some(index) = modrinth_index.as_ref() {
-        let downloaded = import_modrinth_archive_dependencies(&out_root, index).await?;
-        if downloaded > 0 {
-            notes.push(format!(
-                "Downloaded {downloaded} files from Modrinth archive metadata."
-            ));
-        }
-    }
-    if let Some(manifest) = curseforge_manifest.as_ref() {
-        let downloaded = import_curseforge_manifest_dependencies(&app, &out_root, manifest).await?;
-        if downloaded > 0 {
-            notes.push(format!(
-                "Downloaded {downloaded} required files from CurseForge manifest."
-            ));
-        }
-    }
-    let mut extracted_any = false;
-    for i in 0..archive.len() {
-        let mut entry = archive.by_index(i).map_err(into_error)?;
-        if !entry.is_file() {
-            continue;
-        }
-        let entry_name = entry.name().replace('\\', "/");
-        let rel_opt = archive_entry_relative_path(&entry_name, detected_format);
-        let Some(rel) = rel_opt else {
-            continue;
-        };
-        if rel.trim().is_empty() || !is_safe_relative_archive_path(&rel) {
-            continue;
-        }
-        let out = out_root.join(rel);
-        if let Some(parent) = out.parent() {
-            fs::create_dir_all(parent).map_err(into_error)?;
-        }
-        let mut writer = fs::File::create(out).map_err(into_error)?;
-        std::io::copy(&mut entry, &mut writer).map_err(into_error)?;
-        extracted_any = true;
-    }
-    if !extracted_any {
-        return Err("pack_archive_apply_to_instance: archive has no importable files".to_string());
-    }
-
-    let mut patch = json!({
-      "mcVersion": mc_version,
-      "loader": loader,
-      "fabricLoaderVersion": Value::Null,
-      "quiltLoaderVersion": Value::Null,
-      "forgeVersion": Value::Null,
-      "neoforgeVersion": Value::Null
-    });
-    if loader != "vanilla" {
-        let resolved = loader_pick_version(loader.clone(), mc_version.clone()).await?;
-        match loader.as_str() {
-            "fabric" => patch["fabricLoaderVersion"] = json!(resolved),
-            "quilt" => patch["quiltLoaderVersion"] = json!(resolved),
-            "forge" => patch["forgeVersion"] = json!(resolved),
-            "neoforge" => patch["neoforgeVersion"] = json!(resolved),
-            _ => {}
-        }
-    }
-    if let Some(memory_mb) = payload
-        .get("defaults")
-        .and_then(|v| v.get("memoryMb"))
-        .and_then(|v| v.as_u64())
-    {
-        patch["memoryMb"] = json!(memory_mb);
-    }
-
-    let updated = instances_update(app.clone(), safe_id, patch)?;
-    Ok(json!({
-      "ok": true,
-      "canceled": false,
-      "result": {
-        "instance": updated,
-        "detectedFormat": detected_format,
-        "notes": notes
-      }
-    }))
+    apply_pack_archive_to_instance_from_path(app, safe_id, zip_path, payload).await
 }
 
 #[command]

@@ -136,7 +136,23 @@ function sanitizeSettings(settings: Record<string, unknown>): Record<string, unk
     "settingsUpdatedAt",
     "cloudSyncEnabled",
     "cloudSyncAuto",
-    "cloudSyncConflictPolicy"
+    "cloudSyncConflictPolicy",
+    "librarySortMode",
+    "libraryGroupMode",
+    "libraryFilterMode",
+    "instanceContentFilter",
+    "instanceWorldsFilter",
+    "logFilterMode",
+    "discoverKind",
+    "discoverPlatform",
+    "discoverSortMode",
+    "discoverCategory",
+    "discoverHideInstalled",
+    "discoverVersionLocked",
+    "discoverLoaderLocked",
+    "discoverVersionFilter",
+    "discoverLoaderFilter",
+    "discoverPageSize"
   ];
   for (const key of keys) {
     if (Object.prototype.hasOwnProperty.call(settings || {}, key)) out[key] = settings[key];

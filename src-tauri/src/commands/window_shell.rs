@@ -1,6 +1,6 @@
 use serde::Serialize;
 use tauri::command;
-use tauri::{AppHandle, Manager, PhysicalPosition, Position, Window};
+use tauri::{AppHandle, LogicalSize, Manager, PhysicalPosition, Position, Size, Window};
 
 use crate::error::{into_error, AppResult};
 
@@ -155,6 +155,31 @@ pub fn window_toggle_fullscreen(window: Window) -> AppResult<bool> {
     let next = !window.is_fullscreen().map_err(into_error)?;
     window.set_fullscreen(next).map_err(into_error)?;
     window.is_fullscreen().map_err(into_error)
+}
+
+#[command]
+pub fn window_set_fullscreen(window: Window, enabled: bool) -> AppResult<bool> {
+    window.set_fullscreen(enabled).map_err(into_error)?;
+    window.is_fullscreen().map_err(into_error)
+}
+
+#[command]
+pub fn window_set_size(window: Window, width: u32, height: u32) -> AppResult<bool> {
+    let safe_width = width.clamp(480, 3840);
+    let safe_height = height.clamp(320, 2160);
+    if window.is_fullscreen().map_err(into_error)? {
+        return Ok(false);
+    }
+    if window.is_maximized().map_err(into_error)? {
+        window.unmaximize().map_err(into_error)?;
+    }
+    window
+        .set_size(Size::Logical(LogicalSize::new(
+            f64::from(safe_width),
+            f64::from(safe_height),
+        )))
+        .map_err(into_error)?;
+    Ok(true)
 }
 
 #[command]

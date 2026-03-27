@@ -12,6 +12,8 @@ declare global {
       windowDragMove: (cursorX: number, cursorY: number, anchorRatio: number) => Promise<boolean>;
       windowDragEnd: (cursorY: number) => Promise<boolean>;
       windowToggleFullscreen: () => Promise<boolean>;
+      windowSetFullscreen: (enabled: boolean) => Promise<boolean>;
+      windowSetSize: (width: number, height: number) => Promise<boolean>;
       windowClose: () => Promise<boolean>;
       windowShow: () => Promise<boolean>;
       externalOpen: (url: string) => Promise<boolean>;
@@ -505,7 +507,6 @@ declare global {
         tunnels: any[];
       }>;
       instancesCreate: (cfg: any) => Promise<any>;
-      instancesSetActive: (id: string | null) => Promise<any>;
       instancesUpdate: (id: string, patch: any) => Promise<any>;
       instancesRemove: (id: string) => Promise<any>;
       instancesDuplicate: (id: string) => Promise<any>;
@@ -521,6 +522,24 @@ declare global {
       instancesGetIcon: (id: string) => Promise<string | null>;
       instancesClearIcon: (id: string) => Promise<boolean>;
       instancesOpenFolder: (id: string) => Promise<string>;
+      instancesOpenSubfolder: (
+        id: string,
+        folder: "root" | "instance" | "mods" | "resourcepacks" | "shaderpacks" | "saves" | "worlds"
+      ) => Promise<string>;
+      instanceWorldOpenFolder: (instanceId: string, worldId: string) => Promise<string>;
+      instanceWorldsList: (instanceId: string) => Promise<{
+        instanceId: string;
+        savesPath: string;
+        worlds: Array<{
+          id: string;
+          name: string;
+          folderName: string;
+          path: string;
+          iconDataUrl: string | null;
+          lastPlayedAt: number;
+          hasIcon: boolean;
+        }>;
+      }>;
       instancesExport: (id: string) => Promise<
         | { ok: true; canceled: false; path: string }
         | { ok: false; canceled: true }
@@ -572,6 +591,8 @@ declare global {
             canceled: false;
             instance: any;
             lockfileApplied: boolean;
+            importKind?: "instance" | "pack";
+            detectedFormat?: "modrinth" | "curseforge" | "generic" | null;
             lockfileResult: {
               appliedMods: number;
               appliedPacks: number;
@@ -630,7 +651,10 @@ declare global {
         query: string,
         mcVersion?: string,
         loader?: "vanilla" | "fabric" | "quilt" | "forge" | "neoforge",
-        limit?: number
+        limit?: number,
+        offset?: number,
+        index?: "relevance" | "downloads" | "updated" | "name",
+        category?: string
       ) => Promise<{
         hits: Array<{
           projectId: string;
@@ -642,8 +666,13 @@ declare global {
           follows: number;
           dateModified: string | null;
           latestVersionId: string | null;
+          categories: string[];
           installed: boolean;
         }>;
+        offset: number;
+        limit: number;
+        totalHits: number;
+        hasNextPage: boolean;
       }>;
       modrinthModsInstall: (
         instanceId: string,
@@ -656,12 +685,53 @@ declare global {
         versionName: string | null;
         fileName: string;
       }>;
+      curseforgeModsSearch: (
+        instanceId: string,
+        query: string,
+        mcVersion?: string,
+        loader?: "vanilla" | "fabric" | "quilt" | "forge" | "neoforge",
+        limit?: number,
+        offset?: number,
+        category?: string
+      ) => Promise<{
+        hits: Array<{
+          projectId: string;
+          source: "curseforge";
+          title: string;
+          description: string;
+          iconUrl: string | null;
+          author: string | null;
+          downloads: number;
+          follows: number;
+          dateModified: string | null;
+          latestVersionId: string | null;
+          categories: string[];
+          installed: boolean;
+        }>;
+        offset: number;
+        limit: number;
+        totalHits: number;
+        hasNextPage: boolean;
+      }>;
+      curseforgeModsInstall: (
+        instanceId: string,
+        projectId: string,
+        fileId?: string
+      ) => Promise<{
+        ok: true;
+        projectId: string;
+        fileId: string;
+        fileName: string;
+      }>;
       modrinthContentSearch: (
         instanceId: string,
         kind: "resourcepack" | "shaderpack",
         query: string,
         mcVersion?: string,
-        limit?: number
+        limit?: number,
+        offset?: number,
+        index?: "relevance" | "downloads" | "updated" | "name",
+        category?: string
       ) => Promise<{
         hits: Array<{
           projectId: string;
@@ -674,8 +744,13 @@ declare global {
           follows: number;
           dateModified: string | null;
           latestVersionId: string | null;
+          categories: string[];
           installed: boolean;
         }>;
+        offset: number;
+        limit: number;
+        totalHits: number;
+        hasNextPage: boolean;
       }>;
       modrinthContentInstall: (
         instanceId: string,
@@ -796,6 +871,7 @@ declare global {
       ) => Promise<any>;
       serversRemove: (instanceId: string, serverId: string) => Promise<any>;
       serversSetPreferred: (instanceId: string, serverId: string | null) => Promise<any>;
+      serversRefreshStatus: (instanceId: string, force?: boolean) => Promise<any>;
       serversExportProfile: (instanceId: string, serverId: string) => Promise<
         | { ok: true; canceled: false; path: string }
         | { ok: false; canceled: true }

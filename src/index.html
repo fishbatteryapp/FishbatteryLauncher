@@ -58,7 +58,8 @@
         </div>
 
         <div class="nav">
-          <button id="navLibrary" class="active">Library</button>
+          <button id="navHome" class="active">Quick actions</button>
+          <button id="navLibrary">Library</button>
           <button id="navCapes">Skin &amp; Capes</button>
           <button id="navPlayit">Multiplayer</button>
           <button id="navSettings">Settings</button>
@@ -103,9 +104,44 @@
 
       <section class="main">
         <div class="topbar">
-          <div class="search">
-            <span>Search</span>
-            <input id="searchInstances" placeholder="Search instances by name or version" />
+          <div id="libraryTopbarTools" class="libraryTopbarTools">
+            <div class="search searchLarge">
+              <span>Search</span>
+              <input id="searchInstances" placeholder="Search instances, loaders, versions, or sources" />
+            </div>
+            <div class="libraryToolbarControls">
+              <label class="toolbarSelect">
+                <span>Sort</span>
+                <select id="sortInstances">
+                  <option value="recent">Newest first</option>
+                  <option value="name">Name</option>
+                  <option value="version">Minecraft version</option>
+                  <option value="loader">Loader</option>
+                </select>
+              </label>
+              <label class="toolbarSelect">
+                <span>Group</span>
+                <select id="groupInstances">
+                  <option value="type">Type</option>
+                  <option value="source">Source</option>
+                  <option value="loader">Loader</option>
+                  <option value="version">Game version</option>
+                  <option value="sync">Sync state</option>
+                  <option value="none">None</option>
+                </select>
+              </label>
+              <label class="toolbarSelect toolbarSelectCompact">
+                <span>Show</span>
+                <select id="filterInstances">
+                  <option value="all">All instances</option>
+                  <option value="custom">Custom setups</option>
+                  <option value="modpack">Modpack bases</option>
+                  <option value="imported">Imported</option>
+                  <option value="synced">Sync enabled</option>
+                  <option value="local-only">Local only</option>
+                </select>
+              </label>
+            </div>
           </div>
 
           <div class="account">
@@ -132,12 +168,14 @@
           </div>
         </div>
 
-        <div id="viewLibrary" class="content">
-          <div class="sectionTitle">
-            <div>
-              <h2>Library</h2>
-              <p>Manage instances and launch Minecraft.</p>
-            </div>
+        <div id="viewHome" class="content">
+          <div id="homePanelRoot" class="homePanelRoot">
+            <div class="muted" style="font-size:12px">Loading quick actions...</div>
+          </div>
+        </div>
+
+        <div id="viewLibrary" class="content" style="display:none">
+          <div class="sectionTitle sectionTitleCompact">
             <div class="topActions">
               <button id="btnQuickLaunchLatestVanilla" class="btn">Play Latest Version</button>
               <button id="btnCreate" class="btn btnPrimary">Create</button>
@@ -153,23 +191,241 @@
             </div>
           </div>
 
-          <div id="instancesGrid" class="grid"></div>
+          <div class="libraryResultsBar">
+            <div id="libraryResultsMeta" class="libraryResultsMeta">Loading library...</div>
+          </div>
 
-          <div class="logs">
-            <div class="logsHeader">
-              <strong>Status and diagnostics</strong>
-              <button id="btnAnalyzeLogs" class="btn">Check Issues</button>
-              <button id="btnApplyDiagnosisFix" class="btn btnPrimary" disabled>Auto Fix Problems</button>
-              <button id="btnToggleDiagnosisDetails" class="btn">Details</button>
-              <button id="btnToggleDebugLogs" class="btn">Show Debug Logs</button>
-              <button id="btnCopyDiagnosisReport" class="btn">Copy report</button>
-              <div class="spacer"></div>
-              <button id="btnClearLogs" class="btn">Clear</button>
+          <div id="instancesGrid" class="grid libraryGrid"></div>
+        </div>
+
+        <div id="viewInstance" class="content" style="display:none">
+          <div class="instancePage">
+            <div class="instancePageHeader">
+              <div class="instancePageHeaderTop">
+                <button id="instanceBackBtn" class="btn" type="button">Back to library</button>
+              </div>
+
+              <div class="instanceHero">
+                <div class="instanceHeroIdentity">
+                  <div id="instanceHeroIcon" class="instanceHeroIcon" aria-hidden="true"></div>
+                  <div class="instanceHeroMeta">
+                    <h2 id="instanceHeroName">Instance</h2>
+                    <div id="instanceHeroSubline" class="instanceHeroSubline">Loader • Version</div>
+                    <div id="instanceHeroBadges" class="instanceHeroBadges"></div>
+                  </div>
+                </div>
+
+                <div class="instanceHeroActions">
+                  <button id="instancePlayBtn" class="btn btnPrimary" type="button">Play</button>
+                  <button id="instanceOpenFolderBtn" class="btn" type="button">Open folder</button>
+                  <button id="instanceEditBtn" class="btn" type="button">Settings</button>
+                </div>
+              </div>
             </div>
-            <div id="launchDiagnosis" class="launchDiagnosis" style="display:none"></div>
-            <div id="launchDiagnosisDetails" class="launchDiagnosisDetails" style="display:none"></div>
-            <pre id="logs"></pre>
-            <div id="statusText" class="statusText"></div>
+
+            <div class="instancePageTabs">
+              <button id="instanceTabContent" class="tab active" type="button">Content</button>
+              <button id="instanceTabWorlds" class="tab" type="button">Worlds</button>
+              <button id="instanceTabLogs" class="tab" type="button">Logs</button>
+            </div>
+
+            <div id="instancePageContent" class="instanceTabPanel">
+              <div class="instanceToolbar">
+                <div class="search searchLarge">
+                  <span>Search</span>
+                  <input id="instanceInstalledSearch" placeholder="Search installed mods, packs, and files" />
+                </div>
+                <div class="instanceToolbarActions">
+                  <button id="btnBrowseInstanceContent" class="btn btnPrimary" type="button">Discover content</button>
+                  <div id="instanceUploadMenu" class="instanceUploadMenu">
+                    <button id="instanceUploadFilesBtn" class="btn" type="button" aria-haspopup="menu" aria-expanded="false">
+                      Upload files
+                    </button>
+                    <div id="instanceUploadFilesDropdown" class="dropdown instanceUploadDropdown" role="menu">
+                      <button id="instanceUploadModsOption" class="instanceUploadOption" type="button" role="menuitem">Mod</button>
+                      <button id="instanceUploadShaderpacksOption" class="instanceUploadOption" type="button" role="menuitem">Shaderpack</button>
+                      <button id="instanceUploadResourcepacksOption" class="instanceUploadOption" type="button" role="menuitem">Resource pack</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="instanceFilterBar">
+                <div id="instanceContentFilters" class="filterChipRow">
+                  <button id="instanceFilterAll" class="filterToggle active" type="button">All</button>
+                  <button id="instanceFilterMods" class="filterToggle" type="button">Mods</button>
+                  <button id="instanceFilterResourcepacks" class="filterToggle" type="button">Resource Packs</button>
+                  <button id="instanceFilterShaderpacks" class="filterToggle" type="button">Shaders</button>
+                  <button id="instanceFilterUpdates" class="filterToggle" type="button">Updates</button>
+                </div>
+                <div class="instanceFilterActions">
+                  <button id="instanceRefreshContentBtn" class="btn" type="button">Refresh</button>
+                  <button id="instanceUpdateContentBtn" class="btn" type="button">Update all</button>
+                </div>
+              </div>
+
+              <div id="instanceContentSummary" class="instanceContentSummary">Loading installed content…</div>
+              <div id="instanceInstalledList" class="instanceInstalledList"></div>
+            </div>
+
+            <div id="instancePageWorlds" class="instanceTabPanel" style="display:none">
+              <div class="instanceToolbar">
+                <div class="search searchLarge">
+                  <span>Search</span>
+                  <input id="instanceWorldsSearch" placeholder="Search worlds and saved servers" />
+                </div>
+                <div class="instanceToolbarActions">
+                  <button id="instanceRefreshWorldsBtn" class="btn" type="button">Refresh</button>
+                  <button id="instanceAddServerBtn" class="btn" type="button">Add server</button>
+                  <button id="instanceOpenWorldFolderBtn" class="btn" type="button">Open saves folder</button>
+                </div>
+              </div>
+
+              <div class="instanceFilterBar">
+                <div class="filterChipRow">
+                  <button id="instanceWorldsFilterAll" class="filterToggle active" type="button">All</button>
+                  <button id="instanceWorldsFilterSingle" class="filterToggle" type="button">Singleplayer</button>
+                  <button id="instanceWorldsFilterServers" class="filterToggle" type="button">Servers</button>
+                </div>
+              </div>
+
+              <div id="instanceWorldsSummary" class="instanceContentSummary">Saved worlds and preferred servers for this instance.</div>
+              <div id="instanceWorldsListPage" class="instanceWorldsList"></div>
+            </div>
+
+            <div id="instancePageLogs" class="instanceTabPanel" style="display:none">
+              <div class="instanceToolbar">
+                <div class="search searchLarge">
+                  <span>Search</span>
+                  <input id="instanceLogsSearch" placeholder="Filter session logs" />
+                </div>
+                <div class="instanceToolbarActions">
+                  <button id="btnAnalyzeLogs" class="btn" type="button">Check issues</button>
+                  <button id="btnApplyDiagnosisFix" class="btn btnPrimary" type="button" disabled>Auto fix problems</button>
+                  <button id="btnCopyDiagnosisReport" class="btn" type="button">Copy report</button>
+                  <button id="btnClearLogs" class="btn btnDanger" type="button">Clear</button>
+                </div>
+              </div>
+
+              <div class="instanceFilterBar instanceLogsFilters">
+                <div class="filterChipRow">
+                  <button id="instanceLogLevelAll" class="filterToggle active" type="button">All</button>
+                  <button id="instanceLogLevelInfo" class="filterToggle" type="button">Info</button>
+                  <button id="instanceLogLevelWarn" class="filterToggle" type="button">Warn</button>
+                  <button id="instanceLogLevelError" class="filterToggle" type="button">Error</button>
+                  <button id="instanceLogLevelDebug" class="filterToggle" type="button">Debug</button>
+                </div>
+              </div>
+
+              <div id="launchDiagnosis" class="launchDiagnosis" style="display:none"></div>
+              <pre id="logs"></pre>
+              <div id="statusText" class="statusText"></div>
+            </div>
+          </div>
+        </div>
+
+        <div id="viewDiscover" class="content" style="display:none">
+          <div class="discoverPage">
+            <div class="instancePageHeader discoverPageHeader">
+              <div class="instancePageHeaderTop">
+                <button id="discoverBackBtn" class="btn" type="button">Back to instance</button>
+              </div>
+
+              <div class="discoverInstanceSummary">
+                <div id="discoverInstanceIcon" class="instanceHeroIcon" aria-hidden="true"></div>
+                <div class="instanceHeroMeta">
+                  <div class="discoverEyebrow">FISHBATTERY CONTENT BAY</div>
+                  <h2 id="discoverInstanceName">Discover content</h2>
+                  <div id="discoverInstanceSubline" class="instanceHeroSubline">Scoped to this instance</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="discoverLayout">
+              <div class="discoverMain">
+                <div class="discoverTypeTabs">
+                  <button id="discoverKindMods" class="filterToggle active" type="button">Mods</button>
+                  <button id="discoverKindResourcepacks" class="filterToggle" type="button">Resource Packs</button>
+                  <button id="discoverKindShaderpacks" class="filterToggle" type="button">Shaders</button>
+                </div>
+
+                <div class="instanceToolbar">
+                  <div class="search searchLarge">
+                    <span>Search</span>
+                    <input id="discoverSearchInput" placeholder="Search installable content" />
+                  </div>
+                  <div class="instanceToolbarActions">
+                    <label class="toolbarSelect">
+                      <span>Source</span>
+                      <select id="discoverPlatformSelect"></select>
+                    </label>
+                    <label class="toolbarSelect">
+                      <span>Sort</span>
+                      <select id="discoverSortSelect">
+                        <option value="relevance">Relevance</option>
+                        <option value="downloads">Downloads</option>
+                        <option value="updated">Updated</option>
+                        <option value="name">Name</option>
+                      </select>
+                    </label>
+                    <label class="toolbarSelect">
+                      <span>View</span>
+                      <select id="discoverPageSizeSelect">
+                        <option value="20">20</option>
+                        <option value="30">30</option>
+                      </select>
+                    </label>
+                  </div>
+                </div>
+
+                <div class="discoverResultsBar">
+                  <div id="discoverResultsMeta" class="instanceContentSummary">Loading content browser…</div>
+                  <div id="discoverPagination" class="discoverPagination"></div>
+                </div>
+                <div id="discoverResults" class="discoverResults"></div>
+              </div>
+
+              <aside class="discoverSidebar">
+                <div class="discoverSidebarIntro">
+                  <strong>Scoped filters</strong>
+                  <span>Keep browsing tied to this setup unless you intentionally unlock compatibility.</span>
+                </div>
+
+                <label class="discoverSidebarToggle">
+                  <input id="discoverHideInstalled" type="checkbox" />
+                  <span>Hide installed content</span>
+                </label>
+
+                <div class="discoverSidebarSection">
+                  <div class="discoverSidebarHeader">
+                    <strong>Game version</strong>
+                  </div>
+                  <div id="discoverVersionLock" class="discoverLockCard"></div>
+                  <select id="discoverVersionSelect" class="setControl" style="display:none"></select>
+                </div>
+
+                <div class="discoverSidebarSection">
+                  <div class="discoverSidebarHeader">
+                    <strong>Loader</strong>
+                  </div>
+                  <div id="discoverLoaderLock" class="discoverLockCard"></div>
+                  <select id="discoverLoaderSelect" class="setControl" style="display:none">
+                    <option value="vanilla">Vanilla</option>
+                    <option value="fabric">Fabric</option>
+                    <option value="quilt">Quilt</option>
+                    <option value="forge">Forge</option>
+                    <option value="neoforge">NeoForge</option>
+                  </select>
+                </div>
+
+                <div class="discoverSidebarSection">
+                  <div class="discoverSidebarHeader">
+                    <strong>Category</strong>
+                  </div>
+                  <div id="discoverCategoryList" class="discoverCategoryList"></div>
+                </div>
+              </aside>
+            </div>
           </div>
         </div>
 
@@ -260,232 +516,315 @@
         <div class="modalBody">
           <div class="tabs">
             <button id="modalTabGeneral" class="tab active">Edit</button>
-            <button id="modalTabInstalled" class="tab">Installed</button>
-            <button id="modalTabDiscover" class="tab">Discover</button>
           </div>
 
           <div id="modalPanelGeneral">
-            <div class="field">
-              <label>Creation source</label>
-              <div class="sourceTabs">
-                <button id="createSourceCustom" class="btn btnPrimary" type="button">Custom</button>
-                <button id="createSourceImport" class="btn" type="button">Import</button>
-                <button id="createSourceModrinth" class="btn" type="button">Modrinth</button>
-                <button id="createSourceCurseForge" class="btn" type="button">CurseForge</button>
-                <button id="createSourceTechnic" class="btn" type="button">Technic</button>
-                <button id="createSourceATLauncher" class="btn" type="button">ATLauncher</button>
-                <button id="createSourceFTB" class="btn" type="button">FTB</button>
+            <div id="createFlowIntro" class="createFlowIntro" style="display:none">
+              <div class="createFlowIntroHeader">
+                <div class="libraryEyebrow">Step 1</div>
+                <h3>Choose how this instance starts</h3>
+                <p>Start from a polished custom setup, a multi-platform modpack browser, or an imported profile/archive.</p>
               </div>
-              <div id="createSourceHint" class="muted" style="font-size:12px; margin-top:6px">
-                Build a custom instance with manual version + loader selection.
+              <div class="createFlowChoiceGrid">
+                <button id="createEntryCustom" class="createEntryCard" type="button">
+                  <div class="createEntryIcon createEntryIconCustom">
+                    <span class="createEntryGlyph btnIconMask" style="--btn-icon-url:url('/Icons/plus-icon.svg')"></span>
+                  </div>
+                  <div class="createEntryText">
+                    <strong>Custom setup</strong>
+                    <span>Pick a loader, game version, icon, and Fishbattery presets from scratch.</span>
+                  </div>
+                </button>
+                <button id="createEntryModpack" class="createEntryCard" type="button">
+                  <div class="createEntryIcon createEntryIconModpack">
+                    <span class="createEntryGlyph btnIconMask" style="--btn-icon-url:url('/Icons/box-icon.svg')"></span>
+                  </div>
+                  <div class="createEntryText">
+                    <strong>Modpack base</strong>
+                    <span>Browse Modrinth, CurseForge, FTB, ATLauncher, Technic, and more from one flow.</span>
+                  </div>
+                </button>
+                <button id="createEntryImport" class="createEntryCard" type="button">
+                  <div class="createEntryIcon createEntryIconImport">
+                    <span class="createEntryGlyph btnIconMask" style="--btn-icon-url:url('/Icons/download-icon.svg')"></span>
+                  </div>
+                  <div class="createEntryText">
+                    <strong>Import instance</strong>
+                    <span>Bring in local launcher profiles or archive exports without leaving Fishbattery.</span>
+                  </div>
+                </button>
+              </div>
+              <div class="createFlowIntroNote">
+                Fishbattery keeps provider support mixed into the same setup flow instead of locking you to one platform.
               </div>
             </div>
 
-            <div id="createProviderImport" class="setRow" style="display:none">
-              <div style="width:100%">
-                <div class="setLabel">Import existing instance/pack</div>
-                <div class="setHelp">Import archives or installed profiles from other launchers.</div>
-                <div class="setRow" style="margin-top:12px; align-items:flex-end">
-                  <div style="flex:1">
-                    <div class="setLabel">Detected local Modrinth profiles</div>
-                    <div id="localModrinthProfilesHelp" class="setHelp">Import directly from Modrinth App profiles.</div>
-                    <select id="localModrinthProfilesSelect" class="setControl" style="margin-top:8px"></select>
+            <div id="createFlowWorkspace" class="createFlowWorkspace">
+              <div class="createFlowHeader">
+                <div>
+                  <div id="createFlowStepLabel" class="libraryEyebrow">Step 2</div>
+                  <div class="createFlowTitleRow">
+                    <h3 id="createFlowTitle">Custom setup</h3>
+                    <span id="createFlowBadge" class="instanceBadge instanceBadgeNeutral">Custom</span>
                   </div>
-                  <div class="row" style="gap:8px; justify-content:flex-start">
-                    <button id="btnRefreshLocalModrinthProfiles" class="btn" type="button">Refresh</button>
-                    <button id="btnImportLocalModrinthProfile" class="btn" type="button">Import selected</button>
-                  </div>
+                  <p id="createFlowDescription" class="createFlowDescription">
+                    Build a custom instance with manual version and loader selection.
+                  </p>
                 </div>
-                <div class="setRow" style="margin-top:12px; align-items:flex-end">
-                  <div style="flex:1">
-                    <div class="setLabel">Detected local CurseForge instances</div>
-                    <div id="localCurseForgeProfilesHelp" class="setHelp">Import directly from CurseForge installed instances.</div>
-                    <select id="localCurseForgeProfilesSelect" class="setControl" style="margin-top:8px"></select>
-                  </div>
-                  <div class="row" style="gap:8px; justify-content:flex-start">
-                    <button id="btnRefreshLocalCurseForgeProfiles" class="btn" type="button">Refresh</button>
-                    <button id="btnImportLocalCurseForgeProfile" class="btn" type="button">Import selected</button>
-                  </div>
-                </div>
-                <div style="height:12px"></div>
+                <button id="btnCreateFlowBack" class="btn" type="button">Back</button>
               </div>
-              <button id="btnCreateImportNow" class="btn" type="button">Choose file and import</button>
-            </div>
 
-            <div id="createProviderMarketplace" class="setRow" style="display:none">
-              <div>
-                <div id="createProviderMarketplaceTitle" class="setLabel">Pack browser</div>
-                <div id="createProviderMarketplaceHelp" class="setHelp">
-                  Browse and install Modrinth modpacks into a new isolated instance.
+              <div id="createSourceField" class="field">
+                <label>Creation source</label>
+                <div class="sourceTabs sourceTabsModern">
+                  <button id="createSourceCustom" class="btn btnPrimary" type="button">Custom</button>
+                  <button id="createSourceImport" class="btn" type="button">Import</button>
+                  <button id="createSourceModrinth" class="btn" type="button">Modrinth</button>
+                  <button id="createSourceCurseForge" class="btn" type="button">CurseForge</button>
+                  <button id="createSourceTechnic" class="btn" type="button">Technic</button>
+                  <button id="createSourceATLauncher" class="btn" type="button">ATLauncher</button>
+                  <button id="createSourceFTB" class="btn" type="button">FTB</button>
                 </div>
-                <div id="createModrinthPanel" style="margin-top:10px; display:none">
-                  <div class="row" style="gap:8px; justify-content:flex-start">
-                    <input id="modrinthSearchInput" class="setControl" placeholder="Search Modrinth modpacks..." style="min-width:260px; flex:1; max-width:none" />
-                    <button id="btnModrinthSearch" class="btn" type="button">Search</button>
-                  </div>
-                  <div id="modrinthResultsLabel" class="setHelp" style="margin-top:8px">Popular modpacks</div>
-                  <div id="modrinthSearchResults" style="margin-top:10px; max-height:230px; overflow:auto"></div>
+                <div id="createSourceHint" class="muted" style="font-size:12px; margin-top:6px">
+                  Build a custom instance with manual version + loader selection.
                 </div>
-                <div id="createCurseForgePanel" style="margin-top:10px; display:none">
-                  <div class="row" style="gap:8px; justify-content:flex-start; margin-top:8px">
-                    <input id="providerSearchInput" class="setControl" placeholder="Search packs..." style="min-width:260px; flex:1; max-width:none" />
-                    <button id="btnProviderSearch" class="btn" type="button">Search</button>
+              </div>
+
+              <div id="createProviderImport" class="createPanelShell createImportPanel" style="display:none">
+                <div class="createImportHeader">
+                  <div class="createImportLead">
+                    <div class="setLabel">Import existing instance or pack</div>
+                    <div class="setHelp">Bring in launcher archives, exported packs, or installed profiles without rebuilding the setup manually.</div>
                   </div>
-                  <div id="providerResultsLabel" class="setHelp" style="margin-top:8px">Popular packs</div>
-                  <div id="providerSearchResults" style="margin-top:10px; max-height:210px; overflow:auto"></div>
-                  <div id="providerArchiveActions" style="margin-top:10px">
-                    <div class="setHelp" id="providerArchiveHelp">
-                      Import provider archive to create a new instance.
+                  <div class="createImportArchiveCard">
+                    <div class="createImportArchiveIcon" aria-hidden="true"></div>
+                    <div class="createImportArchiveCopy">
+                      <strong>Archive import</strong>
+                      <span>Pick a `.zip`, `.mrpack`, or exported pack file and Fishbattery will create a fresh instance from it.</span>
                     </div>
-                    <div class="row" style="margin-top:10px; justify-content:flex-start">
-                    <button id="btnProviderImportArchive" class="btn" type="button">Import pack archive</button>
+                    <button id="btnCreateImportNow" class="btn btnPrimary" type="button">Choose file and import</button>
+                  </div>
+                </div>
+
+                <div class="createImportMethods">
+                  <section class="createImportMethodCard">
+                    <div class="createImportMethodTop">
+                      <div class="createImportMethodBadge createImportMethodBadgeFolder" aria-hidden="true"></div>
+                      <div class="createImportMethodCopy">
+                        <div class="setLabel">Detected local Modrinth profiles</div>
+                        <div id="localModrinthProfilesHelp" class="setHelp">Import directly from Modrinth App profiles already on this computer.</div>
+                      </div>
+                    </div>
+                    <select id="localModrinthProfilesSelect" class="setControl createImportSelect"></select>
+                    <div class="createImportMethodActions">
+                      <button id="btnRefreshLocalModrinthProfiles" class="btn" type="button">Refresh</button>
+                      <button id="btnImportLocalModrinthProfile" class="btn" type="button">Import selected</button>
+                    </div>
+                  </section>
+
+                  <section class="createImportMethodCard">
+                    <div class="createImportMethodTop">
+                      <div class="createImportMethodBadge createImportMethodBadgeFolder" aria-hidden="true"></div>
+                      <div class="createImportMethodCopy">
+                        <div class="setLabel">Detected local CurseForge instances</div>
+                        <div id="localCurseForgeProfilesHelp" class="setHelp">Import directly from CurseForge instances already installed on this computer.</div>
+                      </div>
+                    </div>
+                    <select id="localCurseForgeProfilesSelect" class="setControl createImportSelect"></select>
+                    <div class="createImportMethodActions">
+                      <button id="btnRefreshLocalCurseForgeProfiles" class="btn" type="button">Refresh</button>
+                      <button id="btnImportLocalCurseForgeProfile" class="btn" type="button">Import selected</button>
+                    </div>
+                  </section>
+                </div>
+              </div>
+
+              <div id="createProviderMarketplace" class="setRow createPanelShell" style="display:none">
+                <div>
+                  <div id="createProviderMarketplaceTitle" class="setLabel">Pack browser</div>
+                  <div id="createProviderMarketplaceHelp" class="setHelp">
+                    Browse and install Modrinth modpacks into a new isolated instance.
+                  </div>
+                  <div id="createModrinthPanel" style="margin-top:10px; display:none">
+                    <div class="row" style="gap:8px; justify-content:flex-start">
+                      <input id="modrinthSearchInput" class="setControl" placeholder="Search Modrinth modpacks..." style="min-width:260px; flex:1; max-width:none" />
+                      <button id="btnModrinthSearch" class="btn" type="button">Search</button>
+                    </div>
+                    <div id="modrinthResultsLabel" class="setHelp" style="margin-top:8px">Popular modpacks</div>
+                    <div id="modrinthSearchResults" style="margin-top:10px; max-height:230px; overflow:auto"></div>
+                  </div>
+                  <div id="createCurseForgePanel" style="margin-top:10px; display:none">
+                    <div class="row" style="gap:8px; justify-content:flex-start; margin-top:8px">
+                      <input id="providerSearchInput" class="setControl" placeholder="Search packs..." style="min-width:260px; flex:1; max-width:none" />
+                      <button id="btnProviderSearch" class="btn" type="button">Search</button>
+                    </div>
+                    <div id="providerResultsLabel" class="setHelp" style="margin-top:8px">Popular packs</div>
+                    <div id="providerSearchResults" style="margin-top:10px; max-height:210px; overflow:auto"></div>
+                    <div id="providerArchiveActions" style="margin-top:10px">
+                      <div class="setHelp" id="providerArchiveHelp">
+                        Import provider archive to create a new instance.
+                      </div>
+                      <div class="row" style="margin-top:10px; justify-content:flex-start">
+                      <button id="btnProviderImportArchive" class="btn" type="button">Import pack archive</button>
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
-            </div>
 
-            <div id="createCustomFields">
-            <div class="field">
-              <label>Name</label>
-              <input id="newName" placeholder="Enter a name for your instance" />
-            </div>
-            <div class="field">
-              <label>Instance icon</label>
-              <div class="row" style="justify-content:flex-start; gap:8px">
-                <button id="btnPickInstanceIcon" class="btn" type="button">Pick icon</button>
-                <button id="btnClearInstanceIcon" class="btn" type="button">Clear</button>
-                <button id="btnResetInstanceIconTransform" class="btn" type="button">Reset fit</button>
-              </div>
-              <div id="instanceIconHint" class="muted" style="font-size:12px; margin-top:6px">No custom icon selected.</div>
-              <div id="instanceIconPreviewWrap" style="margin-top:8px; display:none">
-                <div id="instanceIconPreviewStatus" class="setHelp">Drag image to reposition. Scroll to zoom.</div>
-                <div
-                  id="instanceIconPreviewFrame"
-                  class="instanceIconPreviewFrame"
-                >
-                  <img
-                    id="instanceIconPreviewImage"
-                    alt="Icon preview"
-                    style="position:absolute; left:0; top:0; user-select:none; pointer-events:none"
-                  />
+              <div id="createCustomFields" class="createCustomFields">
+                <div class="createCustomTop">
+                  <div class="createIconPanel">
+                    <div class="field" style="margin-bottom:0">
+                      <label>Instance icon</label>
+                      <div class="row" style="justify-content:flex-start; gap:8px">
+                        <button id="btnPickInstanceIcon" class="btn" type="button">Pick icon</button>
+                        <button id="btnClearInstanceIcon" class="btn" type="button">Clear</button>
+                        <button id="btnResetInstanceIconTransform" class="btn" type="button">Reset fit</button>
+                      </div>
+                      <div id="instanceIconHint" class="muted" style="font-size:12px; margin-top:6px">No custom icon selected.</div>
+                      <div id="instanceIconPreviewWrap" style="margin-top:8px; display:none">
+                        <div id="instanceIconPreviewStatus" class="setHelp">Drag image to reposition. Scroll to zoom.</div>
+                        <div
+                          id="instanceIconPreviewFrame"
+                          class="instanceIconPreviewFrame"
+                        >
+                          <img
+                            id="instanceIconPreviewImage"
+                            alt="Icon preview"
+                            style="position:absolute; left:0; top:0; user-select:none; pointer-events:none"
+                          />
+                        </div>
+                      </div>
+                      <div id="instanceIconTransformControls" style="margin-top:8px">
+                        <div class="setHelp">Resize and reposition custom icon</div>
+                        <div class="row" style="justify-content:flex-start; gap:8px; margin-top:6px">
+                          <label for="instanceIconScale" style="min-width:78px">Zoom</label>
+                          <input id="instanceIconScale" type="range" min="50" max="250" step="1" value="100" style="flex:1" />
+                          <span id="instanceIconScaleValue" class="muted" style="font-size:12px; min-width:48px">100%</span>
+                        </div>
+                        <div class="row" style="justify-content:flex-start; gap:8px; margin-top:4px; display:none">
+                          <label for="instanceIconOffsetX" style="min-width:78px">Position X</label>
+                          <input id="instanceIconOffsetX" type="range" min="-100" max="100" step="1" value="0" style="flex:1" />
+                          <span id="instanceIconOffsetXValue" class="muted" style="font-size:12px; min-width:48px">0%</span>
+                        </div>
+                        <div class="row" style="justify-content:flex-start; gap:8px; margin-top:4px; display:none">
+                          <label for="instanceIconOffsetY" style="min-width:78px">Position Y</label>
+                          <input id="instanceIconOffsetY" type="range" min="-100" max="100" step="1" value="0" style="flex:1" />
+                          <span id="instanceIconOffsetYValue" class="muted" style="font-size:12px; min-width:48px">0%</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="createIdentityPanel">
+                    <div class="field">
+                      <label>Name</label>
+                      <input id="newName" placeholder="Enter a name for your instance" />
+                    </div>
+
+                    <div class="field">
+                      <label>Account</label>
+                      <select id="instanceAccount"></select>
+                      <div class="muted" style="font-size:12px; margin-top:6px">
+                        This instance will always launch with this account.
+                      </div>
+                    </div>
+
+                    <div class="field">
+                      <label>Cloud sync for this instance</label>
+                      <div class="row" style="justify-content:flex-start; gap:8px">
+                        <button id="instanceSyncEnabled" class="filterToggle active" type="button">Enabled</button>
+                      </div>
+                      <div class="muted" style="font-size:12px; margin-top:6px">
+                        When disabled, this instance stays local-only and is excluded from cloud sync.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="createConfigGrid">
+                  <div class="field createConfigBlock">
+                    <label>Game version</label>
+                    <select id="newVersion"></select>
+                    <div class="row" style="justify-content:flex-start; gap:8px; margin-top:8px">
+                      <button id="createFilterReleases" class="filterToggle active" type="button">Releases</button>
+                      <button id="createFilterSnapshots" class="filterToggle" type="button">Snapshots</button>
+                    </div>
+                  </div>
+                  <div class="field createConfigBlock">
+                    <label>Mod loader</label>
+                    <select id="createLoaderType">
+                      <option value="vanilla">Vanilla</option>
+                      <option value="fabric" selected>Fabric</option>
+                      <option value="quilt">Quilt</option>
+                      <option value="forge">Forge</option>
+                      <option value="neoforge">NeoForge</option>
+                    </select>
+                  </div>
+                  <div class="field createConfigBlock">
+                    <label>Loader version</label>
+                    <input id="createLoaderVersion" placeholder="Auto (recommended)" disabled />
+                    <div id="createLoaderHint" class="muted" style="font-size:12px; margin-top:6px">
+                      Auto-picked for Fabric from official metadata.
+                    </div>
+                  </div>
+                  <div class="field createConfigBlock createConfigBlockCompact">
+                    <label>Memory (MB)</label>
+                    <input id="newMem" placeholder="4096" />
+                  </div>
+                </div>
+
+                <div class="field createPresetField">
+                  <label>Instance preset</label>
+                  <select id="instancePreset"></select>
+                  <div class="muted" style="font-size:12px; margin-top:6px">
+                    Applies curated mods and packs for this instance.
+                  </div>
+                </div>
+
+                <div class="createAdvancedGrid">
+                  <div class="setRow">
+                    <div>
+                      <div class="setLabel">One-click hardware optimization</div>
+                      <div class="setHelp">Apply balanced JVM tuning that fits this setup.</div>
+                    </div>
+                    <div class="row" style="gap:8px">
+                      <select id="optProfile" style="min-width:180px">
+                        <option value="conservative">Conservative</option>
+                        <option value="balanced" selected>Balanced</option>
+                        <option value="aggressive">Aggressive</option>
+                      </select>
+                      <button id="btnOptimizeInstance" class="btn">Optimize Instance</button>
+                      <button id="btnRestoreOptimization" class="btn">Restore Defaults</button>
+                    </div>
+                  </div>
+
+                  <div class="setRow">
+                    <div>
+                      <div class="setLabel">Benchmark estimate</div>
+                      <div class="setHelp">Run a synthetic baseline to compare optimization profiles.</div>
+                    </div>
+                    <div class="row" style="gap:8px">
+                      <button id="btnRunBenchmark" class="btn">Run Benchmark</button>
+                    </div>
+                  </div>
+
+                  <div class="field">
+                    <label>Servers for this instance</label>
+                    <div class="row" style="gap:8px">
+                      <input id="serverNameInput" placeholder="Server name (e.g. Friend SMP)" />
+                      <input id="serverAddressInput" placeholder="Address (e.g. play.example.com)" />
+                      <button id="btnSaveServerEntry" class="btn">Save</button>
+                    </div>
+                    <div id="serverList" style="margin-top:10px"></div>
+                    <div class="row" style="gap:8px; margin-top:8px">
+                      <button id="btnExportServerProfile" class="btn">Export Server Profile</button>
+                      <button id="btnImportServerProfile" class="btn">Import Server Profile</button>
+                    </div>
+                  </div>
                 </div>
               </div>
-              <div id="instanceIconTransformControls" style="margin-top:8px">
-                <div class="setHelp">Resize and reposition custom icon</div>
-                <div class="row" style="justify-content:flex-start; gap:8px; margin-top:6px">
-                  <label for="instanceIconScale" style="min-width:78px">Zoom</label>
-                  <input id="instanceIconScale" type="range" min="50" max="250" step="1" value="100" style="flex:1" />
-                  <span id="instanceIconScaleValue" class="muted" style="font-size:12px; min-width:48px">100%</span>
-                </div>
-                <div class="row" style="justify-content:flex-start; gap:8px; margin-top:4px; display:none">
-                  <label for="instanceIconOffsetX" style="min-width:78px">Position X</label>
-                  <input id="instanceIconOffsetX" type="range" min="-100" max="100" step="1" value="0" style="flex:1" />
-                  <span id="instanceIconOffsetXValue" class="muted" style="font-size:12px; min-width:48px">0%</span>
-                </div>
-                <div class="row" style="justify-content:flex-start; gap:8px; margin-top:4px; display:none">
-                  <label for="instanceIconOffsetY" style="min-width:78px">Position Y</label>
-                  <input id="instanceIconOffsetY" type="range" min="-100" max="100" step="1" value="0" style="flex:1" />
-                  <span id="instanceIconOffsetYValue" class="muted" style="font-size:12px; min-width:48px">0%</span>
-                </div>
-              </div>
-            </div>
-
-            <div class="field">
-              <label>Account</label>
-              <select id="instanceAccount"></select>
-              <div class="muted" style="font-size:12px; margin-top:6px">
-                This instance will always launch with this account.
-              </div>
-            </div>
-
-            <div class="field">
-              <label>Cloud sync for this instance</label>
-              <div class="row" style="justify-content:flex-start; gap:8px">
-                <button id="instanceSyncEnabled" class="filterToggle active" type="button">Enabled</button>
-              </div>
-              <div class="muted" style="font-size:12px; margin-top:6px">
-                When disabled, this instance stays local-only and is excluded from cloud sync.
-              </div>
-            </div>
-
-            <div class="row">
-              <div class="field" style="flex:1">
-                <label>Game version</label>
-                <select id="newVersion"></select>
-                <div class="row" style="justify-content:flex-start; gap:8px; margin-top:8px">
-                  <button id="createFilterReleases" class="filterToggle active" type="button">Releases</button>
-                  <button id="createFilterSnapshots" class="filterToggle" type="button">Snapshots</button>
-                </div>
-              </div>
-              <div class="field" style="width:160px">
-                <label>Memory (MB)</label>
-                <input id="newMem" placeholder="4096" />
-              </div>
-            </div>
-
-            <div class="row">
-              <div class="field" style="flex:1">
-                <label>Mod loader</label>
-                <select id="createLoaderType">
-                  <option value="vanilla">Vanilla</option>
-                  <option value="fabric" selected>Fabric</option>
-                  <option value="quilt">Quilt</option>
-                  <option value="forge">Forge</option>
-                  <option value="neoforge">NeoForge</option>
-                </select>
-              </div>
-              <div class="field" style="flex:1">
-                <label>Loader version</label>
-                <input id="createLoaderVersion" placeholder="Auto (recommended)" disabled />
-                <div id="createLoaderHint" class="muted" style="font-size:12px; margin-top:6px">
-                  Auto-picked for Fabric from official metadata.
-                </div>
-              </div>
-            </div>
-
-            <div class="field">
-              <label>Instance preset</label>
-              <select id="instancePreset"></select>
-              <div class="muted" style="font-size:12px; margin-top:6px">
-                Applies curated mods and packs for this instance.
-              </div>
-            </div>
-
-            <div class="row" style="justify-content:space-between; align-items:center">
-              <div class="muted" style="font-size:12px">One-click hardware optimization</div>
-              <div class="row" style="gap:8px">
-                <select id="optProfile" style="min-width:180px">
-                  <option value="conservative">Conservative</option>
-                  <option value="balanced" selected>Balanced</option>
-                  <option value="aggressive">Aggressive</option>
-                </select>
-                <button id="btnOptimizeInstance" class="btn">Optimize Instance</button>
-                <button id="btnRestoreOptimization" class="btn">Restore Defaults</button>
-              </div>
-            </div>
-
-            <div class="row" style="justify-content:space-between; align-items:center; margin-top:10px">
-              <div class="muted" style="font-size:12px">Instance benchmark estimate (synthetic baseline)</div>
-              <div class="row" style="gap:8px">
-                <button id="btnRunBenchmark" class="btn">Run Benchmark</button>
-              </div>
-            </div>
-
-            <div style="height:16px"></div>
-            <div class="field">
-              <label>Servers for this instance</label>
-              <div class="row" style="gap:8px">
-                <input id="serverNameInput" placeholder="Server name (e.g. Friend SMP)" />
-                <input id="serverAddressInput" placeholder="Address (e.g. play.example.com)" />
-                <button id="btnSaveServerEntry" class="btn">Save</button>
-              </div>
-              <div id="serverList" style="margin-top:10px"></div>
-              <div class="row" style="gap:8px; margin-top:8px">
-                <button id="btnExportServerProfile" class="btn">Export Server Profile</button>
-                <button id="btnImportServerProfile" class="btn">Import Server Profile</button>
-              </div>
-            </div>
             </div>
           </div>
 
@@ -510,7 +849,7 @@
               </div>
               <div class="row" style="gap:8px">
                 <button id="modalUploadLocalMod" class="btn">Upload .jar</button>
-                <button id="modalOpenInstanceFolder" class="btn">Open Folder</button>
+                <button id="modalOpenInstanceFolder" class="btn">Open Mods Folder</button>
               </div>
             </div>
 
@@ -533,7 +872,7 @@
               <strong style="font-size:13px">Resource packs</strong>
               <div class="row" style="gap:8px">
                 <button id="btnUploadResourcepack" class="btn">Upload .zip</button>
-                <button id="btnOpenInstanceFolder2" class="btn">Open Folder</button>
+                <button id="btnOpenInstanceFolder2" class="btn">Open Resource Packs Folder</button>
               </div>
             </div>
             <div style="height:10px"></div>
@@ -545,7 +884,7 @@
               <strong style="font-size:13px">Shader packs</strong>
               <div class="row" style="gap:8px">
                 <button id="btnUploadShaderpack" class="btn">Upload .zip</button>
-                <button id="btnOpenInstanceFolder3" class="btn">Open Folder</button>
+                <button id="btnOpenInstanceFolder3" class="btn">Open Shader Packs Folder</button>
               </div>
             </div>
             <div style="height:10px"></div>
@@ -555,9 +894,9 @@
             <div class="setRow" style="align-items:flex-start">
               <div style="display:flex; flex-direction:column; gap:6px; flex:1">
                 <div class="setLabel">Import launcher export</div>
-                <div class="setHelp">Merge a Fishbattery instance export (.zip) into this instance and refresh the editor automatically.</div>
+                <div class="setHelp">Merge a Fishbattery instance export (.zip) or apply a pack archive (.zip/.mrpack) into this instance and refresh the editor automatically.</div>
               </div>
-              <button id="btnImportInstanceArchiveIntoCurrent" class="btn">Import .zip</button>
+              <button id="btnImportInstanceArchiveIntoCurrent" class="btn">Import archive</button>
             </div>
 
             <div style="height:16px"></div>

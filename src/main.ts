@@ -43,7 +43,14 @@ const appShell = $("appShell");
 
 const instancesGrid = $("instancesGrid") as HTMLDivElement;
 const searchInstances = $("searchInstances") as HTMLInputElement;
+const sortInstances = $("sortInstances") as HTMLSelectElement;
+const groupInstances = $("groupInstances") as HTMLSelectElement;
+const filterInstances = $("filterInstances") as HTMLSelectElement;
+const libraryTopbarTools = $("libraryTopbarTools");
+const librarySummaryCards = document.getElementById("librarySummaryCards") as HTMLDivElement | null;
+const libraryResultsMeta = $("libraryResultsMeta");
 
+const navHome = $("navHome");
 const navLibrary = $("navLibrary");
 const navCapes = $("navCapes");
 const navPlayit = $("navPlayit");
@@ -66,12 +73,85 @@ const consentAccept = $("consentAccept") as HTMLButtonElement;
 const consentReject = $("consentReject") as HTMLButtonElement;
 const consentSettings = $("consentSettings") as HTMLButtonElement;
 
+const viewHome = $("viewHome");
+const homePanelRoot = $("homePanelRoot");
 const viewLibrary = $("viewLibrary");
+const viewInstance = $("viewInstance");
+const viewDiscover = $("viewDiscover");
 const viewCapes = $("viewCapes");
 const viewPlayit = $("viewPlayit");
 const viewSettings = $("viewSettings");
 const capesPanelRoot = $("capesPanelRoot");
 const playitPanelRoot = $("playitPanelRoot");
+
+const instanceBackBtn = $("instanceBackBtn") as HTMLButtonElement;
+const instanceBreadcrumbs = document.getElementById("instanceBreadcrumbs") as HTMLElement | null;
+const instanceHeroIcon = $("instanceHeroIcon");
+const instanceHeroName = $("instanceHeroName");
+const instanceHeroSubline = $("instanceHeroSubline");
+const instanceHeroBadges = $("instanceHeroBadges");
+const instancePlayBtn = $("instancePlayBtn") as HTMLButtonElement;
+const instanceOpenFolderBtn = $("instanceOpenFolderBtn") as HTMLButtonElement;
+const instanceEditBtn = $("instanceEditBtn") as HTMLButtonElement;
+const instanceTabContent = $("instanceTabContent") as HTMLButtonElement;
+const instanceTabWorlds = $("instanceTabWorlds") as HTMLButtonElement;
+const instanceTabLogs = $("instanceTabLogs") as HTMLButtonElement;
+const instancePageContent = $("instancePageContent");
+const instancePageWorlds = $("instancePageWorlds");
+const instancePageLogs = $("instancePageLogs");
+const instanceInstalledSearch = $("instanceInstalledSearch") as HTMLInputElement;
+const btnBrowseInstanceContent = $("btnBrowseInstanceContent") as HTMLButtonElement;
+const instanceUploadMenu = $("instanceUploadMenu");
+const instanceUploadFilesBtn = $("instanceUploadFilesBtn") as HTMLButtonElement;
+const instanceUploadFilesDropdown = $("instanceUploadFilesDropdown");
+const instanceUploadModsOption = $("instanceUploadModsOption") as HTMLButtonElement;
+const instanceUploadShaderpacksOption = $("instanceUploadShaderpacksOption") as HTMLButtonElement;
+const instanceUploadResourcepacksOption = $("instanceUploadResourcepacksOption") as HTMLButtonElement;
+const instanceFilterAll = $("instanceFilterAll") as HTMLButtonElement;
+const instanceFilterMods = $("instanceFilterMods") as HTMLButtonElement;
+const instanceFilterResourcepacks = $("instanceFilterResourcepacks") as HTMLButtonElement;
+const instanceFilterShaderpacks = $("instanceFilterShaderpacks") as HTMLButtonElement;
+const instanceFilterUpdates = $("instanceFilterUpdates") as HTMLButtonElement;
+const instanceRefreshContentBtn = $("instanceRefreshContentBtn") as HTMLButtonElement;
+const instanceUpdateContentBtn = $("instanceUpdateContentBtn") as HTMLButtonElement;
+const instanceContentSummary = $("instanceContentSummary");
+const instanceInstalledList = $("instanceInstalledList");
+const instanceWorldsSearch = $("instanceWorldsSearch") as HTMLInputElement;
+const instanceRefreshWorldsBtn = $("instanceRefreshWorldsBtn") as HTMLButtonElement;
+const instanceAddServerBtn = $("instanceAddServerBtn") as HTMLButtonElement;
+const instanceOpenWorldFolderBtn = $("instanceOpenWorldFolderBtn") as HTMLButtonElement;
+const instanceWorldsFilterAll = $("instanceWorldsFilterAll") as HTMLButtonElement;
+const instanceWorldsFilterSingle = $("instanceWorldsFilterSingle") as HTMLButtonElement;
+const instanceWorldsFilterServers = $("instanceWorldsFilterServers") as HTMLButtonElement;
+const instanceWorldsSummary = $("instanceWorldsSummary");
+const instanceWorldsListPage = $("instanceWorldsListPage");
+const instanceLogsSearch = $("instanceLogsSearch") as HTMLInputElement;
+const instanceLogLevelAll = $("instanceLogLevelAll") as HTMLButtonElement;
+const instanceLogLevelInfo = $("instanceLogLevelInfo") as HTMLButtonElement;
+const instanceLogLevelWarn = $("instanceLogLevelWarn") as HTMLButtonElement;
+const instanceLogLevelError = $("instanceLogLevelError") as HTMLButtonElement;
+const instanceLogLevelDebug = $("instanceLogLevelDebug") as HTMLButtonElement;
+
+const discoverBackBtn = $("discoverBackBtn") as HTMLButtonElement;
+const discoverInstanceIcon = $("discoverInstanceIcon");
+const discoverInstanceName = $("discoverInstanceName");
+const discoverInstanceSubline = $("discoverInstanceSubline");
+const discoverKindMods = $("discoverKindMods") as HTMLButtonElement;
+const discoverKindResourcepacks = $("discoverKindResourcepacks") as HTMLButtonElement;
+const discoverKindShaderpacks = $("discoverKindShaderpacks") as HTMLButtonElement;
+const discoverSearchInput = $("discoverSearchInput") as HTMLInputElement;
+const discoverPlatformSelect = $("discoverPlatformSelect") as HTMLSelectElement;
+const discoverSortSelect = $("discoverSortSelect") as HTMLSelectElement;
+const discoverPageSizeSelect = $("discoverPageSizeSelect") as HTMLSelectElement;
+const discoverResultsMeta = $("discoverResultsMeta");
+const discoverResults = $("discoverResults");
+const discoverPagination = $("discoverPagination");
+const discoverHideInstalled = $("discoverHideInstalled") as HTMLInputElement;
+const discoverVersionLock = $("discoverVersionLock");
+const discoverLoaderLock = $("discoverLoaderLock");
+const discoverVersionSelect = $("discoverVersionSelect") as HTMLSelectElement;
+const discoverLoaderSelect = $("discoverLoaderSelect") as HTMLSelectElement;
+const discoverCategoryList = $("discoverCategoryList");
 
 const accountBtn = $("accountBtn");
 const accountDropdown = $("accountDropdown");
@@ -89,17 +169,15 @@ const btnJoinPreferred = document.getElementById("btnJoinPreferred") as HTMLButt
 const btnClearLogs = $("btnClearLogs");
 const btnAnalyzeLogs = $("btnAnalyzeLogs");
 const btnApplyDiagnosisFix = $("btnApplyDiagnosisFix") as HTMLButtonElement;
-const btnToggleDiagnosisDetails = $("btnToggleDiagnosisDetails") as HTMLButtonElement;
-const btnToggleDebugLogs = $("btnToggleDebugLogs") as HTMLButtonElement;
 const btnCopyDiagnosisReport = $("btnCopyDiagnosisReport") as HTMLButtonElement;
 const launchDiagnosis = $("launchDiagnosis");
-const launchDiagnosisDetails = $("launchDiagnosisDetails");
 
 // Apply icon-first button labels while keeping text readable.
 function setButtonIcon(btn: HTMLButtonElement | null, svgPath: string) {
   if (!btn) return;
-  const label = String(btn.textContent || "").trim();
+  const label = btn.dataset.baseLabel || String(btn.textContent || "").trim();
   if (!label) return;
+  btn.dataset.baseLabel = label;
   btn.innerHTML = `
     <svg class="btnIcon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
       <path d="${svgPath}" fill="currentColor"></path>
@@ -110,30 +188,91 @@ function setButtonIcon(btn: HTMLButtonElement | null, svgPath: string) {
 
 function setButtonImageIcon(btn: HTMLButtonElement | null, src: string, alt = "") {
   if (!btn) return;
-  const label = String(btn.textContent || "").trim();
+  const label = btn.dataset.baseLabel || String(btn.textContent || "").trim();
   if (!label) return;
+  btn.dataset.baseLabel = label;
   btn.innerHTML = `
     <img class="btnIcon btnIconImage" src="${src}" alt="${alt}" aria-hidden="true" />
     <span>${label}</span>
   `;
 }
 
+function setButtonAssetIcon(btn: HTMLButtonElement | null, src: string) {
+  if (!btn) return;
+  const label = btn.dataset.baseLabel || String(btn.textContent || "").trim();
+  if (!label) return;
+  btn.dataset.baseLabel = label;
+  btn.innerHTML = `
+    <span class="btnIcon btnIconMask" style="--btn-icon-url:url('${src}')"></span>
+    <span>${label}</span>
+  `;
+}
+
+function setIconButtonAsset(btn: HTMLButtonElement | null, src: string, label = "") {
+  if (!btn) return;
+  if (label) btn.setAttribute("aria-label", label);
+  btn.innerHTML = `<span class="btnIcon btnIconMask" style="--btn-icon-url:url('${src}')"></span>`;
+}
+
 const TRASH_ICON_PATH =
   "M9.5 3.5c0-.83.67-1.5 1.5-1.5h2c.83 0 1.5.67 1.5 1.5V4h3.75C19.77 4 21 5.23 21 6.75S19.77 9.5 18.25 9.5H18l-1.02 9.2A4 4 0 0 1 13 22H11a4 4 0 0 1-3.98-3.3L6 9.5h-.25A2.75 2.75 0 0 1 3 6.75C3 5.23 4.23 4 5.75 4H9.5z";
+const JOIN_BUTTON_ICON_PATH = "M4 6h16v10H4zM2 4h20v14H2zM6 20h12v2H6z";
 const VANILLA_BUTTON_ICON_DATA_URL =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAACXBIWXMAAAsTAAALEwEAmpwYAAABBklEQVR4nOWUMQrCQBBFH5g6dtraewELwc4beBDtBS+gYO0FxFYQK01vbSlewMbawEpgFsIym2wWLcQPA8nw57/dkF34F/WBBXCRWkjvI6FXwHjqBqyBYWhoG5groQ9gA4ylNtIre64ym1YBjp7QRPEmHtihCvASky/UJwszkuGVXUWsTN28NbS+DbgD08DQNAbgGnuKt+itgGcMYARkpX4O7ICB03P9wQCrTIa1XfkOXyOAUcpdbRRAW7lRyuerBYSWlQv6GGDk/Ay1gHPE9zaO71QF6ALb0i9oFbKbXGY7BKg4RMvSe1XwUw6cdhiDdVeCi96s7v5vch1PgL1U8dzkOv9hvQHB1L4BlVIn0wAAAABJRU5ErkJggg==";
 const STARTUP_REVEAL_TIMEOUT_MS = 2500;
+const ICON_ASSETS = {
+  back: "/Icons/back-icon.svg",
+  block: "/Icons/disable-icon.svg",
+  box: "/Icons/box-icon.svg",
+  forward: "/Icons/forward-icon.svg",
+  browse: "/Icons/discover-icon.svg",
+  capes: "/Icons/closet-icon.svg",
+  download: "/Icons/download-icon.svg",
+  dotsVertical: "/Icons/vertical-dots-icon.svg",
+  folder: "/Icons/folder-icon.svg",
+  gear: "/Icons/settings-icon.svg",
+  hammer: "/Icons/fix-icon.svg",
+  home: "/Icons/home-icon.svg",
+  library: "/Icons/library-icon.svg",
+  multiplayer: "/Icons/multiplayer-icon.svg",
+  play: "/Icons/play-icon.svg",
+  plus: "/Icons/plus-icon.svg",
+  refresh: "/Icons/refresh-icon.svg",
+  signOut: "/Icons/sign-out-icon.svg",
+  stop: "/Icons/stop-icon.svg",
+  trash: "/Icons/trash-icon.svg",
+  upload: "/Icons/upload-icon.svg",
+  warning: "/Icons/warning-icon.svg",
+  copy: "/Icons/copy-icon.svg",
+  web: "/Icons/web-icon.svg"
+} as const;
 
 function applyActionButtonIcons() {
-  setButtonImageIcon(btnQuickLaunchLatestVanilla, VANILLA_BUTTON_ICON_DATA_URL);
-  setButtonIcon(btnCreate, "M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6z");
-  setButtonIcon(btnImport, "M12 3v10.17l3.59-3.58L17 11l-5 5-5-5 1.41-1.41L11 13.17V3zM5 19h14v2H5z");
-  setButtonIcon(btnJoinPreferred, "M4 6h16v10H4zM2 4h20v14H2zM6 20h12v2H6z");
-  setButtonIcon(btnAnalyzeLogs, "M9 17H7V7h2zm4 0h-2V3h2zm4 0h-2v-8h2z");
-  setButtonIcon(btnToggleDiagnosisDetails, "M11 17h2v2h-2zm0-12h2v10h-2z");
-  setButtonIcon(btnToggleDebugLogs, "M3 4h18v2H3zm0 7h12v2H3zm0 7h18v2H3z");
-  setButtonIcon(btnCopyDiagnosisReport, "M16 1H4v14h2V3h10zM8 7h12v16H8z");
-  setButtonIcon(btnClearLogs, TRASH_ICON_PATH);
+  setButtonAssetIcon(btnQuickLaunchLatestVanilla as HTMLButtonElement, ICON_ASSETS.play);
+  setButtonAssetIcon(navHome as HTMLButtonElement, ICON_ASSETS.home);
+  setButtonAssetIcon(btnCreate, ICON_ASSETS.plus);
+  setButtonAssetIcon(btnImport, ICON_ASSETS.download);
+  setButtonIcon(btnJoinPreferred, JOIN_BUTTON_ICON_PATH);
+  setButtonAssetIcon(btnAnalyzeLogs as HTMLButtonElement, ICON_ASSETS.warning);
+  setButtonAssetIcon(btnApplyDiagnosisFix, ICON_ASSETS.hammer);
+  setButtonAssetIcon(btnCopyDiagnosisReport, ICON_ASSETS.copy);
+  setButtonAssetIcon(btnClearLogs as HTMLButtonElement, ICON_ASSETS.trash);
+  setButtonAssetIcon(instanceBackBtn, ICON_ASSETS.back);
+  setButtonAssetIcon(discoverBackBtn, ICON_ASSETS.back);
+  setButtonAssetIcon(instancePlayBtn, ICON_ASSETS.play);
+  setButtonAssetIcon(btnBrowseInstanceContent, ICON_ASSETS.browse);
+  setButtonAssetIcon(instanceOpenFolderBtn, ICON_ASSETS.folder);
+  setButtonAssetIcon(instanceEditBtn, ICON_ASSETS.gear);
+  setButtonAssetIcon(instanceUploadFilesBtn, ICON_ASSETS.upload);
+  setButtonAssetIcon(instanceRefreshContentBtn, ICON_ASSETS.refresh);
+  setButtonAssetIcon(instanceUpdateContentBtn, ICON_ASSETS.download);
+  setButtonAssetIcon(instanceRefreshWorldsBtn, ICON_ASSETS.refresh);
+  setButtonAssetIcon(instanceAddServerBtn, ICON_ASSETS.plus);
+  setButtonAssetIcon(instanceOpenWorldFolderBtn, ICON_ASSETS.folder);
+  setButtonAssetIcon(navLibrary as HTMLButtonElement, ICON_ASSETS.library);
+  setButtonAssetIcon(navCapes as HTMLButtonElement, ICON_ASSETS.capes);
+  setButtonAssetIcon(navPlayit as HTMLButtonElement, ICON_ASSETS.multiplayer);
+  setButtonAssetIcon(navSettings as HTMLButtonElement, ICON_ASSETS.gear);
 }
 applyActionButtonIcons();
 
@@ -218,6 +357,17 @@ const createSourceTechnic = $("createSourceTechnic");
 const createSourceATLauncher = $("createSourceATLauncher");
 const createSourceFTB = $("createSourceFTB");
 const createSourceHint = $("createSourceHint");
+const createFlowIntro = $("createFlowIntro");
+const createFlowWorkspace = $("createFlowWorkspace");
+const createFlowStepLabel = $("createFlowStepLabel");
+const createFlowTitle = $("createFlowTitle");
+const createFlowBadge = $("createFlowBadge");
+const createFlowDescription = $("createFlowDescription");
+const btnCreateFlowBack = $("btnCreateFlowBack");
+const createSourceField = $("createSourceField");
+const createEntryCustom = $("createEntryCustom");
+const createEntryModpack = $("createEntryModpack");
+const createEntryImport = $("createEntryImport");
 const createProviderImport = $("createProviderImport");
 const createProviderMarketplace = $("createProviderMarketplace");
 const createProviderMarketplaceTitle = $("createProviderMarketplaceTitle");
@@ -276,6 +426,17 @@ const createLoaderType = $("createLoaderType") as HTMLSelectElement;
 const createLoaderVersion = $("createLoaderVersion") as HTMLInputElement;
 const createLoaderHint = $("createLoaderHint");
 
+function applyCreateFlowButtonIcons() {
+  setButtonAssetIcon(btnCreateFlowBack as HTMLButtonElement | null, ICON_ASSETS.back);
+  setButtonAssetIcon(createSourceImport as HTMLButtonElement | null, ICON_ASSETS.download);
+  setButtonAssetIcon(btnRefreshLocalModrinthProfiles as HTMLButtonElement | null, ICON_ASSETS.refresh);
+  setButtonAssetIcon(btnImportLocalModrinthProfile as HTMLButtonElement | null, ICON_ASSETS.download);
+  setButtonAssetIcon(btnRefreshLocalCurseForgeProfiles as HTMLButtonElement | null, ICON_ASSETS.refresh);
+  setButtonAssetIcon(btnImportLocalCurseForgeProfile as HTMLButtonElement | null, ICON_ASSETS.download);
+  setButtonAssetIcon(btnCreateImportNow as HTMLButtonElement | null, ICON_ASSETS.upload);
+}
+applyCreateFlowButtonIcons();
+
 let state: any = {
   versions: [],
   accounts: null,
@@ -283,7 +444,84 @@ let state: any = {
   launcherSubscription: null,
   instances: null
 };
+let activeView: "home" | "library" | "capes" | "playit" | "settings" = "home";
 let renderInstancesGeneration = 0;
+let renderInstancePageGeneration = 0;
+let renderHomeGeneration = 0;
+let homeDataCache:
+  | {
+      fetchedAt: number;
+      data: any;
+    }
+  | null = null;
+type InstanceSortMode = "recent" | "name" | "version" | "loader";
+type InstanceGroupMode = "type" | "source" | "loader" | "version" | "sync" | "none";
+type InstanceFilterMode = "all" | "custom" | "modpack" | "imported" | "synced" | "local-only";
+type CreateFlowStage = "select" | "details";
+type LibrarySurface = "library" | "instance" | "discover";
+type InstancePageTab = "content" | "worlds" | "logs";
+type InstanceContentFilter = "all" | "mods" | "resourcepacks" | "shaderpacks" | "updates";
+type InstanceWorldsFilter = "all" | "singleplayer" | "servers";
+type LogFilterMode = "all" | "info" | "warn" | "error" | "debug";
+type DiscoverKind = "mods" | "resourcepacks" | "shaderpacks";
+type DiscoverPlatform = "all" | "modrinth" | "curseforge";
+type DiscoverSortMode = "relevance" | "downloads" | "updated" | "name";
+type DiscoverLoaderFilter = "" | "vanilla" | "fabric" | "quilt" | "forge" | "neoforge";
+type HomeUsageEntry = {
+  id: string;
+  label: string;
+  subtitle?: string;
+  imageUrl?: string | null;
+  sourceLabel?: string;
+  count: number;
+  lastUsedAt: number;
+};
+type InstanceContentUpdateState = {
+  status: "idle" | "checking" | "ready" | "error";
+  items: any[];
+  updateableCount: number;
+  checkedAt?: number;
+  error?: string;
+};
+let instanceSortMode: InstanceSortMode = "recent";
+let instanceGroupMode: InstanceGroupMode = "type";
+let instanceFilterMode: InstanceFilterMode = "all";
+let createFlowStage: CreateFlowStage = "select";
+let librarySurface: LibrarySurface = "library";
+let selectedInstanceId: string | null = null;
+let selectedInstanceSnapshot: any | null = null;
+let lastLaunchedInstanceId: string | null = null;
+let selectedInstanceTab: InstancePageTab = "content";
+let instanceContentFilter: InstanceContentFilter = "all";
+let instanceWorldsFilter: InstanceWorldsFilter = "all";
+let logFilterMode: LogFilterMode = "all";
+let discoverKind: DiscoverKind = "mods";
+let discoverPlatform: DiscoverPlatform = "all";
+let discoverSortMode: DiscoverSortMode = "relevance";
+let discoverCategory = "all";
+let discoverHideInstalledState = false;
+let discoverVersionLocked = true;
+let discoverLoaderLocked = true;
+let discoverVersionFilter = "";
+let discoverLoaderFilter: DiscoverLoaderFilter = "";
+let discoverPage = 1;
+let discoverPageSize = 20;
+const worldsStatusRefreshInFlight = new Set<string>();
+const instanceContentUpdateStateByInstance = new Map<string, InstanceContentUpdateState>();
+let activeInstanceContentMenu: HTMLElement | null = null;
+let activeInstanceContentMenuButton: HTMLButtonElement | null = null;
+
+const INSTANCE_SORT_MODE_SET = new Set<InstanceSortMode>(["recent", "name", "version", "loader"]);
+const INSTANCE_GROUP_MODE_SET = new Set<InstanceGroupMode>(["type", "source", "loader", "version", "sync", "none"]);
+const INSTANCE_FILTER_MODE_SET = new Set<InstanceFilterMode>(["all", "custom", "modpack", "imported", "synced", "local-only"]);
+const INSTANCE_CONTENT_FILTER_SET = new Set<InstanceContentFilter>(["all", "mods", "resourcepacks", "shaderpacks", "updates"]);
+const INSTANCE_WORLDS_FILTER_SET = new Set<InstanceWorldsFilter>(["all", "singleplayer", "servers"]);
+const LOG_FILTER_MODE_SET = new Set<LogFilterMode>(["all", "info", "warn", "error", "debug"]);
+const DISCOVER_KIND_SET = new Set<DiscoverKind>(["mods", "resourcepacks", "shaderpacks"]);
+const DISCOVER_PLATFORM_SET = new Set<DiscoverPlatform>(["all", "modrinth", "curseforge"]);
+const DISCOVER_SORT_MODE_SET = new Set<DiscoverSortMode>(["relevance", "downloads", "updated", "name"]);
+const DISCOVER_LOADER_FILTER_SET = new Set<DiscoverLoaderFilter>(["", "vanilla", "fabric", "quilt", "forge", "neoforge"]);
+const DISCOVER_PAGE_SIZE_SET = new Set<number>([20, 30]);
 
 type ModalTabId = "general" | "installed" | "discover";
 let activeModalTab: ModalTabId = "general";
@@ -298,6 +536,23 @@ function getInstanceDisplayLoader(inst: any): LoaderKind {
     return display as LoaderKind;
   }
   return String(inst?.loader || "vanilla").trim().toLowerCase() as LoaderKind;
+}
+
+function instanceSupportsModdedContent(inst: any) {
+  if (!inst) return true;
+  return getInstanceDisplayLoader(inst) !== "vanilla";
+}
+
+function normalizeInstanceContentFilterForInstance(inst: any, nextFilter: InstanceContentFilter): InstanceContentFilter {
+  if (instanceSupportsModdedContent(inst)) return nextFilter;
+  if (nextFilter === "mods" || nextFilter === "shaderpacks") return "resourcepacks";
+  return nextFilter;
+}
+
+function normalizeDiscoverKindForInstance(inst: any, nextKind: DiscoverKind): DiscoverKind {
+  if (instanceSupportsModdedContent(inst)) return nextKind;
+  if (nextKind === "mods" || nextKind === "shaderpacks") return "resourcepacks";
+  return nextKind;
 }
 
 function getEffectiveRuntimeLoader(loaderChoice: string): LoaderKind {
@@ -354,8 +609,6 @@ let startupReady = false;
 let startupRevealStarted = false;
 let startupEmergencyRevealTimer: number | null = null;
 let latestDiagnosis: any = null;
-let diagnosisDetailsOpen = false;
-let debugLogsVisible = false;
 let capesSkinViewer: any = null;
 let capesSkinControls: any = null;
 
@@ -563,6 +816,9 @@ type SkinUiSelectionState = {
 const SKIN_UI_SELECTION_KEY = "fishbattery.skin-ui-selection.v1";
 const SAVED_SKINS_KEY = "fishbattery.saved-skins.v1";
 const OFFICIAL_CAPE_STATE_CACHE_KEY = "fishbattery.official-capes-cache.v1";
+const HOME_INSTANCE_USAGE_KEY = "fishbattery.home-instance-usage.v1";
+const HOME_SKIN_USAGE_KEY = "fishbattery.home-skin-usage.v1";
+const HOME_CAPE_USAGE_KEY = "fishbattery.home-cape-usage.v1";
 
 type SavedSkinEntry = {
   id: string;
@@ -692,6 +948,78 @@ function setOfficialCapeStateCache(accountId: string, state: any) {
   const map = readOfficialCapeStateCacheMap();
   map[accountId] = state;
   writeOfficialCapeStateCacheMap(map);
+}
+
+function readHomeUsageMap(key: string): Record<string, HomeUsageEntry> {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(key) || "{}");
+    if (!parsed || typeof parsed !== "object") return {};
+    const out: Record<string, HomeUsageEntry> = {};
+    for (const [id, value] of Object.entries(parsed)) {
+      if (!value || typeof value !== "object") continue;
+      const item = value as Partial<HomeUsageEntry>;
+      const label = String(item.label || "").trim();
+      if (!id || !label) continue;
+      out[id] = {
+        id: String(id),
+        label,
+        subtitle: typeof item.subtitle === "string" ? item.subtitle : undefined,
+        imageUrl: typeof item.imageUrl === "string" ? item.imageUrl : null,
+        sourceLabel: typeof item.sourceLabel === "string" ? item.sourceLabel : undefined,
+        count: Math.max(0, Number(item.count || 0)),
+        lastUsedAt: Math.max(0, Number(item.lastUsedAt || 0))
+      };
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+function writeHomeUsageMap(key: string, map: Record<string, HomeUsageEntry>) {
+  try {
+    localStorage.setItem(key, JSON.stringify(map));
+  } catch {}
+}
+
+function recordHomeUsage(
+  key: string,
+  entry: Omit<HomeUsageEntry, "count" | "lastUsedAt">,
+  increment = 1
+) {
+  const id = String(entry.id || "").trim();
+  const label = String(entry.label || "").trim();
+  if (!id || !label) return;
+  const map = readHomeUsageMap(key);
+  const current = map[id];
+  map[id] = {
+    id,
+    label,
+    subtitle: entry.subtitle,
+    imageUrl: entry.imageUrl ?? current?.imageUrl ?? null,
+    sourceLabel: entry.sourceLabel,
+    count: Math.max(1, Number(current?.count || 0) + Math.max(1, increment)),
+    lastUsedAt: Date.now()
+  };
+  writeHomeUsageMap(key, map);
+}
+
+function getTopHomeUsageEntries(key: string, limit: number) {
+  return Object.values(readHomeUsageMap(key))
+    .sort((left, right) => {
+      const countDelta = Number(right.count || 0) - Number(left.count || 0);
+      if (countDelta !== 0) return countDelta;
+      const timeDelta = Number(right.lastUsedAt || 0) - Number(left.lastUsedAt || 0);
+      if (timeDelta !== 0) return timeDelta;
+      return String(left.label || "").localeCompare(String(right.label || ""));
+    })
+    .slice(0, Math.max(0, limit));
+}
+
+function getPrimaryMinecraftAccount() {
+  const accounts = state.accounts?.accounts ?? [];
+  const activeId = state.accounts?.activeId ?? null;
+  return accounts.find((account: any) => account.id === activeId) ?? accounts[0] ?? null;
 }
 
 // Get selected icon transform payload.
@@ -989,6 +1317,22 @@ type AppSettings = {
   cloudSyncAuto: boolean;
   cloudSyncConflictPolicy: "ask" | "newer-wins" | "prefer-local" | "prefer-cloud";
   adsConsent: "unknown" | "granted" | "denied";
+  librarySortMode: "recent" | "name" | "version" | "loader";
+  libraryGroupMode: "type" | "source" | "loader" | "version" | "sync" | "none";
+  libraryFilterMode: "all" | "custom" | "modpack" | "imported" | "synced" | "local-only";
+  instanceContentFilter: "all" | "mods" | "resourcepacks" | "shaderpacks" | "updates";
+  instanceWorldsFilter: "all" | "singleplayer" | "servers";
+  logFilterMode: "all" | "info" | "warn" | "error" | "debug";
+  discoverKind: "mods" | "resourcepacks" | "shaderpacks";
+  discoverPlatform: "all" | "modrinth" | "curseforge";
+  discoverSortMode: "relevance" | "downloads" | "updated" | "name";
+  discoverCategory: string;
+  discoverHideInstalled: boolean;
+  discoverVersionLocked: boolean;
+  discoverLoaderLocked: boolean;
+  discoverVersionFilter: string;
+  discoverLoaderFilter: "" | "vanilla" | "fabric" | "quilt" | "forge" | "neoforge";
+  discoverPageSize: number;
 };
 
 const SETTINGS_KEY = "fishbattery.settings";
@@ -1016,7 +1360,23 @@ const defaultSettings: AppSettings = {
   cloudSyncEnabled: true,
   cloudSyncAuto: true,
   cloudSyncConflictPolicy: "ask",
-  adsConsent: "unknown"
+  adsConsent: "unknown",
+  librarySortMode: "recent",
+  libraryGroupMode: "type",
+  libraryFilterMode: "all",
+  instanceContentFilter: "all",
+  instanceWorldsFilter: "all",
+  logFilterMode: "all",
+  discoverKind: "mods",
+  discoverPlatform: "all",
+  discoverSortMode: "relevance",
+  discoverCategory: "all",
+  discoverHideInstalled: false,
+  discoverVersionLocked: true,
+  discoverLoaderLocked: true,
+  discoverVersionFilter: "",
+  discoverLoaderFilter: "",
+  discoverPageSize: 20
 };
 
 const THEME_ID_SET = new Set<ThemeId>(THEME_OPTIONS.map((o) => o.value));
@@ -2031,6 +2391,45 @@ function getSettings(): AppSettings {
         : "ask";
     const adsConsent =
       raw.adsConsent === "granted" || raw.adsConsent === "denied" ? raw.adsConsent : "unknown";
+    const librarySortMode = INSTANCE_SORT_MODE_SET.has(raw.librarySortMode as InstanceSortMode)
+      ? (raw.librarySortMode as InstanceSortMode)
+      : defaultSettings.librarySortMode;
+    const libraryGroupMode = INSTANCE_GROUP_MODE_SET.has(raw.libraryGroupMode as InstanceGroupMode)
+      ? (raw.libraryGroupMode as InstanceGroupMode)
+      : defaultSettings.libraryGroupMode;
+    const libraryFilterMode = INSTANCE_FILTER_MODE_SET.has(raw.libraryFilterMode as InstanceFilterMode)
+      ? (raw.libraryFilterMode as InstanceFilterMode)
+      : defaultSettings.libraryFilterMode;
+    const instanceContentFilter = INSTANCE_CONTENT_FILTER_SET.has(raw.instanceContentFilter as InstanceContentFilter)
+      ? (raw.instanceContentFilter as InstanceContentFilter)
+      : defaultSettings.instanceContentFilter;
+    const instanceWorldsFilter = INSTANCE_WORLDS_FILTER_SET.has(raw.instanceWorldsFilter as InstanceWorldsFilter)
+      ? (raw.instanceWorldsFilter as InstanceWorldsFilter)
+      : defaultSettings.instanceWorldsFilter;
+    const logFilterMode = LOG_FILTER_MODE_SET.has(raw.logFilterMode as LogFilterMode)
+      ? (raw.logFilterMode as LogFilterMode)
+      : defaultSettings.logFilterMode;
+    const discoverKind = DISCOVER_KIND_SET.has(raw.discoverKind as DiscoverKind)
+      ? (raw.discoverKind as DiscoverKind)
+      : defaultSettings.discoverKind;
+    const discoverPlatform = DISCOVER_PLATFORM_SET.has(raw.discoverPlatform as DiscoverPlatform)
+      ? (raw.discoverPlatform as DiscoverPlatform)
+      : defaultSettings.discoverPlatform;
+    const discoverSortMode = DISCOVER_SORT_MODE_SET.has(raw.discoverSortMode as DiscoverSortMode)
+      ? (raw.discoverSortMode as DiscoverSortMode)
+      : defaultSettings.discoverSortMode;
+    const discoverCategory =
+      typeof raw.discoverCategory === "string" && raw.discoverCategory.trim() ? raw.discoverCategory : "all";
+    const discoverHideInstalled = !!raw.discoverHideInstalled;
+    const discoverVersionLocked = raw.discoverVersionLocked !== false;
+    const discoverLoaderLocked = raw.discoverLoaderLocked !== false;
+    const discoverVersionFilter = typeof raw.discoverVersionFilter === "string" ? raw.discoverVersionFilter.trim() : "";
+    const discoverLoaderFilter = DISCOVER_LOADER_FILTER_SET.has(raw.discoverLoaderFilter as DiscoverLoaderFilter)
+      ? (raw.discoverLoaderFilter as DiscoverLoaderFilter)
+      : defaultSettings.discoverLoaderFilter;
+    const discoverPageSize = DISCOVER_PAGE_SIZE_SET.has(Number(raw.discoverPageSize))
+      ? Number(raw.discoverPageSize)
+      : defaultSettings.discoverPageSize;
     return {
       ...raw,
       theme,
@@ -2044,7 +2443,23 @@ function getSettings(): AppSettings {
       cloudSyncEnabled,
       cloudSyncAuto,
       cloudSyncConflictPolicy,
-      adsConsent
+      adsConsent,
+      librarySortMode,
+      libraryGroupMode,
+      libraryFilterMode,
+      instanceContentFilter,
+      instanceWorldsFilter,
+      logFilterMode,
+      discoverKind,
+      discoverPlatform,
+      discoverSortMode,
+      discoverCategory,
+      discoverHideInstalled,
+      discoverVersionLocked,
+      discoverLoaderLocked,
+      discoverVersionFilter,
+      discoverLoaderFilter,
+      discoverPageSize
     };
   } catch {
     return { ...defaultSettings };
@@ -2174,17 +2589,140 @@ function applySettingsToDom(s: AppSettings) {
   }
 }
 
+function applyUiPreferencesFromSettings(s: AppSettings) {
+  instanceSortMode = s.librarySortMode;
+  instanceGroupMode = s.libraryGroupMode;
+  instanceFilterMode = s.libraryFilterMode;
+  discoverPlatform = s.discoverPlatform;
+  discoverSortMode = s.discoverSortMode;
+  discoverCategory = s.discoverCategory || "all";
+  discoverHideInstalledState = !!s.discoverHideInstalled;
+  discoverVersionLocked = s.discoverVersionLocked !== false;
+  discoverLoaderLocked = s.discoverLoaderLocked !== false;
+  discoverVersionFilter = String(s.discoverVersionFilter || "");
+  discoverLoaderFilter = DISCOVER_LOADER_FILTER_SET.has(s.discoverLoaderFilter as DiscoverLoaderFilter)
+    ? (s.discoverLoaderFilter as DiscoverLoaderFilter)
+    : "";
+  discoverPageSize = DISCOVER_PAGE_SIZE_SET.has(Number(s.discoverPageSize))
+    ? Number(s.discoverPageSize)
+    : defaultSettings.discoverPageSize;
+
+  sortInstances.value = instanceSortMode;
+  groupInstances.value = instanceGroupMode;
+  filterInstances.value = instanceFilterMode;
+
+  setInstanceContentFilter(s.instanceContentFilter);
+  setInstanceWorldsFilter(s.instanceWorldsFilter);
+  setLogFilterMode(s.logFilterMode);
+  setDiscoverKind(s.discoverKind);
+
+  discoverPlatformSelect.value = discoverPlatform;
+  discoverSortSelect.value = discoverSortMode;
+  discoverPageSizeSelect.value = String(discoverPageSize);
+  discoverHideInstalled.checked = discoverHideInstalledState;
+  discoverVersionSelect.style.display = discoverVersionLocked ? "none" : "";
+  discoverLoaderSelect.style.display = discoverLoaderLocked ? "none" : "";
+}
+
+function saveUiPreferences(patch: Partial<AppSettings>) {
+  const next = { ...getSettings(), ...patch };
+  try {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(next));
+  } catch (err: any) {
+    alert(`Could not save setting: ${String(err?.message ?? err)}`);
+  }
+}
+
+function setInstanceUploadMenuOpen(open: boolean) {
+  instanceUploadFilesDropdown.classList.toggle("open", open);
+  instanceUploadFilesBtn.setAttribute("aria-expanded", open ? "true" : "false");
+}
+
+function setActiveInstanceContentMenu(menu: HTMLElement | null, button: HTMLButtonElement | null, open: boolean) {
+  if (activeInstanceContentMenu && activeInstanceContentMenu !== menu) {
+    activeInstanceContentMenu.classList.remove("open");
+  }
+  if (activeInstanceContentMenuButton && activeInstanceContentMenuButton !== button) {
+    activeInstanceContentMenuButton.setAttribute("aria-expanded", "false");
+  }
+  if (!menu || !button || !open) {
+    if (activeInstanceContentMenu) activeInstanceContentMenu.classList.remove("open");
+    if (activeInstanceContentMenuButton) activeInstanceContentMenuButton.setAttribute("aria-expanded", "false");
+    activeInstanceContentMenu = null;
+    activeInstanceContentMenuButton = null;
+    return;
+  }
+  menu.classList.add("open");
+  button.setAttribute("aria-expanded", "true");
+  activeInstanceContentMenu = menu;
+  activeInstanceContentMenuButton = button;
+}
+
+function normalizeStoredWindowSize(width: number, height: number) {
+  return {
+    width: Math.max(480, Math.min(3840, Number(width || defaultSettings.winW) || defaultSettings.winW)),
+    height: Math.max(360, Math.min(2160, Number(height || defaultSettings.winH) || defaultSettings.winH))
+  };
+}
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+  let timer = 0;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timer = window.setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs}ms`)), timeoutMs);
+      })
+    ]);
+  } finally {
+    if (timer) window.clearTimeout(timer);
+  }
+}
+
+async function applyNativeWindowSettings(s: AppSettings) {
+  const { width, height } = normalizeStoredWindowSize(s.winW, s.winH);
+  try {
+    if (!s.fullscreen) {
+      await backend.windowSetSize(width, height);
+    }
+    await backend.windowSetFullscreen(!!s.fullscreen);
+    if (!s.fullscreen) {
+      await backend.windowSetSize(width, height);
+    }
+  } catch (err: any) {
+    appendLog(`[window] Failed applying window settings: ${String(err?.message ?? err)}`);
+  }
+  await syncWindowMaxButtonState();
+}
+
 // ---------------- Utilities ----------------
 function appendLog(line: string) {
-  const s = logsEl.textContent || "";
-  logsEl.textContent = s + (s ? "\n" : "") + line;
-  logsEl.scrollTop = logsEl.scrollHeight;
   launchLogBuffer.push(line);
   if (launchLogBuffer.length > 500) {
     launchLogBuffer = launchLogBuffer.slice(launchLogBuffer.length - 500);
   }
+  renderSessionLogs();
   const status = summarizeLogForStatus(line);
   if (status) setStatus(status);
+}
+
+function renderSessionLogs() {
+  if (!logsEl) return;
+  const query = String(instanceLogsSearch?.value || "").trim().toLowerCase();
+  const visible = launchLogBuffer.filter((line) => {
+    const lower = String(line || "").toLowerCase();
+    if (query && !lower.includes(query)) return false;
+    if (logFilterMode === "all") return true;
+    if (logFilterMode === "error") return /\berror\b|\bfailed\b|\bexception\b/.test(lower);
+    if (logFilterMode === "warn") return /\bwarn\b|\bwarning\b/.test(lower);
+    if (logFilterMode === "debug") return /\bdebug\b|\btrace\b/.test(lower);
+    if (logFilterMode === "info") {
+      return !/\berror\b|\bfailed\b|\bexception\b|\bwarn\b|\bwarning\b|\bdebug\b|\btrace\b/.test(lower);
+    }
+    return true;
+  });
+  logsEl.textContent = visible.join("\n");
+  logsEl.scrollTop = logsEl.scrollHeight;
 }
 
 function setStartupProgress(detail: string, title = "Launching launcher") {
@@ -2514,32 +3052,8 @@ function summarizeLogForStatus(line: string) {
 
 // Render debug logs visibility.
 function renderDebugLogsVisibility() {
-  logsEl.style.display = debugLogsVisible ? "" : "none";
-  btnToggleDebugLogs.textContent = debugLogsVisible ? "Hide Debug Logs" : "Show Debug Logs";
-}
-
-// Find diagnosis evidence.
-function findDiagnosisEvidence(diag: any, lines: string[]) {
-  const recent = (lines || []).slice(-200);
-  const patterns: Record<string, string[]> = {
-    "missing-fabric-loader": ["fabric", "no such file", "install incomplete"],
-    "duplicate-mods": ["duplicate", "duplicatemodsfoundexception"],
-    "loader-profile-missing": [
-      "installer completed but no launch profile was generated",
-      "installer completed without profile",
-      "profile generation failed"
-    ],
-    "wrong-java-version": ["unsupportedclassversionerror", "class file version", "requires java"],
-    "mod-mismatch": ["modresolutionexception", "depends on", "requires minecraft", "incompatible"]
-  };
-  const want = patterns[String(diag?.code || "")] || [];
-  if (!want.length) return null;
-
-  for (const line of recent.reverse()) {
-    const lower = String(line || "").toLowerCase();
-    if (want.some((p) => lower.includes(p))) return line;
-  }
-  return null;
+  logsEl.style.display = selectedInstanceTab === "logs" ? "" : "none";
+  renderSessionLogs();
 }
 
 // Redact sensitive.
@@ -2557,8 +3071,6 @@ function renderLaunchDiagnosis(diag: any | null) {
   if (!diag) {
     launchDiagnosis.style.display = "none";
     launchDiagnosis.textContent = "";
-    launchDiagnosisDetails.style.display = "none";
-    launchDiagnosisDetails.textContent = "";
     btnApplyDiagnosisFix.disabled = true;
     return;
   }
@@ -2571,17 +3083,6 @@ function renderLaunchDiagnosis(diag: any | null) {
   launchDiagnosis.textContent = lines.join("\n");
   launchDiagnosis.style.display = "";
   btnApplyDiagnosisFix.disabled = !diag.canAutoFix || !diag.fixAction || diag.fixAction === "none";
-
-  const evidence = findDiagnosisEvidence(diag, launchLogBuffer);
-  const detailLines = [
-    `Code: ${diag.code}`,
-    `Severity: ${diag.severity}`,
-    `Auto fix: ${diag.canAutoFix ? diag.fixAction : "none"}`,
-    evidence ? `Evidence: ${evidence}` : "Evidence: no direct signature line captured"
-  ];
-  launchDiagnosisDetails.textContent = detailLines.join("\n");
-  launchDiagnosisDetails.style.display = diagnosisDetailsOpen ? "" : "none";
-  btnToggleDiagnosisDetails.textContent = diagnosisDetailsOpen ? "Hide details" : "Details";
 }
 
 // Run launch diagnosis.
@@ -2654,10 +3155,10 @@ async function shouldHideSponsoredBanner() {
   if (hasAdsFreeSubscription()) return true;
   if (busy) return true;
   if (latestDiagnosis?.severity === "critical") return true;
-  const active = state.instances?.activeInstanceId ?? null;
-  if (!active) return false;
+  const currentInstanceId = getLaunchContextInstanceId();
+  if (!currentInstanceId) return false;
   try {
-    return !!(await backend.launchIsRunning(active));
+    return !!(await backend.launchIsRunning(currentInstanceId));
   } catch {
     return false;
   }
@@ -2899,16 +3400,24 @@ function ensureSponsoredRotation() {
 }
 
 // Set view.
-function setView(which: "library" | "capes" | "playit" | "settings") {
-  viewLibrary.style.display = which === "library" ? "" : "none";
+function setView(which: "home" | "library" | "capes" | "playit" | "settings") {
+  activeView = which;
+  const showingLibrary = which === "library";
+  viewHome.style.display = which === "home" ? "" : "none";
+  viewLibrary.style.display = showingLibrary && librarySurface === "library" ? "" : "none";
+  viewInstance.style.display = showingLibrary && librarySurface === "instance" ? "" : "none";
+  viewDiscover.style.display = showingLibrary && librarySurface === "discover" ? "" : "none";
   viewCapes.style.display = which === "capes" ? "" : "none";
   viewPlayit.style.display = which === "playit" ? "" : "none";
   viewSettings.style.display = which === "settings" ? "" : "none";
+  if (libraryTopbarTools) libraryTopbarTools.style.display = showingLibrary && librarySurface === "library" ? "" : "none";
+  navHome.classList.toggle("active", which === "home");
   navLibrary.classList.toggle("active", which === "library");
   navCapes.classList.toggle("active", which === "capes");
   navPlayit.classList.toggle("active", which === "playit");
   navSettings.classList.toggle("active", which === "settings");
   if (sidebarCapesPreview) sidebarCapesPreview.style.display = "";
+  if (which === "home") void renderHomeView();
   if (which === "capes") void renderCapesView();
   if (which === "playit") {
     renderPlayitPanel();
@@ -3249,13 +3758,21 @@ async function renderCapesView(forceRefresh = false, officialStateOverride: any 
           label: item.name,
           imageUrl: item.previewDataUrl || null,
           active: !!item.active,
-          onSelect: async () => {
-            const nextState = await backend.capesSetOfficialActive(activeMcId, item.id);
-            setOfficialCapeStateCache(activeMcId, nextState);
-            capeState = nextState;
-            setOfficialSelection(nextState.activeCapeId ?? null);
-            await syncSidebarCapePreview();
-          }
+        onSelect: async () => {
+          const nextState = await backend.capesSetOfficialActive(activeMcId, item.id);
+          setOfficialCapeStateCache(activeMcId, nextState);
+          recordHomeUsage(HOME_CAPE_USAGE_KEY, {
+            id: `official:${item.id}`,
+            label: item.name || "Official cape",
+            subtitle: "Minecraft",
+            imageUrl: item.previewDataUrl || item.url || null,
+            sourceLabel: "Official"
+          });
+          invalidateHomeData();
+          capeState = nextState;
+          setOfficialSelection(nextState.activeCapeId ?? null);
+          await syncSidebarCapePreview();
+        }
         });
       officialTiles.push({ capeId: item.id, setActive: tile.setActive });
       grid.appendChild(tile.tile);
@@ -3320,12 +3837,20 @@ async function renderCapesView(forceRefresh = false, officialStateOverride: any 
           imageUrl: localItem.previewDataUrl || null,
           active: selectedLocalCapeId === localItem.id,
           subLabel: localCapeTierLabel(localItem.tier),
-          onSelect: async () => {
-            if (activeMcId) await backend.capesSetLocalSelection(activeMcId, localItem.id);
-            setLocalSelection(localItem.id);
-            setStatus(`Selected launcher ${localItem.tier} cape: ${localItem.name}`);
-            await syncSidebarCapePreview();
-          }
+        onSelect: async () => {
+          if (activeMcId) await backend.capesSetLocalSelection(activeMcId, localItem.id);
+          recordHomeUsage(HOME_CAPE_USAGE_KEY, {
+            id: `local:${localItem.id}`,
+            label: localItem.name || "Fishbattery cape",
+            subtitle: localCapeTierLabel(localItem.tier),
+            imageUrl: localItem.previewDataUrl || null,
+            sourceLabel: "Fishbattery"
+          });
+          invalidateHomeData();
+          setLocalSelection(localItem.id);
+          setStatus(`Selected launcher ${localItem.tier} cape: ${localItem.name}`);
+          await syncSidebarCapePreview();
+        }
         });
       localTiles.push({ capeId: localItem.id, setActive: tile.setActive });
       localGrid.appendChild(tile.tile);
@@ -3461,6 +3986,13 @@ async function renderCapesView(forceRefresh = false, officialStateOverride: any 
           const nextState = await backend.skinsUploadOfficial(activeMcId, skin.dataUrl, skin.variant);
           setOfficialCapeStateCache(activeMcId, nextState);
           setSkinUiSelection(activeMcId, { mode: "saved", defaultKey: undefined, activeSavedId: skin.id });
+          recordHomeUsage(HOME_SKIN_USAGE_KEY, {
+            id: `saved:${skin.id}`,
+            label: skin.name || `Skin ${idx + 1}`,
+            subtitle: skin.variant === "SLIM" ? "Slim" : "Classic",
+            imageUrl: skin.dataUrl
+          });
+          invalidateHomeData();
           setStatus(`Selected skin: ${skin.name || `Skin ${idx + 1}`}`);
           await renderCapesView(false, nextState);
         } catch (err: any) {
@@ -3563,6 +4095,13 @@ async function renderCapesView(forceRefresh = false, officialStateOverride: any 
             setOfficialCapeStateCache(activeMcId, nextState);
           }
           setSkinUiSelection(activeMcId, { mode: "default", defaultKey: def.key, activeSavedId: undefined });
+          recordHomeUsage(HOME_SKIN_USAGE_KEY, {
+            id: `default:${def.key}`,
+            label: def.name,
+            subtitle: def.variant === "SLIM" ? "Slim" : "Classic",
+            imageUrl: def.sourceUrl
+          });
+          invalidateHomeData();
           setStatus(`Selected default skin: ${def.name}`);
           await renderCapesView(false, nextState);
         } catch (err: any) {
@@ -3918,6 +4457,54 @@ function closeModal() {
   modalBackdrop.classList.remove("open");
 }
 
+function setCreateFlowBadgeText(text: string, tone: "neutral" | "accent" | "source" = "neutral") {
+  createFlowBadge.textContent = text;
+  createFlowBadge.className = `instanceBadge ${
+    tone === "accent" ? "instanceBadgeAccent" : tone === "source" ? "instanceBadgeSource" : "instanceBadgeNeutral"
+  }`;
+}
+
+function updateCreateFlowHeader() {
+  if (modalMode === "edit" && editInstanceId) {
+    const inst = (state.instances?.instances ?? []).find((item: any) => String(item?.id || "") === String(editInstanceId || "")) ?? null;
+    createFlowStepLabel.textContent = "Instance";
+    createFlowTitle.textContent = inst?.name || "Instance configuration";
+    createFlowDescription.textContent = `${humanizeLoader(getInstanceDisplayLoader(inst))} • Minecraft ${inst?.mcVersion || "unknown"} • ${getInstanceSourceLabel(inst)}`;
+    setCreateFlowBadgeText(getInstanceTypeLabel(inst), "neutral");
+    return;
+  }
+
+  createFlowStepLabel.textContent = "Step 2";
+  if (createSource === "import") {
+    createFlowTitle.textContent = "Import instance";
+    createFlowDescription.textContent = "Bring in launcher profiles, exported archives, or local pack files without rebuilding the setup manually.";
+    setCreateFlowBadgeText("Import", "source");
+    return;
+  }
+  if (createSource !== "custom") {
+    createFlowTitle.textContent = "Modpack base";
+    createFlowDescription.textContent = "Browse across Fishbattery-supported providers, compare packs quickly, and create a clean isolated instance.";
+    setCreateFlowBadgeText(getInstanceSourceLabel({ sourcePlatform: createSource }), "source");
+    return;
+  }
+  createFlowTitle.textContent = "Custom setup";
+  createFlowDescription.textContent = "Choose a loader, game version, icon, and Fishbattery preset with a low-friction desktop setup flow.";
+  setCreateFlowBadgeText("Custom", "neutral");
+}
+
+function setCreateFlowStage(nextStage: CreateFlowStage) {
+  createFlowStage = nextStage;
+  const isCreateMode = modalMode === "create";
+  const showIntro = isCreateMode && nextStage === "select";
+  if (createFlowIntro) createFlowIntro.style.display = showIntro ? "" : "none";
+  if (createFlowWorkspace) createFlowWorkspace.style.display = showIntro ? "none" : "";
+  if (btnCreateFlowBack) btnCreateFlowBack.style.display = isCreateMode && !showIntro ? "" : "none";
+  if (createSourceField) createSourceField.style.display = modalMode === "edit" ? "none" : showIntro ? "none" : "";
+  modalCreate.style.display = showIntro ? "none" : "";
+  modalCancel.textContent = showIntro ? "Close" : "Cancel";
+  updateCreateFlowHeader();
+}
+
 function editedInstanceLoader(): LoaderKind {
   if (!editInstanceId) return "fabric";
   const inst = (state.instances?.instances ?? []).find((x: any) => String(x.id) === String(editInstanceId)) ?? null;
@@ -3926,46 +4513,24 @@ function editedInstanceLoader(): LoaderKind {
 
 // Set modal tab.
 function setModalTab(which: ModalTabId) {
-  if (!modalTabGeneral || !modalTabInstalled || !modalTabDiscover || !modalPanelGeneral || !modalPanelInstalled || !modalPanelDiscover) {
+  if (!modalTabGeneral || !modalPanelGeneral) {
     return;
   }
-  const canShowInstanceTabs = modalMode === "edit" && !!editInstanceId;
-  const showInstalled = which === "installed" && canShowInstanceTabs;
-  const showDiscover = which === "discover" && canShowInstanceTabs;
   const isCreateMode = modalMode === "create";
-  activeModalTab = showInstalled || showDiscover ? which : "general";
+  activeModalTab = "general";
 
   modalTabGeneral.textContent = isCreateMode ? "Create" : "Edit";
-
-  modalTabGeneral.classList.toggle("active", !showInstalled && !showDiscover);
-  modalTabInstalled.classList.toggle("active", showInstalled);
-  modalTabDiscover.classList.toggle("active", showDiscover);
+  modalTabGeneral.classList.add("active");
   modalTabGeneral.style.display = "";
-  modalTabInstalled.style.display = isCreateMode ? "none" : "";
-  modalTabDiscover.style.display = isCreateMode ? "none" : "";
+  if (modalTabInstalled) modalTabInstalled.style.display = "none";
+  if (modalTabDiscover) modalTabDiscover.style.display = "none";
 
-  modalPanelGeneral.style.display = showInstalled || showDiscover ? "none" : "";
-  modalPanelInstalled.style.display = showInstalled ? "" : "none";
-  modalPanelDiscover.style.display = showDiscover ? "" : "none";
-
-  modalTabInstalled.toggleAttribute("disabled", !canShowInstanceTabs);
-  modalTabDiscover.toggleAttribute("disabled", !canShowInstanceTabs);
+  modalPanelGeneral.style.display = "";
+  if (modalPanelInstalled) modalPanelInstalled.style.display = "none";
+  if (modalPanelDiscover) modalPanelDiscover.style.display = "none";
 }
 
 if (modalTabGeneral) modalTabGeneral.onclick = () => setModalTab("general");
-if (modalTabInstalled)
-  modalTabInstalled.onclick = async () => {
-    setModalTab("installed");
-    await renderLocalContent(editInstanceId);
-    await renderInstanceMods(editInstanceId);
-  };
-if (modalTabDiscover)
-  modalTabDiscover.onclick = async () => {
-    setModalTab("discover");
-    await renderLocalContent(editInstanceId);
-    await renderInstanceMods(editInstanceId);
-    await runInstanceModrinthContentSearch(editInstanceId);
-  };
 
 // Format bytes.
 function formatBytes(n: number) {
@@ -4000,6 +4565,904 @@ function formatPresetLabel(presetId: string | null | undefined) {
   return preset?.name || id;
 }
 
+type DerivedInstanceType = "custom" | "modpack" | "imported";
+
+type DiscoverCategoryDef = { id: string; label: string; keywords: string[] };
+
+const DISCOVER_MOD_CATEGORIES: DiscoverCategoryDef[] = [
+  { id: "all", label: "All categories", keywords: [] },
+  { id: "adventure", label: "Adventure", keywords: ["adventure", "quest", "explore", "dungeon"] },
+  { id: "decoration", label: "Decoration", keywords: ["decorate", "decoration", "furniture", "cosmetic"] },
+  { id: "economy", label: "Economy", keywords: ["economy", "currency", "shop", "trade"] },
+  { id: "equipment", label: "Equipment", keywords: ["weapon", "armor", "tool", "gear", "equipment"] },
+  { id: "food", label: "Food", keywords: ["food", "cook", "hunger", "farmer"] },
+  { id: "game-mechanics", label: "Game Mechanics", keywords: ["mechanic", "automation", "redstone", "utility"] },
+  { id: "library", label: "Library", keywords: ["api", "library", "lib", "dependency"] },
+  { id: "magic", label: "Magic", keywords: ["magic", "spell", "arcane", "mana"] },
+  { id: "management", label: "Management", keywords: ["config", "manage", "menu", "admin"] },
+  { id: "mobs", label: "Mobs", keywords: ["mob", "entity", "creature", "villager"] },
+  { id: "optimization", label: "Optimization", keywords: ["optimize", "optimization", "performance", "fps", "memory"] },
+  { id: "social", label: "Social", keywords: ["chat", "social", "friend", "party"] },
+  { id: "storage", label: "Storage", keywords: ["storage", "inventory", "backpack", "chest"] },
+  { id: "technology", label: "Technology", keywords: ["tech", "factory", "machine", "power"] },
+  { id: "transportation", label: "Transportation", keywords: ["travel", "transport", "vehicle", "rail"] },
+  { id: "utility", label: "Utility", keywords: ["utility", "tool", "map", "helper"] },
+  { id: "world-generation", label: "World Generation", keywords: ["worldgen", "biome", "terrain", "structure"] }
+];
+
+const DISCOVER_RESOURCEPACK_CATEGORIES: DiscoverCategoryDef[] = [
+  { id: "all", label: "All categories", keywords: [] },
+  { id: "combat", label: "Combat", keywords: ["combat", "pvp", "crosshair", "sword"] },
+  { id: "cursed", label: "Cursed", keywords: ["cursed", "weird", "meme"] },
+  { id: "decoration", label: "Decoration", keywords: ["decoration", "furniture", "ambient", "aesthetic"] },
+  { id: "modded", label: "Modded", keywords: ["modded", "mod support", "compatibility"] },
+  { id: "realistic", label: "Realistic", keywords: ["realistic", "realism", "photoreal"] },
+  { id: "simplistic", label: "Simplistic", keywords: ["simplistic", "simple", "minimal"] },
+  { id: "themed", label: "Themed", keywords: ["theme", "themed", "fantasy", "medieval", "scifi"] },
+  { id: "tweaks", label: "Tweaks", keywords: ["tweak", "tweaks", "improvement", "enhanced"] },
+  { id: "utility", label: "Utility", keywords: ["utility", "helper", "ui", "readability"] },
+  { id: "vanilla-like", label: "Vanilla Like", keywords: ["vanilla like", "vanilla-like", "faithful"] }
+];
+
+const DISCOVER_SHADER_CATEGORIES: DiscoverCategoryDef[] = [
+  { id: "all", label: "All categories", keywords: [] },
+  { id: "cartoon", label: "Cartoon", keywords: ["cartoon", "stylized", "cel"] },
+  { id: "cursed", label: "Cursed", keywords: ["cursed", "weird", "meme"] },
+  { id: "fantasy", label: "Fantasy", keywords: ["fantasy", "magical", "dreamy"] },
+  { id: "realistic", label: "Realistic", keywords: ["realistic", "realism", "cinematic"] },
+  { id: "semi-realistic", label: "Semi Realistic", keywords: ["semi realistic", "semi-realistic"] },
+  { id: "vanilla-like", label: "Vanilla Like", keywords: ["vanilla like", "vanilla-like"] },
+  { id: "atmosphere", label: "Atmosphere", keywords: ["atmosphere", "fog", "sky"] },
+  { id: "bloom", label: "Bloom", keywords: ["bloom", "glow"] },
+  { id: "colored-lighting", label: "Colored Lighting", keywords: ["colored lighting", "colored-lighting"] },
+  { id: "foliage", label: "Foliage", keywords: ["foliage", "leaves", "grass"] },
+  { id: "path-tracing", label: "Path Tracing", keywords: ["path tracing", "path-tracing", "ray tracing"] },
+  { id: "pbr", label: "PBR", keywords: ["pbr", "physically based"] },
+  { id: "reflections", label: "Reflections", keywords: ["reflection", "reflections"] },
+  { id: "shadows", label: "Shadows", keywords: ["shadow", "shadows"] }
+];
+
+const DISCOVER_CATEGORY_SETS: Record<DiscoverKind, DiscoverCategoryDef[]> = {
+  mods: DISCOVER_MOD_CATEGORIES,
+  resourcepacks: DISCOVER_RESOURCEPACK_CATEGORIES,
+  shaderpacks: DISCOVER_SHADER_CATEGORIES
+};
+
+function humanizeLoader(loader: string | null | undefined) {
+  const normalized = String(loader || "vanilla").trim().toLowerCase();
+  if (normalized === "neoforge") return "NeoForge";
+  if (normalized === "forge") return "Forge";
+  if (normalized === "fabric") return "Fabric";
+  if (normalized === "quilt") return "Quilt";
+  return "Vanilla";
+}
+
+function titleCaseWords(text: string) {
+  return String(text || "")
+    .split(/[\s_-]+/)
+    .filter(Boolean)
+    .map((part) => part[0].toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function deriveInstanceSourcePlatform(inst: any): string {
+  const explicit = String(inst?.sourcePlatform || inst?.source || "").trim().toLowerCase();
+  if (explicit) return explicit;
+  const id = String(inst?.id || "").trim().toLowerCase();
+  if (id.startsWith("modrinth-")) return "modrinth";
+  if (id.startsWith("curseforge-profile-")) return "curseforge";
+  if (id.startsWith("modrinth-profile-")) return "modrinth-profile";
+  if (id.startsWith("pack-")) return "archive";
+  return "fishbattery";
+}
+
+function deriveInstanceType(inst: any): DerivedInstanceType {
+  const explicit = String(inst?.libraryType || "").trim().toLowerCase();
+  if (explicit === "custom" || explicit === "modpack" || explicit === "imported") {
+    return explicit as DerivedInstanceType;
+  }
+  const source = deriveInstanceSourcePlatform(inst);
+  if (source === "modrinth-profile" || source === "curseforge" && String(inst?.id || "").startsWith("curseforge-profile-")) {
+    return "imported";
+  }
+  if (source === "archive") return "modpack";
+  if (source === "modrinth" || source === "curseforge" || source === "ftb" || source === "atlauncher" || source === "technic") {
+    return "modpack";
+  }
+  return "custom";
+}
+
+function getInstanceTypeLabel(inst: any) {
+  const type = deriveInstanceType(inst);
+  if (type === "modpack") return "Modpack";
+  if (type === "imported") return "Imported";
+  return "Custom";
+}
+
+function getInstanceSourceLabel(inst: any) {
+  const explicit = String(inst?.sourceLabel || "").trim();
+  if (explicit) return explicit;
+  const source = deriveInstanceSourcePlatform(inst);
+  if (source === "fishbattery") return "Fishbattery";
+  if (source === "modrinth") return "Modrinth";
+  if (source === "curseforge") return "CurseForge";
+  if (source === "ftb") return "FTB";
+  if (source === "atlauncher") return "ATLauncher";
+  if (source === "technic") return "Technic";
+  if (source === "modrinth-profile") return "Modrinth profile";
+  if (source === "curseforge-profile") return "CurseForge profile";
+  if (source === "archive") return "Imported archive";
+  return titleCaseWords(source);
+}
+
+function buildInstanceOriginPatch(
+  libraryType: DerivedInstanceType,
+  sourcePlatform: string,
+  sourceLabel?: string
+) {
+  return {
+    libraryType,
+    sourcePlatform,
+    sourceLabel: sourceLabel || titleCaseWords(sourcePlatform)
+  };
+}
+
+function getInstanceCreatedMs(inst: any) {
+  const created = Number(inst?.createdAt || 0);
+  return Number.isFinite(created) ? created : 0;
+}
+
+function formatRelativeTimestamp(epochMs: number) {
+  if (!epochMs) return "Unknown date";
+  const deltaMs = Math.max(0, Date.now() - epochMs);
+  const minutes = Math.floor(deltaMs / 60000);
+  if (minutes < 1) return "Just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  const months = Math.floor(days / 30);
+  if (months < 12) return `${months}mo ago`;
+  const years = Math.floor(months / 12);
+  return `${years}y ago`;
+}
+
+function invalidateHomeData() {
+  homeDataCache = null;
+}
+
+function createHomeSection(
+  title: string,
+  subtitle: string,
+  action?: { label: string; onClick: () => void }
+) {
+  const section = document.createElement("section");
+  section.className = "homeSection";
+
+  const header = document.createElement("div");
+  header.className = "homeSectionHeader";
+
+  const copy = document.createElement("div");
+  const heading = document.createElement("h3");
+  heading.className = "homeSectionTitle";
+  heading.textContent = title;
+  const sub = document.createElement("div");
+  sub.className = "homeSectionSub";
+  sub.textContent = subtitle;
+  copy.append(heading, sub);
+  header.appendChild(copy);
+
+  if (action) {
+    const btn = document.createElement("button");
+    btn.className = "btn";
+    btn.type = "button";
+    btn.textContent = action.label;
+    btn.onclick = action.onClick;
+    header.appendChild(btn);
+  }
+
+  const body = document.createElement("div");
+  body.className = "homeSectionBody";
+  section.append(header, body);
+  return { section, body };
+}
+
+async function getHomeStyleFallbacks() {
+  const activeMc = getPrimaryMinecraftAccount();
+  const activeMcId = String(activeMc?.id || "").trim();
+  const topSkins = getTopHomeUsageEntries(HOME_SKIN_USAGE_KEY, 3);
+  const topCapes = getTopHomeUsageEntries(HOME_CAPE_USAGE_KEY, 3);
+  if (!activeMcId) return { topSkins, topCapes };
+
+  if (!topSkins.length) {
+    const selection = getSkinUiSelection(activeMcId);
+    if (selection.mode === "saved" && selection.activeSavedId) {
+      const saved = getSavedSkins(activeMcId).find((entry) => entry.id === selection.activeSavedId);
+      if (saved) {
+        topSkins.push({
+          id: `saved:${saved.id}`,
+          label: saved.name || "Saved skin",
+          subtitle: saved.variant === "SLIM" ? "Slim" : "Classic",
+          imageUrl: saved.dataUrl,
+          count: 1,
+          lastUsedAt: saved.createdAt || 1
+        });
+      }
+    } else if (selection.mode === "default" && selection.defaultKey) {
+      const def = MOJANG_DEFAULT_SKINS.find((entry) => entry.key === selection.defaultKey);
+      if (def) {
+        topSkins.push({
+          id: `default:${def.key}`,
+          label: def.name,
+          subtitle: def.variant === "SLIM" ? "Slim" : "Classic",
+          imageUrl: def.sourceUrl,
+          count: 1,
+          lastUsedAt: 1
+        });
+      }
+    }
+  }
+
+  if (!topCapes.length) {
+    try {
+      const [localCatalog, localSelection] = await Promise.all([
+        backend.capesListLocal(),
+        backend.capesGetLocalSelection(activeMcId)
+      ]);
+      const selectedLocalId = String(localSelection?.capeId || "").trim();
+      const localHit = (localCatalog?.items || []).find((item: any) => item.id === selectedLocalId);
+      if (localHit) {
+        topCapes.push({
+          id: `local:${localHit.id}`,
+          label: localHit.name || "Fishbattery cape",
+          subtitle: localCapeTierLabel(localHit.tier),
+          imageUrl: localHit.previewDataUrl || null,
+          sourceLabel: "Fishbattery",
+          count: 1,
+          lastUsedAt: 1
+        });
+      }
+    } catch {}
+
+    if (!topCapes.length) {
+      const officialState = getOfficialCapeStateCache(activeMcId);
+      const activeCapeId = String(officialState?.activeCapeId || "").trim();
+      const officialCape = Array.isArray(officialState?.capes)
+        ? officialState.capes.find((item: any) => item.id === activeCapeId)
+        : null;
+      if (officialCape) {
+        topCapes.push({
+          id: `official:${officialCape.id}`,
+          label: officialCape.name || "Official cape",
+          subtitle: "Minecraft",
+          imageUrl: officialCape.previewDataUrl || officialCape.url || null,
+          sourceLabel: "Official",
+          count: 1,
+          lastUsedAt: 1
+        });
+      }
+    }
+  }
+
+  return { topSkins: topSkins.slice(0, 3), topCapes: topCapes.slice(0, 3) };
+}
+
+async function collectHomeData(force = false) {
+  const now = Date.now();
+  if (!force && homeDataCache && now - homeDataCache.fetchedAt < 45000) {
+    return homeDataCache.data;
+  }
+
+  const instances = Array.isArray(state.instances?.instances) ? state.instances.instances : [];
+  const instanceUsage = readHomeUsageMap(HOME_INSTANCE_USAGE_KEY);
+  const latestInstances = [...instances]
+    .sort((left, right) => {
+      const leftUsage = instanceUsage[String(left?.id || "")];
+      const rightUsage = instanceUsage[String(right?.id || "")];
+      const leftRecent = Math.max(
+        Number(leftUsage?.lastUsedAt || 0),
+        Number(left?.lastPlayedAt || 0),
+        Number(left?.updatedAt || 0),
+        getInstanceCreatedMs(left)
+      );
+      const rightRecent = Math.max(
+        Number(rightUsage?.lastUsedAt || 0),
+        Number(right?.lastPlayedAt || 0),
+        Number(right?.updatedAt || 0),
+        getInstanceCreatedMs(right)
+      );
+      return rightRecent - leftRecent;
+    })
+    .slice(0, 5);
+
+  const [worldSettled, serverSettled, modrinthSettled, curseforgeSettled] = await Promise.all([
+    Promise.allSettled(
+      instances.map(async (inst: any) => ({
+        instance: inst,
+        data: await withTimeout(
+          backend.instanceWorldsList(String(inst.id || "")),
+          3000,
+          `instanceWorldsList(${String(inst?.id || "")})`
+        )
+      }))
+    ),
+    Promise.allSettled(
+      instances.map(async (inst: any) => ({
+        instance: inst,
+        data: await withTimeout(backend.serversList(String(inst.id || "")), 3000, `serversList(${String(inst?.id || "")})`)
+      }))
+    ),
+    Promise.resolve(backend.modrinthPacksSearch("", 6)).catch(() => ({ hits: [] })),
+    Promise.resolve(backend.providerPacksSearch("curseforge", "", 6)).catch(() => ({ hits: [] }))
+  ]);
+
+  const recentWorlds = worldSettled
+    .filter((result): result is PromiseFulfilledResult<{ instance: any; data: any }> => result.status === "fulfilled")
+    .flatMap((result) =>
+      (Array.isArray(result.value.data?.worlds) ? result.value.data.worlds : [])
+        .filter((world: any) => Number(world?.lastPlayedAt || 0) > 0)
+        .map((world: any) => ({ instance: result.value.instance, world }))
+    )
+    .sort((left, right) => Number(right.world?.lastPlayedAt || 0) - Number(left.world?.lastPlayedAt || 0))
+    .slice(0, 5);
+
+  const recentServers = serverSettled
+    .filter((result): result is PromiseFulfilledResult<{ instance: any; data: any }> => result.status === "fulfilled")
+    .flatMap((result) =>
+      (Array.isArray(result.value.data?.servers) ? result.value.data.servers : []).map((server: any) => ({
+        instance: result.value.instance,
+        server
+      }))
+    )
+    .sort((left, right) => {
+      const rightTs = Number(right.server?.updatedAt || right.server?.createdAt || 0);
+      const leftTs = Number(left.server?.updatedAt || left.server?.createdAt || 0);
+      return rightTs - leftTs;
+    })
+    .slice(0, 5);
+
+  const recentActivity = [
+    ...recentWorlds.map((item) => ({
+      kind: "world" as const,
+      instance: item.instance,
+      world: item.world,
+      timestamp: Number(item.world?.lastPlayedAt || 0)
+    })),
+    ...recentServers.map((item) => ({
+      kind: "server" as const,
+      instance: item.instance,
+      server: item.server,
+      timestamp: Number(item.server?.updatedAt || item.server?.createdAt || 0)
+    }))
+  ]
+    .sort((left, right) => right.timestamp - left.timestamp)
+    .slice(0, 3);
+
+  const modrinthHits = (modrinthSettled?.hits || []).map((hit: any) => ({
+    id: String(hit.projectId || ""),
+    title: String(hit.title || "Modpack"),
+    description: String(hit.description || ""),
+    iconUrl: hit.iconUrl || null,
+    mcVersion: hit.mcVersion || "",
+    loader: hit.loader || "",
+    source: "modrinth" as const,
+    latestVersionId: hit.latestVersionId || null
+  }));
+  const curseforgeHits = (curseforgeSettled?.hits || []).map((hit: any) => ({
+    id: String(hit.id || ""),
+    title: String(hit.name || "Modpack"),
+    description: String(hit.description || ""),
+    iconUrl: hit.iconUrl || null,
+    mcVersion: hit.mcVersion || "",
+    loader: hit.loader || "",
+    source: "curseforge" as const
+  }));
+  const discoverPacks: Array<any> = [];
+  for (let index = 0; discoverPacks.length < 5 && (index < modrinthHits.length || index < curseforgeHits.length); index += 1) {
+    if (index < modrinthHits.length) discoverPacks.push(modrinthHits[index]);
+    if (discoverPacks.length >= 5) break;
+    if (index < curseforgeHits.length) discoverPacks.push(curseforgeHits[index]);
+  }
+
+  const iconIds = new Set<string>();
+  for (const entry of [...latestInstances, ...recentActivity.map((item) => item.instance)]) {
+    const id = String(entry?.id || "").trim();
+    if (id) iconIds.add(id);
+  }
+  const instanceIcons = new Map<string, string | null>();
+  await Promise.all(
+    Array.from(iconIds).map(async (id) => {
+      try {
+        instanceIcons.set(id, await withTimeout(backend.instancesGetIcon(id), 2500, `instancesGetIcon(${id})`));
+      } catch {
+        instanceIcons.set(id, null);
+      }
+    })
+  );
+
+  const data = {
+    latestInstances,
+    recentActivity,
+    discoverPacks,
+    instanceIcons
+  };
+  homeDataCache = { fetchedAt: now, data };
+  return data;
+}
+
+async function openHomeFeaturedPack(pack: any) {
+  if (!pack) return;
+  if (pack.source === "modrinth") {
+    await openCreateInstanceModal("modrinth", "details");
+    selectedModrinthPack = {
+      projectId: pack.id,
+      title: pack.title,
+      latestVersionId: pack.latestVersionId || undefined,
+      iconUrl: pack.iconUrl || null
+    };
+    modrinthSearchInput.value = pack.title;
+    await runModrinthSearch();
+    return;
+  }
+  await openCreateInstanceModal("curseforge", "details");
+  selectedProviderPack = { id: pack.id, name: pack.title, iconUrl: pack.iconUrl || null };
+  providerSearchInput.value = pack.title;
+  await runProviderSearch();
+}
+
+async function renderHomeView(force = false) {
+  if (!homePanelRoot) return;
+  const generation = ++renderHomeGeneration;
+  const activeMc = getPrimaryMinecraftAccount();
+  homePanelRoot.innerHTML = `
+    <div class="homeHero">
+      <div class="homeHeroCopy">
+        <div class="homeEyebrow">Quick actions</div>
+        <h1>Jump back in fast</h1>
+        <p>${activeMc ? `Welcome back, ${getAccountLabel(activeMc)}.` : "Your launcher shortcuts, recent activity, and pack picks all in one place."}</p>
+      </div>
+      <div class="homeHeroActions">
+        <button id="homeQuickLaunch" class="btn btnPrimary" type="button">Play latest version</button>
+        <button id="homeCreateInstance" class="btn" type="button">Create instance</button>
+        <button id="homeImportPack" class="btn" type="button">Import modpack</button>
+      </div>
+    </div>
+    <div class="homeLoading">Collecting your recent activity and modpack picks...</div>
+  `;
+
+  const homeQuickLaunch = document.getElementById("homeQuickLaunch") as HTMLButtonElement | null;
+  const homeCreateInstance = document.getElementById("homeCreateInstance") as HTMLButtonElement | null;
+  const homeImportPack = document.getElementById("homeImportPack") as HTMLButtonElement | null;
+  setButtonAssetIcon(homeQuickLaunch, ICON_ASSETS.play);
+  setButtonAssetIcon(homeCreateInstance, ICON_ASSETS.plus);
+  setButtonAssetIcon(homeImportPack, ICON_ASSETS.download);
+  if (homeQuickLaunch) homeQuickLaunch.onclick = () => btnQuickLaunchLatestVanilla.click();
+  if (homeCreateInstance) homeCreateInstance.onclick = () => btnCreate.click();
+  if (homeImportPack) homeImportPack.onclick = () => btnImport.click();
+
+  const data = await collectHomeData(force);
+  if (generation !== renderHomeGeneration) return;
+
+  homePanelRoot.innerHTML = "";
+
+  const hero = document.createElement("div");
+  hero.className = "homeHero";
+  const heroCopy = document.createElement("div");
+  heroCopy.className = "homeHeroCopy";
+  const eyebrow = document.createElement("div");
+  eyebrow.className = "homeEyebrow";
+  eyebrow.textContent = "Quick actions";
+  const title = document.createElement("h1");
+  title.textContent = "Jump back in fast";
+  const sub = document.createElement("p");
+  sub.textContent = activeMc
+    ? `Welcome back, ${getAccountLabel(activeMc)}. Your recent launcher activity is ready below.`
+    : "Your launcher shortcuts, recent activity, and curated modpack picks all in one place.";
+  heroCopy.append(eyebrow, title, sub);
+  const heroActions = document.createElement("div");
+  heroActions.className = "homeHeroActions";
+  const heroPlay = document.createElement("button");
+  heroPlay.className = "btn btnPrimary";
+  heroPlay.type = "button";
+  heroPlay.textContent = "Play latest version";
+  setButtonAssetIcon(heroPlay, ICON_ASSETS.play);
+  heroPlay.onclick = () => btnQuickLaunchLatestVanilla.click();
+  const heroCreate = document.createElement("button");
+  heroCreate.className = "btn";
+  heroCreate.type = "button";
+  heroCreate.textContent = "Create instance";
+  setButtonAssetIcon(heroCreate, ICON_ASSETS.plus);
+  heroCreate.onclick = () => btnCreate.click();
+  const heroImport = document.createElement("button");
+  heroImport.className = "btn";
+  heroImport.type = "button";
+  heroImport.textContent = "Import modpack";
+  setButtonAssetIcon(heroImport, ICON_ASSETS.download);
+  heroImport.onclick = () => btnImport.click();
+  heroActions.append(heroPlay, heroCreate, heroImport);
+  hero.append(heroCopy, heroActions);
+  homePanelRoot.appendChild(hero);
+
+  const grid = document.createElement("div");
+  grid.className = "homeSectionGrid";
+  homePanelRoot.appendChild(grid);
+
+  const latestInstancesSection = createHomeSection("Latest played instances", "Your five most recent jump-back targets.", {
+    label: "Open library",
+    onClick: () => {
+      setLibrarySurface("library");
+      setView("library");
+    }
+  });
+  latestInstancesSection.section.classList.add("homeSectionSpan2");
+  const latestList = document.createElement("div");
+  latestList.className = "homeInstanceList";
+  if (!data.latestInstances.length) {
+    const empty = document.createElement("div");
+    empty.className = "homeEmpty";
+    empty.textContent = "Launch an instance and it will start showing up here.";
+    latestList.appendChild(empty);
+  } else {
+    for (const inst of data.latestInstances) {
+      const card = document.createElement("div");
+      card.className = "homeInstanceCard";
+      card.tabIndex = 0;
+      card.setAttribute("role", "button");
+      card.onclick = () => void openInstancePage(inst, "content");
+      card.onkeydown = (ev: KeyboardEvent) => {
+        if (ev.key !== "Enter" && ev.key !== " ") return;
+        ev.preventDefault();
+        void openInstancePage(inst, "content");
+      };
+
+      const icon = document.createElement("div");
+      icon.className = "homeInstanceCardIcon";
+      renderInstanceIconInto(icon, inst, data.instanceIcons.get(String(inst.id || "")) || null);
+
+      const meta = document.createElement("div");
+      meta.className = "homeInstanceCardMeta";
+      const cardTitle = document.createElement("strong");
+      cardTitle.textContent = inst.name || "Instance";
+      const cardSub = document.createElement("div");
+      cardSub.className = "homeCardSub";
+      cardSub.textContent = `${humanizeLoader(getInstanceDisplayLoader(inst))} ${inst.mcVersion || "unknown"} • ${
+        getTopHomeUsageEntries(HOME_INSTANCE_USAGE_KEY, 50).find((entry) => entry.id === String(inst.id || ""))?.lastUsedAt
+          ? formatRelativeTimestamp(
+              Number(
+                getTopHomeUsageEntries(HOME_INSTANCE_USAGE_KEY, 50).find((entry) => entry.id === String(inst.id || ""))?.lastUsedAt || 0
+              )
+            )
+          : formatRelativeTimestamp(Number(inst.updatedAt || inst.createdAt || 0))
+      }`;
+      meta.append(cardTitle, cardSub);
+
+      const playBtn = document.createElement("button");
+      playBtn.className = "btn btnPrimary";
+      playBtn.type = "button";
+      playBtn.textContent = "Play";
+      setButtonAssetIcon(playBtn, ICON_ASSETS.play);
+      playBtn.onclick = (ev) => {
+        ev.stopPropagation();
+        void guarded(async () => launchForInstance(inst));
+      };
+
+      card.append(icon, meta, playBtn);
+      latestList.appendChild(card);
+    }
+  }
+  latestInstancesSection.body.appendChild(latestList);
+  grid.appendChild(latestInstancesSection.section);
+
+  const activitySection = createHomeSection("Recent worlds & servers", "Your last three world and server jump-back targets.", {
+    label: "Multiplayer",
+    onClick: () => setView("playit")
+  });
+  activitySection.section.classList.add("homeSectionSpan2");
+  const activityList = document.createElement("div");
+  activityList.className = "homeRecentList";
+  if (!data.recentActivity.length) {
+    const empty = document.createElement("div");
+    empty.className = "homeEmpty";
+    empty.textContent = "Play a world or join a server and it will show up here.";
+    activityList.appendChild(empty);
+  } else {
+    for (const item of data.recentActivity) {
+      const card = document.createElement("div");
+      card.className = "homeRecentCard";
+      card.tabIndex = 0;
+      card.setAttribute("role", "button");
+      card.onclick = () => void openInstancePage(item.instance, "worlds");
+      card.onkeydown = (ev: KeyboardEvent) => {
+        if (ev.key !== "Enter" && ev.key !== " ") return;
+        ev.preventDefault();
+        void openInstancePage(item.instance, "worlds");
+      };
+
+      const thumb = document.createElement("div");
+      thumb.className = "homeCompactThumb";
+      if (item.kind === "world" && item.world?.iconDataUrl) {
+        const img = document.createElement("img");
+        img.src = item.world.iconDataUrl;
+        img.alt = `${item.world?.name || "World"} icon`;
+        thumb.appendChild(img);
+      } else if (item.kind === "server" && item.server?.iconDataUrl) {
+        const img = document.createElement("img");
+        img.src = item.server.iconDataUrl;
+        img.alt = `${item.server?.name || item.server?.address || "Server"} icon`;
+        thumb.appendChild(img);
+      } else {
+        renderInstanceIconInto(thumb, item.instance, data.instanceIcons.get(String(item.instance?.id || "")) || null);
+      }
+
+      const meta = document.createElement("div");
+      meta.className = "homeCompactMeta";
+      const strong = document.createElement("strong");
+      strong.textContent =
+        item.kind === "world" ? item.world?.name || "World" : item.server?.name || item.server?.address || "Server";
+      const detail = document.createElement("div");
+      detail.className = "homeCardSub";
+      detail.textContent =
+        item.kind === "world"
+          ? `Singleplayer world • ${formatRelativeTimestamp(Number(item.world?.lastPlayedAt || 0))}`
+          : `${item.server?.address || "Unknown address"} • ${formatRelativeTimestamp(
+              Number(item.server?.updatedAt || item.server?.createdAt || 0)
+            )}`;
+      const context = document.createElement("div");
+      context.className = "homeCardSub";
+      context.textContent = `From ${item.instance?.name || "Instance"} • ${humanizeLoader(
+        getInstanceDisplayLoader(item.instance)
+      )} ${item.instance?.mcVersion || "unknown"}`;
+      meta.append(strong, detail, context);
+
+      const action = document.createElement("button");
+      action.className = item.kind === "server" ? "btn btnPrimary" : "btn";
+      action.type = "button";
+      action.textContent = item.kind === "server" ? "Join" : "Play";
+      setButtonAssetIcon(action, ICON_ASSETS.play);
+      action.onclick = (ev) => {
+        ev.stopPropagation();
+        void guarded(async () =>
+          launchForInstance(item.instance, item.kind === "server" ? String(item.server?.address || "").trim() : undefined)
+        );
+      };
+
+      card.append(thumb, meta, action);
+      activityList.appendChild(card);
+    }
+  }
+  activitySection.body.appendChild(activityList);
+  grid.appendChild(activitySection.section);
+
+  const discoverSection = createHomeSection("Discover modpacks", "A mixed quick-pick feed from Modrinth and CurseForge.", {
+    label: "Browse imports",
+    onClick: () => {
+      void guarded(async () => openCreateInstanceModal("modrinth", "details"));
+    }
+  });
+  discoverSection.section.classList.add("homeSectionSpan2");
+  const discoverGrid = document.createElement("div");
+  discoverGrid.className = "homeDiscoverGrid";
+  if (!data.discoverPacks.length) {
+    const empty = document.createElement("div");
+    empty.className = "homeEmpty";
+    empty.textContent = "Popular pack feeds are unavailable right now.";
+    discoverGrid.appendChild(empty);
+  } else {
+    for (const pack of data.discoverPacks) {
+      const card = document.createElement("button");
+      card.className = "homeDiscoverCard";
+      card.type = "button";
+      card.onclick = () => void guarded(async () => openHomeFeaturedPack(pack));
+
+      const art = document.createElement("div");
+      art.className = "homeDiscoverArt";
+      const img = document.createElement("img");
+      img.src = pack.iconUrl || fallbackPackIconDataUrl(pack.title, "blue");
+      img.alt = `${pack.title} cover`;
+      art.appendChild(img);
+
+      const packTitle = document.createElement("strong");
+      packTitle.textContent = pack.title;
+      const packDesc = document.createElement("div");
+      packDesc.className = "homeCardSub homeDiscoverDesc";
+      packDesc.textContent = pack.description || "No description.";
+      const packMeta = document.createElement("div");
+      packMeta.className = "homeCardSub";
+      packMeta.textContent = `MC ${pack.mcVersion || "unknown"} • ${humanizeLoader(pack.loader || "vanilla")} • ${
+        pack.source === "modrinth" ? "Modrinth" : "CurseForge"
+      }`;
+      const action = document.createElement("div");
+      action.className = "homeDiscoverAction";
+      action.textContent = "Set up pack";
+
+      card.append(art, packTitle, packDesc, packMeta, action);
+      discoverGrid.appendChild(card);
+    }
+  }
+  discoverSection.body.appendChild(discoverGrid);
+  grid.appendChild(discoverSection.section);
+}
+
+function compareMcVersions(a: string, b: string) {
+  const parse = (value: string) =>
+    String(value || "")
+      .split(/[^0-9]+/)
+      .filter(Boolean)
+      .map((part) => Number(part));
+  const left = parse(a);
+  const right = parse(b);
+  const max = Math.max(left.length, right.length);
+  for (let index = 0; index < max; index += 1) {
+    const l = left[index] ?? 0;
+    const r = right[index] ?? 0;
+    if (l !== r) return r - l;
+  }
+  return String(b || "").localeCompare(String(a || ""), undefined, { numeric: true, sensitivity: "base" });
+}
+
+function matchesInstanceFilter(inst: any) {
+  const type = deriveInstanceType(inst);
+  if (instanceFilterMode === "custom") return type === "custom";
+  if (instanceFilterMode === "modpack") return type === "modpack";
+  if (instanceFilterMode === "imported") return type === "imported";
+  if (instanceFilterMode === "synced") return inst?.syncEnabled !== false;
+  if (instanceFilterMode === "local-only") return inst?.syncEnabled === false;
+  return true;
+}
+
+function buildInstanceSearchHaystack(inst: any) {
+  return [
+    inst?.name,
+    inst?.mcVersion,
+    humanizeLoader(getInstanceDisplayLoader(inst)),
+    getInstanceTypeLabel(inst),
+    getInstanceSourceLabel(inst),
+    formatPresetLabel(inst?.instancePreset)
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+}
+
+function getInstanceGroupLabel(inst: any, mode: InstanceGroupMode) {
+  if (mode === "type") return `${getInstanceTypeLabel(inst)} instances`;
+  if (mode === "source") return getInstanceSourceLabel(inst);
+  if (mode === "loader") return `${humanizeLoader(getInstanceDisplayLoader(inst))} setups`;
+  if (mode === "version") return `Minecraft ${inst?.mcVersion || "Unknown"}`;
+  if (mode === "sync") return inst?.syncEnabled === false ? "Local only" : "Cloud sync enabled";
+  return "Instances";
+}
+
+function cacheSelectedInstanceSnapshot(instance: any) {
+  if (!instance || typeof instance !== "object") {
+    selectedInstanceSnapshot = null;
+    return null;
+  }
+  selectedInstanceSnapshot = { ...(selectedInstanceSnapshot || {}), ...instance };
+  return selectedInstanceSnapshot;
+}
+
+function getSelectedInstance() {
+  const currentId = String(selectedInstanceId || "").trim();
+  if (!currentId) return selectedInstanceSnapshot;
+  const live = (state.instances?.instances ?? []).find((item: any) => String(item?.id || "") === currentId) ?? null;
+  if (live) {
+    return cacheSelectedInstanceSnapshot(live);
+  }
+  if (String(selectedInstanceSnapshot?.id || "").trim() === currentId) {
+    return selectedInstanceSnapshot;
+  }
+  return null;
+}
+
+function getInstanceById(instanceId: string | null | undefined) {
+  const currentId = String(instanceId || "").trim();
+  if (!currentId) return null;
+  return (state.instances?.instances ?? []).find((item: any) => String(item?.id || "") === currentId) ?? null;
+}
+
+function getPreferredInstanceContext() {
+  return getSelectedInstance() || getInstanceById(lastLaunchedInstanceId);
+}
+
+function getPreferredInstanceId() {
+  const inst = getPreferredInstanceContext();
+  const id = String(inst?.id || "").trim();
+  return id || null;
+}
+
+function getLaunchContextInstance() {
+  return getInstanceById(lastLaunchedInstanceId) || getSelectedInstance();
+}
+
+function getLaunchContextInstanceId() {
+  const inst = getLaunchContextInstance();
+  const id = String(inst?.id || "").trim();
+  return id || null;
+}
+
+function setLibrarySurface(nextSurface: LibrarySurface) {
+  librarySurface = nextSurface;
+  const inLibrary = viewLibrary.style.display !== "none";
+  viewLibrary.style.display = inLibrary && nextSurface === "library" ? "" : "none";
+  viewInstance.style.display = inLibrary && nextSurface === "instance" ? "" : "none";
+  viewDiscover.style.display = inLibrary && nextSurface === "discover" ? "" : "none";
+  libraryTopbarTools.style.display = inLibrary && nextSurface === "library" ? "" : "none";
+}
+
+function setInstanceTab(nextTab: InstancePageTab) {
+  selectedInstanceTab = nextTab;
+  instanceTabContent.classList.toggle("active", nextTab === "content");
+  instanceTabWorlds.classList.toggle("active", nextTab === "worlds");
+  instanceTabLogs.classList.toggle("active", nextTab === "logs");
+  instancePageContent.style.display = nextTab === "content" ? "" : "none";
+  instancePageWorlds.style.display = nextTab === "worlds" ? "" : "none";
+  instancePageLogs.style.display = nextTab === "logs" ? "" : "none";
+  renderDebugLogsVisibility();
+}
+
+function setInstanceContentFilter(nextFilter: InstanceContentFilter) {
+  instanceContentFilter = normalizeInstanceContentFilterForInstance(getSelectedInstance(), nextFilter);
+  instanceFilterAll.classList.toggle("active", instanceContentFilter === "all");
+  instanceFilterMods.classList.toggle("active", instanceContentFilter === "mods");
+  instanceFilterResourcepacks.classList.toggle("active", instanceContentFilter === "resourcepacks");
+  instanceFilterShaderpacks.classList.toggle("active", instanceContentFilter === "shaderpacks");
+  instanceFilterUpdates.classList.toggle("active", instanceContentFilter === "updates");
+}
+
+function setInstanceWorldsFilter(nextFilter: InstanceWorldsFilter) {
+  instanceWorldsFilter = nextFilter;
+  instanceWorldsFilterAll.classList.toggle("active", nextFilter === "all");
+  instanceWorldsFilterSingle.classList.toggle("active", nextFilter === "singleplayer");
+  instanceWorldsFilterServers.classList.toggle("active", nextFilter === "servers");
+}
+
+function setLogFilterMode(nextFilter: LogFilterMode) {
+  logFilterMode = nextFilter;
+  instanceLogLevelAll.classList.toggle("active", nextFilter === "all");
+  instanceLogLevelInfo.classList.toggle("active", nextFilter === "info");
+  instanceLogLevelWarn.classList.toggle("active", nextFilter === "warn");
+  instanceLogLevelError.classList.toggle("active", nextFilter === "error");
+  instanceLogLevelDebug.classList.toggle("active", nextFilter === "debug");
+}
+
+function setDiscoverKind(nextKind: DiscoverKind) {
+  discoverKind = normalizeDiscoverKindForInstance(getSelectedInstance(), nextKind);
+  discoverKindMods.classList.toggle("active", discoverKind === "mods");
+  discoverKindResourcepacks.classList.toggle("active", discoverKind === "resourcepacks");
+  discoverKindShaderpacks.classList.toggle("active", discoverKind === "shaderpacks");
+  const categories = DISCOVER_CATEGORY_SETS[discoverKind] || DISCOVER_MOD_CATEGORIES;
+  if (!categories.some((category) => category.id === discoverCategory)) {
+    discoverCategory = "all";
+  }
+  renderDiscoverCategories();
+}
+
+function setDiscoverCategory(nextCategory: string) {
+  discoverCategory = nextCategory;
+  renderDiscoverCategories();
+}
+
+function renderDiscoverCategories() {
+  discoverCategoryList.innerHTML = "";
+  const categories = DISCOVER_CATEGORY_SETS[discoverKind] || DISCOVER_MOD_CATEGORIES;
+  for (const category of categories) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = `discoverCategoryBtn${discoverCategory === category.id ? " active" : ""}`;
+    btn.textContent = category.label;
+    btn.onclick = () => {
+      discoverCategory = category.id;
+      saveUiPreferences({ discoverCategory });
+      resetDiscoverPaging();
+      renderDiscoverCategories();
+      void renderDiscoverPage();
+    };
+    discoverCategoryList.appendChild(btn);
+  }
+}
+
 // Render profile image.
 function renderProfileImage(summary: Awaited<ReturnType<typeof backend.profileGetSummary>>, tierLabel: string) {
   const canvas = document.createElement("canvas");
@@ -4030,7 +5493,6 @@ function renderProfileImage(summary: Awaited<ReturnType<typeof backend.profileGe
     `Playtime: ${formatPlaytime(summary.totals.totalPlaytimeMs)}`,
     `Installed mods: ${summary.totals.installedMods}`,
     `Instances: ${summary.totals.instances}`,
-    `Active preset: ${formatPresetLabel(summary.activeInstance?.presetId)}`,
     summary.bestBenchmark
       ? `Best benchmark: ${summary.bestBenchmark.avgFps} FPS (${summary.bestBenchmark.instanceName})`
       : "Best benchmark: none",
@@ -4671,7 +6133,7 @@ async function finalizePlayitTunnelReady(
     await upsertPlayitServerEntry(safeInstanceId, tunnel);
     appendLog(`[playit] Saved join address to servers for instance ${safeInstanceId}.`);
   } else if (!safeInstanceId && joinAddress) {
-    appendLog("[playit] Tunnel created, but no active instance was selected for server-list save.");
+    appendLog("[playit] Tunnel created, but no current instance was available for server-list save.");
   }
   if (joinAddress) {
     setStatus(`Playit tunnel ready: ${joinAddress}`);
@@ -4701,11 +6163,11 @@ function parsePlayitLanPortFromLog(line: string) {
 }
 
 async function createPlayitMinecraftLanTunnel(localPort: number, reason: "manual" | "auto-lan") {
-  const activeInstanceId = state.instances?.activeInstanceId ?? null;
-  const activeInstance = (state.instances?.instances ?? []).find((x: any) => x.id === activeInstanceId) ?? null;
+  const launchContextInstance = getLaunchContextInstance();
+  const activeInstanceId = String(launchContextInstance?.id || "").trim() || null;
   const tunnelName =
     String(playitTunnelNameDraft || "").trim() ||
-    `${String(activeInstance?.name || "Minecraft").trim() || "Minecraft"} LAN`;
+    `${String(launchContextInstance?.name || "Minecraft").trim() || "Minecraft"} LAN`;
   const created = await backend.playitCreateTunnel({
     name: tunnelName,
     tunnelType: "minecraft-java",
@@ -4788,7 +6250,7 @@ async function disablePlayitAutoTunnelForInstance(instanceId: string, reason: st
 async function handleDetectedLanPort(localPort: number) {
   const safePort = Number(localPort || 0);
   if (!Number.isFinite(safePort) || safePort <= 0) return;
-  const activeInstanceId = String(state.instances?.activeInstanceId || "").trim();
+  const activeInstanceId = String(getLaunchContextInstanceId() || "").trim();
   if (!activeInstanceId || !playitState.linked || !playitState.autoTunnelEnabled) return;
 
   const attemptKey = `${activeInstanceId}:${safePort}`;
@@ -4888,6 +6350,8 @@ function cloudSyncStatusText(state: CloudSyncUiState) {
 function applyRemoteSyncedSettings(patch: Record<string, unknown> | null | undefined) {
   if (!patch || typeof patch !== "object") return;
   setSettings(patch as Partial<AppSettings>, { touchUpdatedAt: false });
+  applyUiPreferencesFromSettings(getSettings());
+  void applyNativeWindowSettings(getSettings());
   ensureCloudSyncTimer();
 }
 
@@ -5419,8 +6883,7 @@ async function runActiveModalBenchmark() {
 function renderSettingsPanels() {
   const s = getSettings();
   const premium = hasPremium();
-  const activeInstanceId = state.instances?.activeInstanceId ?? null;
-  const activeInstance = (state.instances?.instances ?? []).find((x: any) => x.id === activeInstanceId) ?? null;
+  const currentInstance = getPreferredInstanceContext();
 
   if (!premium && PREMIUM_THEMES.has(s.theme)) {
     setSettings({ theme: defaultSettings.theme });
@@ -5998,38 +7461,33 @@ function renderSettingsPanels() {
     const btnGenLock = document.createElement("button");
     btnGenLock.className = "btn";
     btnGenLock.textContent = "Refresh lockfile";
-    btnGenLock.disabled = !activeInstance;
+    btnGenLock.disabled = !currentInstance;
     btnGenLock.onclick = () =>
       guarded(async () => {
-        const latest = await backend.instancesList();
-        state.instances = latest;
-        const latestActiveId = latest?.activeInstanceId ?? null;
-        const latestActive = (latest?.instances ?? []).find((x: any) => x.id === latestActiveId) ?? null;
-        if (!latestActive) {
-          alert("No active instance selected.");
+        const targetInstanceId = getPreferredInstanceId();
+        const targetInstance = getPreferredInstanceContext();
+        if (!targetInstanceId || !targetInstance) {
+          alert("Select an instance first.");
           renderSettingsPanels();
           return;
         }
-        const res = await backend.lockfileGenerate(latestActive.id);
-        appendLog(`[lockfile] Generated for ${latestActive.name}: ${res.artifacts} artifacts @ ${res.generatedAt}`);
+        const res = await backend.lockfileGenerate(targetInstanceId);
+        appendLog(`[lockfile] Generated for ${targetInstance.name}: ${res.artifacts} artifacts @ ${res.generatedAt}`);
       });
 
     const btnCheckLock = document.createElement("button");
     btnCheckLock.className = "btn";
     btnCheckLock.textContent = "Check lock drift";
-    btnCheckLock.disabled = !activeInstance;
+    btnCheckLock.disabled = !currentInstance;
     btnCheckLock.onclick = () =>
       guarded(async () => {
-        const latest = await backend.instancesList();
-        state.instances = latest;
-        const latestActiveId = latest?.activeInstanceId ?? null;
-        const latestActive = (latest?.instances ?? []).find((x: any) => x.id === latestActiveId) ?? null;
-        if (!latestActive) {
-          alert("No active instance selected.");
+        const targetInstanceId = getPreferredInstanceId();
+        if (!targetInstanceId) {
+          alert("Select an instance first.");
           renderSettingsPanels();
           return;
         }
-        const drift = await backend.lockfileDrift(latestActive.id);
+        const drift = await backend.lockfileDrift(targetInstanceId);
         if (drift.clean) {
           appendLog("[lockfile] Drift check: clean.");
           alert("Lockfile drift check: clean.");
@@ -6049,36 +7507,85 @@ function renderSettingsPanels() {
   clearPanel(settingsPanelWindow);
   settingsPanelWindow.appendChild(makeH3("Window"));
   {
-    const { row } = makeRow("Fullscreen", "Start launcher in fullscreen mode (if you implement it on the main process).");
-    const sw = makeSwitch(s.fullscreen, (v) => setSettings({ fullscreen: v }));
+    const { row } = makeRow("Fullscreen", "Apply fullscreen immediately and remember it for next launch.");
+    const sw = makeToggle(s.fullscreen, async (v) => {
+      try {
+        const applied = await backend.windowSetFullscreen(v);
+        setSettings({ fullscreen: !!applied });
+        if (!applied) {
+          const latest = getSettings();
+          const { width, height } = normalizeStoredWindowSize(latest.winW, latest.winH);
+          await backend.windowSetSize(width, height);
+        }
+        await syncWindowMaxButtonState();
+      } catch (err: any) {
+        alert(`Could not change fullscreen: ${String(err?.message ?? err)}`);
+        renderSettingsPanels();
+      }
+    });
     row.appendChild(sw);
     settingsPanelWindow.appendChild(row);
   }
   {
-    const { row } = makeRow("Window size (WxH)", "Stored locally; apply in main process if desired.");
+    const { row } = makeRow("Window size (WxH)", "Resize the launcher now and remember the size for future launches.");
     const wrap = document.createElement("div");
     wrap.className = "row";
     wrap.style.justifyContent = "flex-end";
+    wrap.style.gap = "8px";
 
-    const w = makeInput(String(s.winW), "854", (v) => {
-      const n = Math.max(480, Math.min(3840, Number(v || 0)));
-      if (!Number.isFinite(n)) return;
-      setSettings({ winW: n });
-    });
-    (w as any).type = "number";
+    const { width: normalizedWidth, height: normalizedHeight } = normalizeStoredWindowSize(s.winW, s.winH);
 
-    const h = makeInput(String(s.winH), "480", (v) => {
-      const n = Math.max(360, Math.min(2160, Number(v || 0)));
-      if (!Number.isFinite(n)) return;
-      setSettings({ winH: n });
-    });
-    (h as any).type = "number";
-
+    const w = document.createElement("input");
+    w.className = "setControl";
+    w.type = "number";
+    w.value = String(normalizedWidth);
+    w.placeholder = "854";
     w.style.width = "120px";
+
+    const h = document.createElement("input");
+    h.className = "setControl";
+    h.type = "number";
+    h.value = String(normalizedHeight);
+    h.placeholder = "480";
     h.style.width = "120px";
 
-    wrap.appendChild(w);
-    wrap.appendChild(h);
+    const applyWindowSize = async () => {
+      const next = normalizeStoredWindowSize(Number(w.value || 0), Number(h.value || 0));
+      w.value = String(next.width);
+      h.value = String(next.height);
+      setSettings({ winW: next.width, winH: next.height });
+      try {
+        const fullscreen = await backend.windowIsFullscreen();
+        if (fullscreen) {
+          setStatus("Saved window size. It will apply after fullscreen is turned off.");
+          return;
+        }
+        await backend.windowSetSize(next.width, next.height);
+        await syncWindowMaxButtonState();
+      } catch (err: any) {
+        alert(`Could not resize window: ${String(err?.message ?? err)}`);
+      }
+    };
+
+    const applyBtn = document.createElement("button");
+    applyBtn.className = "btn";
+    applyBtn.textContent = "Apply";
+    applyBtn.onclick = () => void applyWindowSize();
+
+    w.onkeydown = (ev) => {
+      if (ev.key !== "Enter") return;
+      ev.preventDefault();
+      void applyWindowSize();
+    };
+    h.onkeydown = (ev) => {
+      if (ev.key !== "Enter") return;
+      ev.preventDefault();
+      void applyWindowSize();
+    };
+    w.onblur = () => void applyWindowSize();
+    h.onblur = () => void applyWindowSize();
+
+    wrap.append(w, h, applyBtn);
     row.appendChild(wrap);
     settingsPanelWindow.appendChild(row);
   }
@@ -6143,7 +7650,6 @@ async function renderProfileSettingsPanel() {
     const cardData = [
       { title: "Total playtime", value: formatPlaytime(summary.totals.totalPlaytimeMs) },
       { title: "Installed mods", value: String(summary.totals.installedMods) },
-      { title: "Active preset", value: formatPresetLabel(summary.activeInstance?.presetId) },
       { title: "Subscription", value: tierLabel },
       {
         title: "Hardware",
@@ -6558,9 +8064,8 @@ function renderPlayitPanel() {
   statusCard.appendChild(codeRow.row);
   shell.appendChild(statusCard);
 
-  const activeInstanceId = state.instances?.activeInstanceId ?? null;
-  const activeInstance = (state.instances?.instances ?? []).find((x: any) => x.id === activeInstanceId) ?? null;
-  const suggestedTunnelName = playitTunnelNameDraft.trim() || `${activeInstance?.name || "Minecraft"} LAN`;
+  const currentInstance = getPreferredInstanceContext();
+  const suggestedTunnelName = playitTunnelNameDraft.trim() || `${currentInstance?.name || "Minecraft"} LAN`;
 
   const tunnelCard = document.createElement("div");
   tunnelCard.className = "setRow";
@@ -6887,15 +8392,15 @@ async function findPreferredServerTarget() {
   const instances = state.instances?.instances ?? [];
   if (!instances.length) return null;
 
-  const activeId = state.instances?.activeInstanceId ?? null;
-  const activeInst = instances.find((x: any) => x.id === activeId) ?? null;
-  if (activeInst) {
-    const s = await backend.serversList(activeInst.id);
+  const currentInst = getPreferredInstanceContext();
+  if (currentInst) {
+    const s = await backend.serversList(currentInst.id);
     const preferred = (s?.servers ?? []).find((x: any) => x.id === s.preferredServerId) ?? null;
-    if (preferred) return { instance: activeInst, server: preferred };
+    if (preferred) return { instance: currentInst, server: preferred };
   }
 
   for (const inst of instances) {
+    if (String(inst?.id || "") === String(currentInst?.id || "")) continue;
     const s = await backend.serversList(inst.id);
     const preferred = (s?.servers ?? []).find((x: any) => x.id === s.preferredServerId) ?? null;
     if (preferred) return { instance: inst, server: preferred };
@@ -6957,12 +8462,1407 @@ async function refreshEditedInstanceWorkspace(targetTab: ModalTabId = activeModa
   if (targetTab === "discover") {
     await runInstanceModrinthContentSearch(inst.id);
   }
+  if (selectedInstanceId && String(selectedInstanceId) === String(inst.id)) {
+    await renderInstancePage();
+    if (librarySurface === "discover") {
+      await renderDiscoverPage();
+    }
+  }
 
   return inst;
 }
 
+function renderInstanceIconInto(target: HTMLElement, inst: any, iconData: string | null) {
+  const name = String(inst?.name || "Instance");
+  const type = deriveInstanceType(inst);
+  const src = iconData || fallbackPackIconDataUrl(name, type === "custom" ? "green" : "blue");
+  target.innerHTML = "";
+  const img = document.createElement("img");
+  img.src = src;
+  img.alt = `${name} icon`;
+  img.style.width = "100%";
+  img.style.height = "100%";
+  img.style.objectFit = "cover";
+  img.style.borderRadius = "inherit";
+  target.appendChild(img);
+}
+
+async function getInstanceLocalContentSnapshot(instanceId: string) {
+  const [modsRes, rpsRes, spsRes] = await Promise.allSettled([
+    withTimeout(backend.contentList(instanceId, "mods"), 4000, `contentList(mods:${instanceId})`),
+    withTimeout(backend.contentList(instanceId, "resourcepacks"), 4000, `contentList(resourcepacks:${instanceId})`),
+    withTimeout(backend.contentList(instanceId, "shaderpacks"), 4000, `contentList(shaderpacks:${instanceId})`)
+  ]);
+  for (const [kind, result] of [
+    ["mods", modsRes],
+    ["resourcepacks", rpsRes],
+    ["shaderpacks", spsRes]
+  ] as const) {
+    if (result.status === "rejected") {
+      appendLog(`[content] ${kind} list failed for ${instanceId}: ${String(result.reason?.message ?? result.reason)}`);
+    }
+  }
+  const toList = (res: PromiseSettledResult<any>) => {
+    if (res.status !== "fulfilled") return [] as Array<{ name: string; size: number; modifiedMs?: number }>;
+    const value = res.value;
+    if (Array.isArray(value)) return value;
+    if (Array.isArray(value?.items)) return value.items;
+    return [] as Array<{ name: string; size: number; modifiedMs?: number }>;
+  };
+  const mods = toList(modsRes);
+  const resourcepacks = toList(rpsRes);
+  const shaderpacks = toList(spsRes);
+
+  let modMetadataByName: Record<string, any> = {};
+  let packMetadataByName: Record<string, any> = {};
+
+  if (mods.length) {
+    try {
+      const metaRes = await withTimeout(
+        backend.localModsMetadata(instanceId, mods.map((m: any) => String(m?.name || ""))),
+        3500,
+        `localModsMetadata(${instanceId})`
+      );
+      const rows = Array.isArray(metaRes?.items) ? metaRes.items : [];
+      modMetadataByName = rows.reduce((acc: Record<string, any>, row: any) => {
+        const key = String(row?.fileName || "").toLowerCase();
+        if (!key) return acc;
+        acc[key] = row;
+        return acc;
+      }, {});
+    } catch (err: any) {
+      appendLog(`[mods-metadata] Failed fetching metadata: ${String(err?.message ?? err)}`);
+    }
+  }
+
+  const loadPackMetadata = async (kind: "resourcepacks" | "shaderpacks", rows: Array<{ name: string }>) => {
+    if (!rows.length) return;
+    try {
+      const res = await withTimeout(
+        backend.localPacksMetadata(instanceId, kind, rows.map((r: any) => String(r?.name || ""))),
+        3500,
+        `localPacksMetadata(${kind}:${instanceId})`
+      );
+      const items = Array.isArray(res?.items) ? res.items : [];
+      for (const item of items) {
+        const key = `${kind}:${String(item?.fileName || "").toLowerCase()}`;
+        packMetadataByName[key] = item;
+      }
+    } catch (err: any) {
+      appendLog(`[packs-metadata] Failed fetching ${kind} metadata: ${String(err?.message ?? err)}`);
+    }
+  };
+  await Promise.all([loadPackMetadata("resourcepacks", resourcepacks as any), loadPackMetadata("shaderpacks", shaderpacks as any)]);
+
+  return { mods, resourcepacks, shaderpacks, modMetadataByName, packMetadataByName };
+}
+
+function buildInstanceInstalledEntries(snapshot: Awaited<ReturnType<typeof getInstanceLocalContentSnapshot>>) {
+  const entries: Array<{
+    kind: "mods" | "resourcepacks" | "shaderpacks";
+    name: string;
+    size: number;
+    title: string;
+    description: string;
+    author: string | null;
+    source: string | null;
+    projectId?: string | null;
+    enabled: boolean;
+    modifiedMs?: number;
+    raw: any;
+  }> = [];
+
+  for (const item of snapshot.mods) {
+    const meta = snapshot.modMetadataByName[String(item.name || "").toLowerCase()] || {};
+    entries.push({
+      kind: "mods",
+      name: item.name,
+      size: Number(item.size || 0),
+      title: meta?.title || getPrettyName("mods", item.name),
+      description: meta?.description || inferLocalModDescription(item.name),
+      author: meta?.author || null,
+      source: meta?.source === "curseforge" ? "CurseForge" : meta?.source === "modrinth" ? "Modrinth" : null,
+      projectId: meta?.projectId || null,
+      enabled: !String(item.name || "").endsWith(".disabled"),
+      modifiedMs: Number(item.modifiedMs || 0) || undefined,
+      raw: item
+    });
+  }
+
+  for (const kind of ["resourcepacks", "shaderpacks"] as const) {
+    for (const item of snapshot[kind]) {
+      const meta = snapshot.packMetadataByName[`${kind}:${String(item.name || "").toLowerCase()}`] || {};
+      entries.push({
+        kind,
+        name: item.name,
+        size: Number(item.size || 0),
+        title: meta?.title || getPrettyName(kind, item.name),
+        description:
+          meta?.description ||
+          (kind === "shaderpacks" ? "Local shader pack scoped to this instance." : "Local resource pack scoped to this instance."),
+        author: meta?.author || null,
+        source: meta?.source === "modrinth" ? "Modrinth" : null,
+        projectId: meta?.projectId || null,
+        enabled: !String(item.name || "").endsWith(".disabled"),
+        modifiedMs: Number(item.modifiedMs || 0) || undefined,
+        raw: item
+      });
+    }
+  }
+
+  const grouped = new Map<string, any>();
+  for (const entry of entries) {
+    const sourceKey = String(entry.source || "local").toLowerCase();
+    const projectKey = String(entry.projectId || "").trim();
+    const titleKey = normalizeInstalledProjectKey(entry.title || entry.name);
+    const key = projectKey
+      ? `${entry.kind}:${sourceKey}:${projectKey}`
+      : `${entry.kind}:${sourceKey}:${titleKey}`;
+    const current = grouped.get(key);
+    if (!current) {
+      grouped.set(key, {
+        ...entry,
+        names: [entry.name],
+        duplicateCount: 1
+      });
+      continue;
+    }
+    current.names.push(entry.name);
+    current.duplicateCount += 1;
+    current.size += Number(entry.size || 0);
+    current.enabled = current.enabled || entry.enabled;
+    current.modifiedMs = Math.max(Number(current.modifiedMs || 0), Number(entry.modifiedMs || 0)) || undefined;
+    if (String(entry.description || "").length > String(current.description || "").length) current.description = entry.description;
+    if (!current.author && entry.author) current.author = entry.author;
+    if (!current.source && entry.source) current.source = entry.source;
+    if (!current.projectId && entry.projectId) current.projectId = entry.projectId;
+  }
+
+  return Array.from(grouped.values()).sort((a, b) =>
+    String(a.title || "").localeCompare(String(b.title || ""), undefined, { sensitivity: "base", numeric: true })
+  );
+}
+
+function getDefaultInstanceContentUpdateState(): InstanceContentUpdateState {
+  return { status: "idle", items: [], updateableCount: 0 };
+}
+
+function getInstanceContentUpdateState(instanceId: string): InstanceContentUpdateState {
+  return instanceContentUpdateStateByInstance.get(instanceId) || getDefaultInstanceContentUpdateState();
+}
+
+function setInstanceUpdateButtonState(instanceId: string) {
+  const state = getInstanceContentUpdateState(instanceId);
+  const isChecking = state.status === "checking";
+  const hasUpdates = state.status === "ready" && state.updateableCount > 0;
+  instanceUpdateContentBtn.disabled = !hasUpdates;
+  instanceUpdateContentBtn.classList.toggle("btnPrimary", hasUpdates);
+  instanceUpdateContentBtn.textContent = isChecking ? "Checking..." : "Update all";
+  setButtonAssetIcon(instanceUpdateContentBtn, ICON_ASSETS.download);
+}
+
+function findInstanceContentUpdate(entry: any, state: InstanceContentUpdateState) {
+  if (!state.items.length) return null;
+  const source = String(entry?.source || "").trim().toLowerCase();
+  const projectId = String(entry?.projectId || "").trim();
+  if (source && projectId) {
+    const byProject = state.items.find(
+      (item: any) =>
+        String(item?.kind || "") === String(entry?.kind || "") &&
+        String(item?.source || "").trim().toLowerCase() === source &&
+        String(item?.projectId || "").trim() === projectId
+    );
+    if (byProject) return byProject;
+  }
+  const names = new Set((Array.isArray(entry?.names) ? entry.names : [entry?.name]).map((value: any) => String(value || "").toLowerCase()));
+  return state.items.find((item: any) =>
+    String(item?.kind || "") === String(entry?.kind || "") &&
+    (Array.isArray(item?.currentFileNames) ? item.currentFileNames : []).some((value: any) => names.has(String(value || "").toLowerCase()))
+  ) || null;
+}
+
+async function refreshInstanceContentUpdateState(instanceId: string, force = false) {
+  const current = getInstanceContentUpdateState(instanceId);
+  if (!force && (current.status === "checking" || current.status === "ready")) {
+    setInstanceUpdateButtonState(instanceId);
+    return current;
+  }
+  instanceContentUpdateStateByInstance.set(instanceId, { status: "checking", items: [], updateableCount: 0 });
+  setInstanceUpdateButtonState(instanceId);
+  try {
+    const result = await withTimeout(
+      backend.contentCheckUpdates(instanceId),
+      15000,
+      `contentCheckUpdates(${instanceId})`
+    );
+    const nextState: InstanceContentUpdateState = {
+      status: "ready",
+      items: Array.isArray(result?.items) ? result.items : [],
+      updateableCount: Math.max(0, Number(result?.updateableCount || 0) || 0),
+      checkedAt: Number(result?.checkedAt || 0) || Date.now()
+    };
+    instanceContentUpdateStateByInstance.set(instanceId, nextState);
+    setInstanceUpdateButtonState(instanceId);
+    if (selectedInstanceId === instanceId && selectedInstanceTab === "content") {
+      void renderInstanceInstalledList(instanceId);
+    }
+    return nextState;
+  } catch (err: any) {
+    const failedState: InstanceContentUpdateState = {
+      status: "error",
+      items: [],
+      updateableCount: 0,
+      error: String(err?.message ?? err)
+    };
+    instanceContentUpdateStateByInstance.set(instanceId, failedState);
+    setInstanceUpdateButtonState(instanceId);
+    appendLog(`[content-updates] Failed checking updates for ${instanceId}: ${failedState.error}`);
+    if (selectedInstanceId === instanceId && selectedInstanceTab === "content") {
+      void renderInstanceInstalledList(instanceId);
+    }
+    return failedState;
+  }
+}
+
+async function applyInstanceContentUpdates(instanceId: string, updates: any[]) {
+  const actionable = updates.filter((item) => item?.canUpdate && item?.updateAvailable);
+  if (!actionable.length) {
+    setStatus("No updates available.");
+    return;
+  }
+  setStatus(`Applying ${actionable.length} content update${actionable.length === 1 ? "" : "s"}...`);
+  let appliedCount = 0;
+  const failures: string[] = [];
+  for (const item of actionable) {
+    const kind = String(item?.kind || "") as "mods" | "resourcepacks" | "shaderpacks";
+    const source = String(item?.source || "").trim().toLowerCase();
+    const projectId = String(item?.projectId || "").trim();
+    const latestVersionId = String(item?.latestVersionId || "").trim() || undefined;
+    if (!projectId || !kind) continue;
+    try {
+      let result: any = null;
+      if (kind === "mods" && source === "curseforge") {
+        result = await backend.curseforgeModsInstall(instanceId, projectId, latestVersionId);
+      } else if (kind === "mods") {
+        result = await backend.modrinthModsInstall(instanceId, projectId, latestVersionId);
+      } else {
+        result = await backend.modrinthContentInstall(
+          instanceId,
+          kind === "shaderpacks" ? "shaderpack" : "resourcepack",
+          projectId,
+          latestVersionId
+        );
+      }
+      const installedFileName = String(result?.fileName || "").trim();
+      for (const currentName of Array.isArray(item?.currentFileNames) ? item.currentFileNames : []) {
+        const safeCurrentName = String(currentName || "").trim();
+        if (!safeCurrentName || (installedFileName && safeCurrentName === installedFileName)) continue;
+        try {
+          await backend.contentRemove(instanceId, kind, safeCurrentName);
+        } catch {
+          // Keep the new install even if an old file cleanup fails.
+        }
+      }
+      appliedCount += 1;
+      appendLog(`[content-updates] Updated ${String(item?.title || projectId)} from ${source || "catalog"}.`);
+    } catch (err: any) {
+      const msg = `${String(item?.title || projectId)}: ${String(err?.message ?? err)}`;
+      failures.push(msg);
+      appendLog(`[content-updates] ${msg}`);
+    }
+  }
+  instanceContentUpdateStateByInstance.delete(instanceId);
+  await renderInstanceInstalledList(instanceId);
+  void refreshInstanceContentUpdateState(instanceId, true);
+  if (appliedCount > 0) {
+    setStatus(`Applied ${appliedCount} content update${appliedCount === 1 ? "" : "s"}.`);
+  } else {
+    setStatus("No content updates were applied.");
+  }
+  if (failures.length) {
+    alert(`Some updates failed:\n${failures.join("\n")}`);
+  }
+}
+
+async function openInstancePage(instance: any, tab: InstancePageTab = "content") {
+  selectedInstanceId = String(instance?.id || "");
+  cacheSelectedInstanceSnapshot(instance);
+  selectedInstanceTab = tab;
+  setLibrarySurface("instance");
+  setView("library");
+  await renderInstancePage();
+}
+
+async function openDiscoverPage(instance: any, kind: DiscoverKind = discoverKind) {
+  selectedInstanceId = String(instance?.id || "");
+  cacheSelectedInstanceSnapshot(instance);
+  setDiscoverKind(kind);
+  setLibrarySurface("discover");
+  setView("library");
+  await renderDiscoverPage();
+}
+
+async function renderInstanceInstalledList(instanceId: string) {
+  const inst = getSelectedInstance();
+  const search = String(instanceInstalledSearch.value || "").trim().toLowerCase();
+  const snapshot = await getInstanceLocalContentSnapshot(instanceId);
+  const entries = buildInstanceInstalledEntries(snapshot);
+  const updatesState = getInstanceContentUpdateState(instanceId);
+  const filtered = entries.filter((entry) => {
+    const update = findInstanceContentUpdate(entry, updatesState);
+    if (instanceContentFilter !== "all" && instanceContentFilter !== "updates" && entry.kind !== instanceContentFilter) {
+      return false;
+    }
+    if (instanceContentFilter === "updates" && !(update?.canUpdate && update?.updateAvailable)) {
+      return false;
+    }
+    if (!search) return true;
+    const haystack = [
+      entry.title,
+      entry.description,
+      entry.author,
+      ...(Array.isArray(entry.names) ? entry.names : [entry.name]),
+      entry.source,
+      update?.latestVersionName
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+    return haystack.includes(search);
+  });
+
+  const totalCount = entries.length;
+  const kindsCount = {
+    mods: entries.filter((entry) => entry.kind === "mods").length,
+    resourcepacks: entries.filter((entry) => entry.kind === "resourcepacks").length,
+    shaderpacks: entries.filter((entry) => entry.kind === "shaderpacks").length
+  };
+  const updateSummary =
+    updatesState.status === "checking"
+      ? "Checking for updates..."
+      : updatesState.status === "error"
+        ? "Could not check for updates right now."
+        : `${updatesState.updateableCount} update${updatesState.updateableCount === 1 ? "" : "s"} available`;
+  instanceContentSummary.textContent =
+    instanceContentFilter === "updates"
+      ? updatesState.status === "checking"
+        ? "Checking installed content for updates..."
+        : updatesState.updateableCount > 0
+          ? `${filtered.length} update${filtered.length === 1 ? "" : "s"} available for this instance.`
+          : "No updates are currently available for this instance."
+      : `${filtered.length} of ${totalCount} installed items shown • ${kindsCount.mods} mods • ${kindsCount.resourcepacks} resource packs • ${kindsCount.shaderpacks} shaders • ${updateSummary}`;
+
+  instanceInstalledList.innerHTML = "";
+  setActiveInstanceContentMenu(null, null, false);
+  if (!filtered.length) {
+    const empty = document.createElement("div");
+    empty.className = "emptyInstances";
+    empty.innerHTML =
+      instanceContentFilter === "updates"
+        ? updatesState.status === "checking"
+          ? "<strong>Checking for updates</strong><p>Fishbattery is looking across the supported platforms for newer compatible files.</p>"
+          : "<strong>No updates available</strong><p>Everything installed in this instance is already on the latest compatible build we could find.</p>"
+        : "<strong>No installed content matched</strong><p>Try a different search or filter, or browse for new content.</p>";
+    instanceInstalledList.appendChild(empty);
+    return;
+  }
+
+  for (const entry of filtered) {
+    const row = document.createElement("div");
+    row.className = "instanceInstalledRow";
+
+    const left = document.createElement("div");
+    left.className = "instanceInstalledIdentity";
+
+    const thumb = document.createElement("div");
+    thumb.className = "instanceInstalledThumb";
+    renderInstanceIconInto(thumb, { name: entry.title, libraryType: entry.kind === "mods" ? "custom" : "modpack" }, entry.kind === "mods"
+      ? snapshot.modMetadataByName[String(entry.name || "").toLowerCase()]?.iconUrl || null
+      : snapshot.packMetadataByName[`${entry.kind}:${String(entry.name || "").toLowerCase()}`]?.iconUrl || null);
+
+    const meta = document.createElement("div");
+    meta.className = "instanceInstalledMeta";
+
+    const titleRow = document.createElement("div");
+    titleRow.className = "instanceInstalledTitleRow";
+    const title = document.createElement("strong");
+    title.textContent = entry.title;
+    const chip = document.createElement("span");
+    chip.className = "instanceBadge instanceBadgeNeutral";
+    chip.textContent = entry.kind === "mods" ? "Mod" : entry.kind === "resourcepacks" ? "Resource Pack" : "Shader";
+    titleRow.append(title, chip);
+    const update = findInstanceContentUpdate(entry, updatesState);
+    if (update?.canUpdate && update?.updateAvailable) {
+      const updateChip = document.createElement("span");
+      updateChip.className = "instanceBadge instanceBadgeAccent";
+      updateChip.textContent = "Update available";
+      titleRow.appendChild(updateChip);
+    }
+
+    const desc = document.createElement("div");
+    desc.className = "instanceInstalledDescription";
+    desc.textContent = entry.description;
+
+    const sub = document.createElement("div");
+    sub.className = "instanceInstalledSubline";
+    const subBits = [
+      entry.author ? `by ${entry.author}` : null,
+      entry.source,
+      update?.canUpdate && update?.updateAvailable && update?.latestVersionName ? `Latest ${String(update.latestVersionName)}` : null,
+      entry.duplicateCount > 1 ? `${entry.duplicateCount} files` : null,
+      formatBytes(entry.size),
+      entry.enabled ? "Enabled" : "Disabled"
+    ].filter(Boolean);
+    sub.textContent = subBits.join(" • ");
+
+    meta.append(titleRow, desc, sub);
+    left.append(thumb, meta);
+
+    const right = document.createElement("div");
+    right.className = "instanceInstalledActions";
+
+    if (update?.canUpdate && update?.updateAvailable) {
+      const updateBtn = document.createElement("button");
+      updateBtn.className = "btn btnPrimary";
+      updateBtn.textContent = "Update";
+      setButtonAssetIcon(updateBtn, ICON_ASSETS.download);
+      updateBtn.onclick = () =>
+        guarded(async () => {
+          await applyInstanceContentUpdates(instanceId, [update]);
+          if (editInstanceId === instanceId) {
+            await renderLocalContent(instanceId);
+          }
+        });
+      right.appendChild(updateBtn);
+    }
+
+    const toggle = document.createElement("button");
+    toggle.className = "btn";
+    toggle.textContent = entry.enabled ? "Disable" : "Enable";
+    setButtonAssetIcon(toggle, ICON_ASSETS.block);
+    toggle.onclick = () =>
+      guarded(async () => {
+        for (const fileName of Array.isArray(entry.names) ? entry.names : [entry.name]) {
+          await backend.contentToggleEnabled(instanceId, entry.kind, fileName, !entry.enabled);
+        }
+        await renderInstanceInstalledList(instanceId);
+        if (editInstanceId === instanceId) {
+          await renderLocalContent(instanceId);
+        }
+      });
+
+    const deleteBtn = document.createElement("button");
+    deleteBtn.className = "iconBtn danger instanceInstalledDeleteBtn";
+    deleteBtn.type = "button";
+    deleteBtn.setAttribute("aria-label", `Delete ${entry.title}`);
+    setIconButtonAsset(deleteBtn, ICON_ASSETS.trash, `Delete ${entry.title}`);
+    deleteBtn.onclick = () =>
+      guarded(async () => {
+        setActiveInstanceContentMenu(null, null, false);
+        for (const fileName of Array.isArray(entry.names) ? entry.names : [entry.name]) {
+          await backend.contentRemove(instanceId, entry.kind, fileName);
+        }
+        await renderInstanceInstalledList(instanceId);
+        if (editInstanceId === instanceId) {
+          await renderLocalContent(instanceId);
+        }
+      });
+
+    const menuWrap = document.createElement("div");
+    menuWrap.className = "instanceInstalledMenu";
+
+    const menuBtn = document.createElement("button");
+    menuBtn.className = "iconBtn instanceInstalledMenuBtn";
+    menuBtn.type = "button";
+    menuBtn.setAttribute("aria-haspopup", "menu");
+    menuBtn.setAttribute("aria-expanded", "false");
+    menuBtn.setAttribute("aria-label", `More actions for ${entry.title}`);
+    setIconButtonAsset(menuBtn, ICON_ASSETS.dotsVertical, `More actions for ${entry.title}`);
+
+    const menu = document.createElement("div");
+    menu.className = "dropdown instanceInstalledMenuDropdown";
+    menu.setAttribute("role", "menu");
+
+    const primaryFileName =
+      (Array.isArray(entry.names) ? entry.names : [entry.name]).find((name: string) => !String(name || "").endsWith(".disabled")) ||
+      (Array.isArray(entry.names) ? entry.names[0] : entry.name);
+
+    const showFileBtn = document.createElement("button");
+    showFileBtn.className = "instanceInstalledMenuItem";
+    showFileBtn.type = "button";
+    showFileBtn.setAttribute("role", "menuitem");
+    showFileBtn.textContent = "Show file";
+    showFileBtn.onclick = () =>
+      guarded(async () => {
+        setActiveInstanceContentMenu(null, null, false);
+        if (!primaryFileName) return;
+        await backend.contentRevealFile(instanceId, entry.kind, primaryFileName);
+      });
+
+    menu.append(showFileBtn);
+    menuBtn.onclick = (ev) => {
+      ev.stopPropagation();
+      const isOpen = menu.classList.contains("open");
+      setActiveInstanceContentMenu(menu, menuBtn, !isOpen);
+    };
+    menuWrap.append(menuBtn, menu);
+
+    right.append(toggle, deleteBtn, menuWrap);
+    row.append(left, right);
+    instanceInstalledList.appendChild(row);
+  }
+  if (inst && editInstanceId === inst.id) {
+    await renderLocalContent(inst.id);
+  }
+}
+
+async function renderInstanceWorldsPage(inst: any) {
+  const search = String(instanceWorldsSearch.value || "").trim().toLowerCase();
+  const worldsState = await withTimeout(
+    backend.instanceWorldsList(inst.id),
+    4000,
+    `instanceWorldsList(${String(inst?.id || "")})`
+  ).catch(() => ({ worlds: [], savesPath: "" }));
+  const worlds = Array.isArray(worldsState?.worlds) ? worldsState.worlds : [];
+  const data = await withTimeout(backend.serversList(inst.id), 4000, `serversList(${String(inst?.id || "")})`).catch(
+    () => ({ servers: [], preferredServerId: null })
+  );
+  const servers = Array.isArray(data?.servers) ? data.servers : [];
+  const filteredWorlds = worlds.filter((world: any) => {
+    if (instanceWorldsFilter === "servers") return false;
+    const haystack = [world.name, world.folderName, world.path].filter(Boolean).join(" ").toLowerCase();
+    return !search || haystack.includes(search);
+  });
+  const filteredServers = servers.filter((server: any) => {
+    if (instanceWorldsFilter === "singleplayer") return false;
+    const haystack = [server.name, server.address, server.notes].filter(Boolean).join(" ").toLowerCase();
+    return !search || haystack.includes(search);
+  });
+
+  instanceWorldsSummary.textContent =
+    `${filteredWorlds.length} world${filteredWorlds.length === 1 ? "" : "s"} • ${filteredServers.length} saved server${filteredServers.length === 1 ? "" : "s"} • Singleplayer saves stay scoped to this instance.`;
+  instanceWorldsListPage.innerHTML = "";
+
+  for (const world of filteredWorlds) {
+    const row = document.createElement("div");
+    row.className = "instanceWorldRow";
+
+    const identity = document.createElement("div");
+    identity.className = "instanceWorldIdentity";
+
+    const thumb = document.createElement("div");
+    thumb.className = "instanceWorldThumb instanceWorldThumbSingle";
+    if (world.iconDataUrl) {
+      renderInstanceIconInto(thumb, { name: world.name, libraryType: "custom" }, world.iconDataUrl);
+    } else {
+      thumb.textContent = "SP";
+    }
+
+    const meta = document.createElement("div");
+    meta.className = "instanceWorldMeta";
+    const title = document.createElement("strong");
+    title.textContent = world.name || world.folderName || "World";
+    const desc = document.createElement("div");
+    desc.className = "instanceInstalledDescription";
+    desc.textContent = `Folder: ${world.folderName || world.name || "world"}`;
+    const sub = document.createElement("div");
+    sub.className = "instanceInstalledSubline";
+    sub.textContent = `Singleplayer world • ${formatRelativeTimestamp(Number(world.lastPlayedAt || 0))}`;
+    meta.append(title, desc, sub);
+    identity.append(thumb, meta);
+
+    const actions = document.createElement("div");
+    actions.className = "instanceInstalledActions";
+    const openBtn = document.createElement("button");
+    openBtn.className = "btn";
+    openBtn.textContent = "Open folder";
+    openBtn.onclick = () => void backend.instanceWorldOpenFolder(inst.id, String(world.id || world.folderName || ""));
+    actions.appendChild(openBtn);
+    row.append(identity, actions);
+    instanceWorldsListPage.appendChild(row);
+  }
+
+  for (const server of filteredServers) {
+    const row = document.createElement("div");
+    row.className = "instanceWorldRow";
+
+    const identity = document.createElement("div");
+    identity.className = "instanceWorldIdentity";
+
+    const thumb = document.createElement("div");
+    thumb.className = "instanceWorldThumb";
+    if (server.iconDataUrl) {
+      renderInstanceIconInto(thumb, { name: server.name || server.address || "Server", libraryType: "modpack" }, server.iconDataUrl);
+    } else {
+      thumb.textContent = String(server.name || server.address || "SV").slice(0, 2).toUpperCase();
+    }
+
+    const meta = document.createElement("div");
+    meta.className = "instanceWorldMeta";
+    const title = document.createElement("strong");
+    title.textContent = server.name || server.address || "Server";
+    const desc = document.createElement("div");
+    desc.className = "instanceInstalledDescription";
+    desc.textContent =
+      String(server.statusMotd || "").trim() ||
+      server.notes ||
+      server.address ||
+      "Saved server";
+    const sub = document.createElement("div");
+    sub.className = "instanceInstalledSubline";
+    const serverBits = [
+      data.preferredServerId === server.id ? "Preferred server" : "Saved server",
+      Number(server.statusPlayerCount || 0) > 0
+        ? `${Number(server.statusPlayerCount || 0).toLocaleString()} online`
+        : server.statusOnline === true
+          ? "Online"
+          : server.statusOnline === false
+            ? "Offline"
+            : null,
+      server.statusVersion ? String(server.statusVersion) : null,
+      formatRelativeTimestamp(Number(server.statusCheckedAt || server.updatedAt || server.createdAt || 0))
+    ].filter(Boolean);
+    sub.textContent = serverBits.join(" • ");
+    meta.append(title, desc, sub);
+    identity.append(thumb, meta);
+
+    const actions = document.createElement("div");
+    actions.className = "instanceInstalledActions";
+
+    const joinBtn = document.createElement("button");
+    joinBtn.className = "btn btnPrimary";
+    joinBtn.textContent = "Join";
+    setButtonIcon(joinBtn, JOIN_BUTTON_ICON_PATH);
+    joinBtn.onclick = () => void guarded(async () => launchForInstance(inst, String(server.address || "").trim()));
+
+    const preferBtn = document.createElement("button");
+    preferBtn.className = "btn";
+    preferBtn.textContent = data.preferredServerId === server.id ? "Preferred" : "Set preferred";
+    preferBtn.onclick = () =>
+      void guarded(async () => {
+        await backend.serversSetPreferred(inst.id, server.id);
+        await renderInstanceWorldsPage(inst);
+      });
+
+    actions.append(joinBtn, preferBtn);
+    row.append(identity, actions);
+    instanceWorldsListPage.appendChild(row);
+  }
+
+  if (!instanceWorldsListPage.childElementCount) {
+    const empty = document.createElement("div");
+    empty.className = "emptyInstances";
+    empty.innerHTML = "<strong>No worlds or servers matched</strong><p>Open the instance folder to add saves, or save a server for quick joins.</p>";
+    instanceWorldsListPage.appendChild(empty);
+  }
+
+  if (servers.length && !worldsStatusRefreshInFlight.has(inst.id)) {
+    worldsStatusRefreshInFlight.add(inst.id);
+    void backend
+      .serversRefreshStatus(inst.id, false)
+      .then(() => {
+        if (selectedInstanceId === inst.id && selectedInstanceTab === "worlds") {
+          void renderInstanceWorldsPage(inst);
+        }
+      })
+      .finally(() => {
+        worldsStatusRefreshInFlight.delete(inst.id);
+      });
+  }
+}
+
+async function renderInstancePage() {
+  const inst = getSelectedInstance();
+  if (!inst) {
+    setLibrarySurface("library");
+    setView("library");
+    return;
+  }
+  const renderGeneration = ++renderInstancePageGeneration;
+  const instanceId = String(inst.id || "");
+  const renderTab = selectedInstanceTab;
+  const supportsModdedContent = instanceSupportsModdedContent(inst);
+  if (!supportsModdedContent && (instanceContentFilter === "mods" || instanceContentFilter === "shaderpacks")) {
+    setInstanceContentFilter("resourcepacks");
+  }
+  instanceFilterMods.style.display = supportsModdedContent ? "" : "none";
+  instanceFilterShaderpacks.style.display = supportsModdedContent ? "" : "none";
+  instanceUploadModsOption.style.display = supportsModdedContent ? "" : "none";
+  instanceUploadShaderpacksOption.style.display = supportsModdedContent ? "" : "none";
+  renderInstanceIconInto(instanceHeroIcon, inst, null);
+  if (instanceBreadcrumbs) {
+    instanceBreadcrumbs.textContent = `Library / ${inst.name || "Instance"} / ${selectedInstanceTab[0].toUpperCase()}${selectedInstanceTab.slice(1)}`;
+  }
+  instanceHeroName.textContent = inst.name || "Instance";
+  instanceHeroSubline.textContent = `${humanizeLoader(getInstanceDisplayLoader(inst))} ${inst.mcVersion || "unknown"} • ${getInstanceSourceLabel(inst)}`;
+  instanceHeroBadges.innerHTML = "";
+  for (const label of [getInstanceTypeLabel(inst), getInstanceSourceLabel(inst), inst?.syncEnabled === false ? "Local only" : "Cloud sync"]) {
+    const badge = document.createElement("span");
+    badge.className = "instanceBadge instanceBadgeNeutral";
+    badge.textContent = label;
+    instanceHeroBadges.appendChild(badge);
+  }
+
+  let isRunning = false;
+  const setInstancePlayButtonState = (running: boolean) => {
+    isRunning = running;
+    instancePlayBtn.textContent = running ? "Stop" : "Play";
+    instancePlayBtn.classList.toggle("btnPrimary", !running);
+    instancePlayBtn.classList.toggle("btnDanger", running);
+    setButtonAssetIcon(instancePlayBtn, running ? ICON_ASSETS.stop : ICON_ASSETS.play);
+  };
+  setInstancePlayButtonState(false);
+  instancePlayBtn.onclick = () =>
+    void guarded(async () => {
+      if (isRunning) {
+        setInstancePlayButtonState(false);
+        try {
+          await backend.launchStop(instanceId);
+        } catch (err) {
+          setInstancePlayButtonState(true);
+          throw err;
+        }
+      } else {
+        setInstancePlayButtonState(true);
+        try {
+          await launchForInstance(inst);
+        } catch (err) {
+          setInstancePlayButtonState(false);
+          throw err;
+        }
+      }
+      await renderInstances();
+      await renderInstancePage();
+    });
+  instanceOpenFolderBtn.onclick = () => void backend.instancesOpenFolder(instanceId);
+  instanceEditBtn.onclick = () => void openInstanceWorkspace(inst, "general");
+  btnBrowseInstanceContent.onclick = () => void openDiscoverPage(inst, discoverKind);
+  instanceRefreshContentBtn.onclick = () =>
+    void guarded(async () => {
+      instanceContentUpdateStateByInstance.delete(instanceId);
+      await renderInstanceInstalledList(instanceId);
+      void refreshInstanceContentUpdateState(instanceId, true);
+    });
+  instanceUpdateContentBtn.onclick = () =>
+    void guarded(async () => {
+      const updateState = getInstanceContentUpdateState(instanceId);
+      if (updateState.status !== "ready") {
+        await refreshInstanceContentUpdateState(instanceId, true);
+      }
+      await applyInstanceContentUpdates(instanceId, getInstanceContentUpdateState(instanceId).items);
+      await renderInstances();
+    });
+  instanceUploadFilesBtn.onclick = () => {
+    setInstanceUploadMenuOpen(!instanceUploadFilesDropdown.classList.contains("open"));
+  };
+  instanceUploadModsOption.onclick = () => {
+    setInstanceUploadMenuOpen(false);
+    editInstanceId = instanceId;
+    void pickAndAdd("mods");
+  };
+  instanceUploadShaderpacksOption.onclick = () => {
+    setInstanceUploadMenuOpen(false);
+    editInstanceId = instanceId;
+    void pickAndAdd("shaderpacks");
+  };
+  instanceUploadResourcepacksOption.onclick = () => {
+    setInstanceUploadMenuOpen(false);
+    editInstanceId = instanceId;
+    void pickAndAdd("resourcepacks");
+  };
+  instanceOpenWorldFolderBtn.onclick = () => void backend.instancesOpenSubfolder(instanceId, "saves");
+
+  setInstanceTab(selectedInstanceTab);
+  if (selectedInstanceTab === "content") {
+    instanceContentSummary.textContent = "Loading installed content...";
+    instanceInstalledList.innerHTML = "";
+    setInstanceUpdateButtonState(instanceId);
+  } else if (selectedInstanceTab === "worlds") {
+    instanceWorldsSummary.textContent = "Loading worlds and saved servers...";
+    instanceWorldsListPage.innerHTML = "";
+  }
+
+  void backend.instancesGetIcon(instanceId)
+    .then((iconData) => {
+      if (renderGeneration !== renderInstancePageGeneration) return;
+      if (String(selectedInstanceId || "") !== instanceId || selectedInstanceTab !== renderTab) return;
+      renderInstanceIconInto(instanceHeroIcon, inst, iconData || null);
+    })
+    .catch(() => {
+      // Keep fallback icon when custom icon lookup fails.
+    });
+
+  void backend.launchIsRunning(instanceId)
+    .then((running) => {
+      if (renderGeneration !== renderInstancePageGeneration) return;
+      if (String(selectedInstanceId || "") !== instanceId) return;
+      setInstancePlayButtonState(!!running);
+    })
+    .catch(() => {
+      if (renderGeneration !== renderInstancePageGeneration) return;
+      if (String(selectedInstanceId || "") !== instanceId) return;
+      setInstancePlayButtonState(false);
+    });
+
+  if (selectedInstanceTab === "content") {
+    void refreshInstanceContentUpdateState(instanceId).catch(() => {
+      setInstanceUpdateButtonState(instanceId);
+    });
+    void renderInstanceInstalledList(instanceId).catch((err: any) => {
+      if (renderGeneration !== renderInstancePageGeneration) return;
+      if (String(selectedInstanceId || "") !== instanceId) return;
+      instanceContentSummary.textContent = "Could not load installed content.";
+      instanceInstalledList.innerHTML =
+        "<div class=\"emptyInstances\"><strong>Installed content could not be loaded</strong><p>Try Refresh, or reopen the instance page.</p></div>";
+      appendLog(`[instance] Installed content failed to load: ${String(err?.message ?? err)}`);
+    });
+  } else if (selectedInstanceTab === "worlds") {
+    void renderInstanceWorldsPage(inst).catch((err: any) => {
+      if (renderGeneration !== renderInstancePageGeneration) return;
+      if (String(selectedInstanceId || "") !== instanceId) return;
+      instanceWorldsSummary.textContent = "Could not load worlds and servers.";
+      instanceWorldsListPage.innerHTML =
+        "<div class=\"emptyInstances\"><strong>Worlds and servers could not be loaded</strong><p>Try Refresh, or reopen the instance page.</p></div>";
+      appendLog(`[instance] Worlds page failed to load: ${String(err?.message ?? err)}`);
+    });
+  } else {
+    renderSessionLogs();
+  }
+}
+
+function matchesDiscoverCategory(item: { title?: string; description?: string; categories?: string[] | null }) {
+  if (discoverCategory === "all") return true;
+  const actualCategories = Array.isArray(item.categories)
+    ? item.categories.map((value) => String(value || "").trim().toLowerCase()).filter(Boolean)
+    : [];
+  if (actualCategories.length) {
+    return actualCategories.includes(discoverCategory);
+  }
+  const category = (DISCOVER_CATEGORY_SETS[discoverKind] || DISCOVER_MOD_CATEGORIES).find(
+    (entry) => entry.id === discoverCategory
+  );
+  if (!category) return true;
+  const haystack = [item.title, item.description].filter(Boolean).join(" ").toLowerCase();
+  return category.keywords.some((keyword) => haystack.includes(keyword));
+}
+
+function inferDiscoverCategories(item: { title?: string; description?: string; categories?: string[] | null }) {
+  const categories = DISCOVER_CATEGORY_SETS[discoverKind] || DISCOVER_MOD_CATEGORIES;
+  const actualCategories = Array.isArray(item.categories)
+    ? item.categories
+        .map((value) => String(value || "").trim().toLowerCase())
+        .filter(Boolean)
+        .slice(0, 3)
+        .map((id) => categories.find((category) => category.id === id) || { id, label: titleCaseWords(id), keywords: [] })
+    : [];
+  if (actualCategories.length) return actualCategories;
+  const haystack = [item.title, item.description].filter(Boolean).join(" ").toLowerCase();
+  return categories
+    .filter((category) => category.id !== "all" && category.keywords.some((keyword) => haystack.includes(keyword)))
+    .slice(0, 2);
+}
+
+function getAvailableDiscoverPlatforms(kind: DiscoverKind): Array<{ value: DiscoverPlatform; label: string }> {
+  if (kind === "mods") {
+    return [
+      { value: "all", label: "All platforms" },
+      { value: "modrinth", label: "Modrinth" },
+      { value: "curseforge", label: "CurseForge" }
+    ];
+  }
+  return [{ value: "modrinth", label: "Modrinth" }];
+}
+
+function syncDiscoverPlatformOptions() {
+  const options = getAvailableDiscoverPlatforms(discoverKind);
+  if (!options.some((option) => option.value === discoverPlatform)) {
+    discoverPlatform = options[0]?.value ?? "modrinth";
+  }
+  discoverPlatformSelect.innerHTML = "";
+  for (const option of options) {
+    const el = document.createElement("option");
+    el.value = option.value;
+    el.textContent = option.label;
+    discoverPlatformSelect.appendChild(el);
+  }
+  discoverPlatformSelect.value = discoverPlatform;
+  discoverPlatformSelect.closest(".toolbarSelect")?.setAttribute("data-disabled", options.length <= 1 ? "true" : "false");
+  discoverPlatformSelect.disabled = options.length <= 1;
+}
+
+function resetDiscoverPaging() {
+  discoverPage = 1;
+}
+
+function getDiscoverBackendIndex(query: string): "relevance" | "downloads" | "updated" | "name" {
+  if (discoverSortMode === "name") {
+    return query ? "relevance" : "downloads";
+  }
+  return discoverSortMode;
+}
+
+function renderDiscoverPagination(currentPage: number, totalPages: number) {
+  discoverPagination.innerHTML = "";
+  if (totalPages <= 1) return;
+
+  const makeButton = (label: string, page: number, active = false, disabled = false) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `discoverPageBtn${active ? " active" : ""}`;
+    button.textContent = label;
+    button.disabled = disabled;
+    button.onclick = () => {
+      if (page === discoverPage || disabled) return;
+      discoverPage = page;
+      void renderDiscoverPage();
+    };
+    return button;
+  };
+
+  discoverPagination.appendChild(makeButton("Prev", Math.max(1, currentPage - 1), false, currentPage <= 1));
+
+  const pages = new Set<number>([1, totalPages, currentPage - 1, currentPage, currentPage + 1]);
+  const normalizedPages = Array.from(pages)
+    .filter((page) => page >= 1 && page <= totalPages)
+    .sort((left, right) => left - right);
+
+  let previousPage = 0;
+  for (const page of normalizedPages) {
+    if (page - previousPage > 1) {
+      const gap = document.createElement("span");
+      gap.className = "discoverPageGap";
+      gap.textContent = "...";
+      discoverPagination.appendChild(gap);
+    }
+    discoverPagination.appendChild(makeButton(String(page), page, page === currentPage));
+    previousPage = page;
+  }
+
+  discoverPagination.appendChild(
+    makeButton("Next", Math.min(totalPages, currentPage + 1), false, currentPage >= totalPages)
+  );
+}
+
+function normalizeDiscoverDuplicateKey(hit: { title?: string }) {
+  return String(hit.title || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function getDiscoverProviderLabel(source: string | null | undefined) {
+  return String(source || "").toLowerCase() === "curseforge" ? "CurseForge" : "Modrinth";
+}
+
+function normalizeInstalledProjectKey(value: string | null | undefined) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/\[[^\]]+\]/g, " ")
+    .replace(/\([^)]+\)/g, " ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function scoreDiscoverHit(hit: any, query: string) {
+  const q = query.toLowerCase().trim();
+  const title = String(hit?.title || "").toLowerCase();
+  const desc = String(hit?.description || "").toLowerCase();
+  let score = 0;
+  if (q) {
+    if (title === q) score += 1200;
+    if (title.startsWith(q)) score += 500;
+    if (title.includes(q)) score += 240;
+    if (desc.includes(q)) score += 60;
+  }
+  score += Math.min(Number(hit?.follows || 0), 1_000_000) / 10;
+  score += Math.min(Number(hit?.downloads || 0), 50_000_000) / 100_000;
+  if (hit?.installed) score += 90;
+  if (String(hit?.source || "").toLowerCase() === "modrinth") score += 12;
+  return score;
+}
+
+function mergeDiscoverHits(hits: any[], query: string) {
+  const merged = new Map<string, any>();
+  for (const hit of hits) {
+    const key = normalizeDiscoverDuplicateKey(hit) || `${String(hit?.source || "unknown")}::${String(hit?.projectId || "")}`;
+    const current = merged.get(key);
+    if (!current || scoreDiscoverHit(hit, query) > scoreDiscoverHit(current, query)) {
+      merged.set(key, hit);
+    }
+  }
+  return Array.from(merged.values());
+}
+
+type InstalledDiscoverIndex = {
+  titleKeys: Set<string>;
+  providerProjectIds: Set<string>;
+};
+
+function buildInstalledDiscoverIndex(
+  entries: Array<{ kind: "mods" | "resourcepacks" | "shaderpacks"; title: string; source: string | null; projectId?: string | null }>,
+  kind: DiscoverKind
+): InstalledDiscoverIndex {
+  const targetKind = kind === "mods" ? "mods" : kind === "shaderpacks" ? "shaderpacks" : "resourcepacks";
+  const filtered = entries.filter((entry) => entry.kind === targetKind);
+  return {
+    titleKeys: new Set(filtered.map((entry) => normalizeInstalledProjectKey(entry.title)).filter(Boolean)),
+    providerProjectIds: new Set(
+      filtered
+        .map((entry) => {
+          const source = String(entry.source || "").trim().toLowerCase();
+          const projectId = String(entry.projectId || "").trim();
+          if (!source || !projectId) return "";
+          return `${source}:${projectId}`;
+        })
+        .filter(Boolean)
+    )
+  };
+}
+
+function renderDiscoverLockCard(
+  target: HTMLElement,
+  label: string,
+  value: string,
+  locked: boolean,
+  onToggle: () => void
+) {
+  target.innerHTML = "";
+  const valueChip = document.createElement("div");
+  valueChip.className = "discoverLockValue";
+  valueChip.textContent = value || "Any";
+  const help = document.createElement("div");
+  help.className = "discoverLockHelp";
+  help.textContent = locked
+    ? `${label} is provided by the instance. Unlocking may allow incompatible content.`
+    : `This filter is unlocked. Use with care if you want to browse outside the current instance profile.`;
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "btn";
+  button.textContent = locked ? `Unlock ${label.toLowerCase()}` : `Lock ${label.toLowerCase()}`;
+  button.onclick = onToggle;
+  target.append(valueChip, help, button);
+}
+
+async function renderDiscoverPage() {
+  const inst = getSelectedInstance();
+  if (!inst) {
+    setLibrarySurface("library");
+    setView("library");
+    return;
+  }
+  const supportsModdedContent = instanceSupportsModdedContent(inst);
+  if (!supportsModdedContent && (discoverKind === "mods" || discoverKind === "shaderpacks")) {
+    setDiscoverKind("resourcepacks");
+  }
+  discoverKindMods.style.display = supportsModdedContent ? "" : "none";
+  discoverKindShaderpacks.style.display = supportsModdedContent ? "" : "none";
+
+  if (!discoverVersionSelect.options.length) {
+    const versions = (state.versions ?? []).filter((entry: any) => String(entry?.id || "").trim());
+    for (const version of versions) {
+      const opt = document.createElement("option");
+      opt.value = String(version.id || "");
+      opt.textContent = String(version.id || "");
+      discoverVersionSelect.appendChild(opt);
+    }
+  }
+  const preferredVersion = discoverVersionFilter || String(inst.mcVersion || "");
+  discoverVersionSelect.value = preferredVersion;
+  if (!discoverVersionSelect.value) discoverVersionSelect.value = String(inst.mcVersion || "");
+  if (!discoverVersionSelect.value && discoverVersionSelect.options.length) {
+    discoverVersionSelect.value = String(discoverVersionSelect.options[0]?.value || "");
+  }
+  discoverVersionFilter = String(discoverVersionSelect.value || "");
+  const preferredLoader = (discoverLoaderFilter || String(inst.loader || "fabric")) as DiscoverLoaderFilter;
+  discoverLoaderSelect.value = preferredLoader;
+  if (!discoverLoaderSelect.value) discoverLoaderSelect.value = String(inst.loader || "fabric");
+  discoverLoaderFilter = DISCOVER_LOADER_FILTER_SET.has(discoverLoaderSelect.value as DiscoverLoaderFilter)
+    ? (discoverLoaderSelect.value as DiscoverLoaderFilter)
+    : "";
+  discoverHideInstalled.checked = discoverHideInstalledState;
+  syncDiscoverPlatformOptions();
+  discoverSortSelect.value = discoverSortMode;
+  discoverPageSizeSelect.value = String(discoverPageSize);
+  discoverVersionSelect.style.display = discoverVersionLocked ? "none" : "";
+  discoverLoaderSelect.style.display = discoverLoaderLocked ? "none" : "";
+  renderDiscoverCategories();
+
+  const iconData = await backend.instancesGetIcon(inst.id).catch(() => null);
+  renderInstanceIconInto(discoverInstanceIcon, inst, iconData);
+  discoverInstanceName.textContent = `${inst.name || "Instance"} content bay`;
+  discoverInstanceSubline.textContent = `${humanizeLoader(getInstanceDisplayLoader(inst))} ${inst.mcVersion || "unknown"} • Fishbattery-scoped browsing`;
+
+  renderDiscoverLockCard(
+    discoverVersionLock,
+    "Game version",
+    discoverVersionLocked ? String(inst.mcVersion || "unknown") : String(discoverVersionSelect.value || "Any"),
+    discoverVersionLocked,
+    () => {
+      discoverVersionLocked = !discoverVersionLocked;
+      saveUiPreferences({ discoverVersionLocked });
+      discoverVersionSelect.style.display = discoverVersionLocked ? "none" : "";
+      void renderDiscoverPage();
+    }
+  );
+  renderDiscoverLockCard(
+    discoverLoaderLock,
+    "Loader",
+    discoverLoaderLocked ? humanizeLoader(getInstanceDisplayLoader(inst)) : humanizeLoader(discoverLoaderSelect.value || "vanilla"),
+    discoverLoaderLocked,
+    () => {
+      discoverLoaderLocked = !discoverLoaderLocked;
+      saveUiPreferences({ discoverLoaderLocked });
+      discoverLoaderSelect.style.display = discoverLoaderLocked ? "none" : "";
+      void renderDiscoverPage();
+    }
+  );
+
+  const q = String(discoverSearchInput.value || "").trim();
+  discoverResultsMeta.textContent = "Searching Fishbattery-supported content sources…";
+  discoverResults.innerHTML = '<div class="muted" style="font-size:12px">Searching…</div>';
+  discoverPagination.innerHTML = "";
+  const installedSnapshot = await getInstanceLocalContentSnapshot(inst.id).catch(() => null);
+  const installedEntries = installedSnapshot ? buildInstanceInstalledEntries(installedSnapshot) : [];
+  const installedIndex = buildInstalledDiscoverIndex(installedEntries as any, discoverKind);
+
+  const resolvedVersion = discoverVersionLocked ? String(inst.mcVersion || "") : String(discoverVersionSelect.value || "");
+  const resolvedLoader = (discoverLoaderLocked ? String(inst.loader || "fabric") : String(discoverLoaderSelect.value || "fabric")) as any;
+  const pageOffset = Math.max(0, (discoverPage - 1) * discoverPageSize);
+  const backendIndex = getDiscoverBackendIndex(q);
+
+  let hits: any[] = [];
+  let totalHits = 0;
+  let providerWarning = "";
+  if (discoverKind === "mods" && discoverPlatform === "all") {
+    const aggregateBatchSize = Math.min(discoverPageSize * 2, 60);
+    const [modrinthData, curseforgeData] = await Promise.all([
+      backend
+        .modrinthModsSearch(
+          inst.id,
+          q,
+          resolvedVersion,
+          resolvedLoader,
+          aggregateBatchSize,
+          pageOffset,
+          backendIndex,
+          discoverCategory
+        )
+        .catch(() => ({ hits: [], totalHits: 0 })),
+      backend
+        .curseforgeModsSearch(
+          inst.id,
+          q,
+          resolvedVersion,
+          resolvedLoader,
+          aggregateBatchSize,
+          pageOffset,
+          discoverCategory
+        )
+        .catch((err: any) => {
+          providerWarning = String(err?.message || err || "");
+          return { hits: [], totalHits: 0 };
+        })
+    ]);
+    hits = mergeDiscoverHits(
+      [
+        ...(Array.isArray(modrinthData?.hits) ? modrinthData.hits : []).map((hit: any) => ({ ...hit, source: "modrinth" })),
+        ...(Array.isArray(curseforgeData?.hits) ? curseforgeData.hits : []).map((hit: any) => ({ ...hit, source: "curseforge" }))
+      ],
+      q
+    );
+    totalHits = Number(modrinthData?.totalHits || 0) + Number(curseforgeData?.totalHits || 0);
+  } else if (discoverKind === "mods" && discoverPlatform === "curseforge") {
+    try {
+      const data = await backend.curseforgeModsSearch(
+        inst.id,
+        q,
+        resolvedVersion,
+        resolvedLoader,
+        discoverPageSize,
+        pageOffset,
+        discoverCategory
+      );
+      hits = Array.isArray(data?.hits) ? data.hits.map((hit: any) => ({ ...hit, source: "curseforge" })) : [];
+      totalHits = Number(data?.totalHits || hits.length || 0);
+    } catch (err: any) {
+      providerWarning = String(err?.message || err || "");
+      hits = [];
+      totalHits = 0;
+    }
+  } else if (discoverKind === "mods") {
+    const data = await backend.modrinthModsSearch(
+      inst.id,
+      q,
+      resolvedVersion,
+      resolvedLoader,
+      discoverPageSize,
+      pageOffset,
+      backendIndex,
+      discoverCategory
+    );
+    hits = Array.isArray(data?.hits) ? data.hits.map((hit: any) => ({ ...hit, source: "modrinth" })) : [];
+    totalHits = Number(data?.totalHits || hits.length || 0);
+  } else {
+    const data = await backend.modrinthContentSearch(
+      inst.id,
+      discoverKind === "shaderpacks" ? "shaderpack" : "resourcepack",
+      q,
+      resolvedVersion,
+      discoverPageSize,
+      pageOffset,
+      backendIndex,
+      discoverCategory
+    );
+    hits = Array.isArray(data?.hits) ? data.hits.map((hit: any) => ({ ...hit, source: "modrinth" })) : [];
+    totalHits = Number(data?.totalHits || hits.length || 0);
+  }
+
+  let visibleHits = hits.filter((hit) => matchesDiscoverCategory(hit));
+  visibleHits = visibleHits.map((hit) => {
+    const titleKey = normalizeInstalledProjectKey(hit.title || "");
+    const providerProjectId = `${String(hit.source || "").toLowerCase()}:${String(hit.projectId || "").trim()}`;
+    return {
+      ...hit,
+      installed:
+        !!hit.installed ||
+        installedIndex.providerProjectIds.has(providerProjectId) ||
+        installedIndex.titleKeys.has(titleKey)
+    };
+  });
+  if (discoverHideInstalledState) {
+    visibleHits = visibleHits.filter((hit) => !hit.installed);
+  }
+  visibleHits.sort((left, right) => {
+    if (discoverSortMode === "downloads") return Number(right.downloads || 0) - Number(left.downloads || 0);
+    if (discoverSortMode === "updated") {
+      return new Date(String(right.dateModified || 0)).getTime() - new Date(String(left.dateModified || 0)).getTime();
+    }
+    if (discoverSortMode === "name") {
+      return String(left.title || "").localeCompare(String(right.title || ""), undefined, { sensitivity: "base", numeric: true });
+    }
+    return Number(right.follows || 0) - Number(left.follows || 0);
+  });
+  if (discoverPlatform === "all") {
+    visibleHits = visibleHits.slice(0, discoverPageSize);
+  }
+
+  const totalPages = Math.max(1, Math.ceil(Math.max(totalHits, 0) / discoverPageSize));
+  if (discoverPage > totalPages) {
+    discoverPage = totalPages;
+    void renderDiscoverPage();
+    return;
+  }
+  const firstVisible = totalHits ? pageOffset + 1 : 0;
+  const lastVisible = totalHits ? Math.min(pageOffset + visibleHits.length, totalHits) : 0;
+  const hiddenInstalledNote =
+    discoverHideInstalledState && hits.length !== visibleHits.length
+      ? ` • ${visibleHits.length} visible after hiding installed`
+      : "";
+  discoverResultsMeta.textContent =
+    `${totalHits.toLocaleString()} result${totalHits === 1 ? "" : "s"} in the bay • Showing ${firstVisible.toLocaleString()}-${lastVisible.toLocaleString()}` +
+    ` • Page ${discoverPage} of ${totalPages}` +
+    ` • ${discoverPlatform === "all" ? "Mixed providers" : getDiscoverProviderLabel(discoverPlatform)}` +
+    `${discoverKind === "mods" ? ` • ${humanizeLoader(resolvedLoader)}` : ""}` +
+    `${resolvedVersion ? ` • ${resolvedVersion}` : ""}` +
+    hiddenInstalledNote;
+  discoverResults.innerHTML = "";
+  renderDiscoverPagination(discoverPage, totalPages);
+  if (!visibleHits.length) {
+    const reason = providerWarning
+      ? `<p>${providerWarning}</p>`
+      : "<p>Try a broader search, unlock compatibility filters, or switch category.</p>";
+    discoverResults.innerHTML = `<div class="emptyInstances"><strong>No content matched</strong>${reason}</div>`;
+    return;
+  }
+
+  for (const hit of visibleHits) {
+    const row = document.createElement("div");
+    row.className = "discoverResultRow";
+
+    const thumb = document.createElement("div");
+    thumb.className = "instanceInstalledThumb";
+    renderInstanceIconInto(thumb, { name: hit.title || "Project", libraryType: "modpack" }, hit.iconUrl || null);
+
+    const meta = document.createElement("div");
+    meta.className = "discoverResultMeta";
+
+    const titleRow = document.createElement("div");
+    titleRow.className = "discoverResultTitleRow";
+    const title = document.createElement("strong");
+    title.textContent = hit.title || "Unknown content";
+    titleRow.append(title);
+
+    const desc = document.createElement("div");
+    desc.className = "instanceInstalledDescription";
+    desc.textContent = hit.description || "No description.";
+
+    const tagRow = document.createElement("div");
+    tagRow.className = "discoverTags";
+      const inferredCategories = inferDiscoverCategories(hit);
+    for (const category of inferredCategories) {
+      const chip = document.createElement("span");
+      chip.className = "discoverTag";
+      chip.textContent = category.label;
+      tagRow.appendChild(chip);
+    }
+
+    const sub = document.createElement("div");
+    sub.className = "instanceInstalledSubline";
+    const bits = [
+      `${getDiscoverProviderLabel(hit.source)} via Fishbattery`,
+      hit.author ? `by ${hit.author}` : null,
+      `${Number(hit.downloads || 0).toLocaleString()} downloads`,
+      `${Number(hit.follows || 0).toLocaleString()} follows`,
+      hit.dateModified ? formatRelativeTimestamp(new Date(String(hit.dateModified)).getTime()) : null
+    ].filter(Boolean);
+    sub.textContent = bits.join(" • ");
+
+    meta.append(titleRow, desc);
+    if (tagRow.childElementCount) meta.appendChild(tagRow);
+    meta.appendChild(sub);
+
+    const actions = document.createElement("div");
+    actions.className = "discoverResultActions";
+
+    const install = document.createElement("button");
+    install.className = hit.installed ? "btn discoverInstalledBtn" : "btn btnPrimary";
+    install.textContent = hit.installed ? "Installed" : "Install";
+    install.disabled = !!hit.installed;
+    install.onclick = () =>
+      void guarded(async () => {
+        install.disabled = true;
+        install.textContent = "Installing…";
+        if (discoverKind === "mods" && String(hit.source || "").toLowerCase() === "curseforge") {
+          await backend.curseforgeModsInstall(inst.id, hit.projectId, hit.latestVersionId || undefined);
+        } else if (discoverKind === "mods") {
+          await backend.modrinthModsInstall(inst.id, hit.projectId, hit.latestVersionId || undefined);
+        } else {
+          await backend.modrinthContentInstall(
+            inst.id,
+            discoverKind === "shaderpacks" ? "shaderpack" : "resourcepack",
+            hit.projectId,
+            hit.latestVersionId || undefined
+          );
+        }
+        await renderDiscoverPage();
+        await renderInstanceInstalledList(inst.id);
+        await renderInstances();
+      });
+
+    actions.appendChild(install);
+    row.append(thumb, meta, actions);
+    discoverResults.appendChild(row);
+  }
+}
+
 // Launch for instance.
 async function launchForInstance(inst: any, serverAddress?: string) {
+  const instanceId = String(inst?.id || "").trim();
+  if (instanceId) {
+    lastLaunchedInstanceId = instanceId;
+  }
   const accounts = state.accounts?.accounts ?? [];
   const accountId = inst.accountId || state.accounts?.activeId || (accounts[0]?.id ?? null);
   if (!accountId) {
@@ -7000,6 +9900,17 @@ async function launchForInstance(inst: any, serverAddress?: string) {
     postExit: s.postExit,
     serverAddress
   });
+  if (launchRes?.ok) {
+    recordHomeUsage(HOME_INSTANCE_USAGE_KEY, {
+      id: String(inst.id || ""),
+      label: String(inst.name || "Instance"),
+      subtitle: `${humanizeLoader(getInstanceDisplayLoader(inst))} ${inst.mcVersion || "unknown"}`,
+      sourceLabel: getInstanceSourceLabel(inst),
+      imageUrl: null
+    });
+    invalidateHomeData();
+    if (activeView === "home") void renderHomeView(true);
+  }
   if (!launchRes?.ok) {
     const errText = String(launchRes?.error || "Unknown launch failure");
     appendLog(`[launcher] ${errText}`);
@@ -8344,11 +11255,7 @@ async function renderAccounts() {
     btnRemoveAccount.className = "accountTrashBtn";
     btnRemoveAccount.title = "Remove account";
     btnRemoveAccount.setAttribute("aria-label", "Remove account");
-    btnRemoveAccount.innerHTML =
-      '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" focusable="false">' +
-      '<path fill="currentColor" d="M9 3h6l1 2h4v2H4V5h4l1-2zm1 6h2v8h-2V9zm4 0h2v8h-2V9zM7 9h2v8H7V9z"/>' +
-      '<path fill="currentColor" d="M6 7h12l-1 13a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L6 7z"/>' +
-      "</svg>";
+    setIconButtonAsset(btnRemoveAccount, ICON_ASSETS.trash, "Remove account");
     btnRemoveAccount.onclick = (e) => {
       e.stopPropagation();
       void guarded(async () => {
@@ -8385,7 +11292,8 @@ async function renderAccounts() {
     accountItems.appendChild(item);
   }
 
-  accountAdd.textContent = "+ Add Minecraft account";
+  accountAdd.textContent = "Add Minecraft account";
+  setButtonAssetIcon(accountAdd, ICON_ASSETS.plus);
 
   const popSep = document.createElement("div");
   popSep.className = "popSep";
@@ -8437,13 +11345,20 @@ async function renderAccounts() {
   const btnLauncherRegister = document.createElement("button");
   btnLauncherRegister.className = "btn";
   btnLauncherRegister.textContent = "Create account";
+  setButtonAssetIcon(btnLauncherRegister, ICON_ASSETS.plus);
   btnLauncherRegister.onclick = () => openLauncherAuthFlow("register");
 
   const btnLauncherLogout = document.createElement("button");
-  btnLauncherLogout.className = "btn";
+  btnLauncherLogout.className = "btn btnDanger";
   btnLauncherLogout.textContent = "Sign out";
+  setButtonAssetIcon(btnLauncherLogout, ICON_ASSETS.signOut);
   btnLauncherLogout.onclick = () => {
     void runLauncherAccountAction(async () => {
+      const confirmed = await showLauncherConfirm(
+        "Sign out of your Fishbattery account?\n\nYou will stay signed in to your Minecraft accounts, but Fishbattery cloud features will be unavailable until you sign back in.",
+        "Sign out of Fishbattery?"
+      );
+      if (!confirmed) return;
       state.launcherAccount = await backend.launcherAccountLogout();
       state.launcherSubscription = null;
       await renderAccounts();
@@ -8454,6 +11369,7 @@ async function renderAccounts() {
   const btnLauncherSettings = document.createElement("button");
   btnLauncherSettings.className = "btn";
   btnLauncherSettings.textContent = "Account settings";
+  setButtonAssetIcon(btnLauncherSettings, ICON_ASSETS.gear);
   btnLauncherSettings.onclick = () => {
     void runLauncherAccountAction(async () => {
       const values = await openLauncherProfileDialog({
@@ -8483,6 +11399,7 @@ async function renderAccounts() {
   const btnOpenFishbatteryWeb = document.createElement("button");
   btnOpenFishbatteryWeb.className = "btn";
   btnOpenFishbatteryWeb.textContent = "Open Fishbattery web";
+  setButtonAssetIcon(btnOpenFishbatteryWeb, ICON_ASSETS.web);
   btnOpenFishbatteryWeb.onclick = () => {
     void runLauncherAccountAction(async () => {
       const target = "https://fishbattery.app";
@@ -8509,7 +11426,6 @@ async function renderAccounts() {
   } else {
     launcherActionRow.appendChild(btnLauncherSettings);
     launcherActionRow.appendChild(btnOpenFishbatteryWeb);
-    launcherActionRow.appendChild(btnLauncherLogout);
     accountItems.appendChild(launcherActionRow);
 
     const launcherAccounts = Array.isArray(launcherState?.accounts) ? launcherState.accounts : [launcherActive];
@@ -8554,6 +11470,25 @@ async function renderAccounts() {
       left.appendChild(av);
       left.appendChild(meta);
       item.appendChild(left);
+
+      if (a.id === launcherState?.activeAccountId) {
+        const right = document.createElement("div");
+        right.className = "right";
+
+        const logoutInline = document.createElement("button");
+        logoutInline.type = "button";
+        logoutInline.className = "btn btnDanger dropdownInlineDangerBtn";
+        logoutInline.textContent = "Sign out";
+        setButtonAssetIcon(logoutInline, ICON_ASSETS.signOut);
+        logoutInline.onclick = (ev) => {
+          ev.preventDefault();
+          ev.stopPropagation();
+          btnLauncherLogout.click();
+        };
+
+        right.appendChild(logoutInline);
+        item.appendChild(right);
+      }
 
       item.onclick = () => {
         void runLauncherAccountAction(async () => {
@@ -8605,13 +11540,94 @@ async function renderAccounts() {
 // ---------------- Instances (card layout) ----------------
 function filteredInstances() {
   const q = (searchInstances.value || "").trim().toLowerCase();
-  const items = state.instances?.instances ?? [];
-  if (!q) return items;
-  return items.filter((i: any) => {
-    const name = (i.name || "").toLowerCase();
-    const v = (i.mcVersion || "").toLowerCase();
-    return name.includes(q) || v.includes(q);
+  const items = [...(state.instances?.instances ?? [])]
+    .filter((inst: any) => matchesInstanceFilter(inst))
+    .filter((inst: any) => !q || buildInstanceSearchHaystack(inst).includes(q));
+
+  items.sort((a: any, b: any) => {
+    if (instanceSortMode === "name") {
+      return String(a?.name || "").localeCompare(String(b?.name || ""), undefined, { sensitivity: "base", numeric: true });
+    }
+    if (instanceSortMode === "version") {
+      const versionCompare = compareMcVersions(String(a?.mcVersion || ""), String(b?.mcVersion || ""));
+      if (versionCompare !== 0) return versionCompare;
+    } else if (instanceSortMode === "loader") {
+      const loaderCompare = humanizeLoader(getInstanceDisplayLoader(a)).localeCompare(humanizeLoader(getInstanceDisplayLoader(b)));
+      if (loaderCompare !== 0) return loaderCompare;
+    } else {
+      const createdCompare = getInstanceCreatedMs(b) - getInstanceCreatedMs(a);
+      if (createdCompare !== 0) return createdCompare;
+    }
+    return String(a?.name || "").localeCompare(String(b?.name || ""), undefined, { sensitivity: "base", numeric: true });
   });
+
+  return items;
+}
+
+function renderLibrarySummaryCards(visibleItems: any[], allItems: any[], runningCount: number) {
+  if (!librarySummaryCards) return;
+  const total = allItems.length;
+  const custom = allItems.filter((inst: any) => deriveInstanceType(inst) === "custom").length;
+  const modpacks = allItems.filter((inst: any) => deriveInstanceType(inst) === "modpack").length;
+  const localOnly = allItems.filter((inst: any) => inst?.syncEnabled === false).length;
+  const cards = [
+    {
+      label: "Visible instances",
+      value: String(visibleItems.length),
+      detail: `${total} total in library`
+    },
+    {
+      label: "Running now",
+      value: String(runningCount),
+      detail: `${custom} custom setups`
+    },
+    {
+      label: "Modpack-based",
+      value: String(modpacks),
+      detail: `${allItems.length - modpacks - custom} imported`
+    },
+    {
+      label: "Local-only",
+      value: String(localOnly),
+      detail: `${Math.max(0, total - localOnly)} sync enabled`
+    }
+  ];
+  librarySummaryCards.innerHTML = cards
+    .map(
+      (card) => `
+        <article class="librarySummaryCard">
+          <span>${card.label}</span>
+          <strong>${card.value}</strong>
+          <small>${card.detail}</small>
+        </article>
+      `
+    )
+    .join("");
+}
+
+function renderLibraryResultsMeta(visibleItems: any[]) {
+  if (!libraryResultsMeta) return;
+  const groupLabel =
+    instanceGroupMode === "none"
+      ? "Ungrouped"
+      : instanceGroupMode === "type"
+      ? "Grouped by type"
+      : instanceGroupMode === "source"
+      ? "Grouped by source"
+      : instanceGroupMode === "loader"
+      ? "Grouped by loader"
+      : instanceGroupMode === "version"
+      ? "Grouped by Minecraft version"
+      : "Grouped by sync state";
+  const sortLabel =
+    instanceSortMode === "recent"
+      ? "newest first"
+      : instanceSortMode === "name"
+      ? "name"
+      : instanceSortMode === "version"
+      ? "version"
+      : "loader";
+  libraryResultsMeta.textContent = `${visibleItems.length} instance${visibleItems.length === 1 ? "" : "s"} shown • ${groupLabel} • Sorted by ${sortLabel}`;
 }
 
 type RunningSnapshot = {
@@ -8674,7 +11690,7 @@ async function openInstanceWorkspace(
 ) {
   modalMode = "edit";
   editInstanceId = i.id;
-  modalTitle.textContent = "Edit instance";
+  modalTitle.textContent = i.name ?? "Instance workspace";
   createIncludeReleases = true;
   createIncludeSnapshots = true;
   renderCreateFilterButtons();
@@ -8701,37 +11717,35 @@ async function openInstanceWorkspace(
   await fillInstanceAccountDropdown(i.accountId ?? null);
   await renderServerEntries(i.id);
 
-  const resolvedInitialTab: ModalTabId = initialTab;
+  const resolvedInitialTab: ModalTabId = "general";
 
   openModal(resolvedInitialTab);
-  if (resolvedInitialTab === "installed" || resolvedInitialTab === "discover") {
-    await renderInstanceMods(i.id);
-    await renderLocalContent(i.id);
-  }
-  if (resolvedInitialTab === "discover") {
-    await runInstanceModrinthContentSearch(i.id);
-  }
+  setCreateFlowStage("details");
 }
 
 // Render instances.
 async function renderInstances() {
+  invalidateHomeData();
   const generation = ++renderInstancesGeneration;
   const items = filteredInstances();
-  const active = state.instances?.activeInstanceId ?? null;
+  const highlightedId = String(selectedInstanceId || "").trim() || null;
   const allInstances = state.instances?.instances ?? [];
   const runningSnapshot = await getRunningSnapshot(allInstances);
   if (generation !== renderInstancesGeneration) return;
   lastRunningSignature = buildRunningSignature(allInstances, runningSnapshot);
   updateTopbarRunningPill(runningSnapshot.count);
+  renderLibrarySummaryCards(items, allInstances, runningSnapshot.count);
+  renderLibraryResultsMeta(items);
 
   if (!items.length) {
     if (generation !== renderInstancesGeneration) return;
     instancesGrid.innerHTML = "";
     const empty = document.createElement("div");
     empty.className = "emptyInstances";
+    const hasFilters = !!(searchInstances.value || "").trim() || instanceFilterMode !== "all";
     empty.innerHTML = `
-      <strong>No instances yet</strong>
-      <p>Create your first instance or import a modpack to get started.</p>
+      <strong>${hasFilters ? "No matching instances" : "No instances yet"}</strong>
+      <p>${hasFilters ? "Try a different search, grouping, or filter." : "Create your first instance or import a modpack to get started."}</p>
       <div class="emptyInstancesActions">
         <button id="emptyCreateInstance" class="btn btnPrimary" type="button">Create Instance</button>
         <button id="emptyImportInstance" class="btn" type="button">Import Modpack</button>
@@ -8746,7 +11760,6 @@ async function renderInstances() {
   }
 
   const icons = new Map<string, string | null>();
-  const preferredServers = new Map<string, any | null>();
   await Promise.all(
     items.map(async (i: any) => {
       try {
@@ -8754,166 +11767,146 @@ async function renderInstances() {
       } catch {
         icons.set(i.id, null);
       }
-      try {
-        preferredServers.set(String(i.id), await findPreferredServerForInstance(i));
-      } catch {
-        preferredServers.set(String(i.id), null);
-      }
     })
   );
   if (generation !== renderInstancesGeneration) return;
 
   const createInstanceCard = (i: any) => {
     const card = document.createElement("div");
-    card.className = "card";
+    const instanceType = deriveInstanceType(i);
+    const isRunning = !!runningSnapshot.byId.get(String(i.id || ""));
+    const displayLoader = getInstanceDisplayLoader(i);
+    const humanLoader = humanizeLoader(displayLoader);
+    const sourceLabel = getInstanceSourceLabel(i);
+    card.className = `card instanceCard instanceCard--compact instanceCard--${instanceType}`;
     card.style.cursor = "pointer";
     card.tabIndex = 0;
     card.setAttribute("role", "button");
-    card.setAttribute("aria-label", `Open ${i.name ?? "instance"} workspace`);
+    card.setAttribute("aria-label", `Open ${i.name ?? "instance"} page`);
     card.onclick = () => {
-      void openInstanceWorkspace(i, "installed");
+      void openInstancePage(i, "content");
     };
     card.onkeydown = (ev: KeyboardEvent) => {
       if (ev.key !== "Enter" && ev.key !== " ") return;
       ev.preventDefault();
-      void openInstanceWorkspace(i, "installed");
+      void openInstancePage(i, "content");
     };
-    if (i.id === active) {
-      card.style.boxShadow = "0 0 0 2px rgba(61,220,132,.18)";
-    }
+    card.classList.toggle("active", String(i.id || "") === String(highlightedId || ""));
+    card.classList.toggle("running", isRunning);
 
     const inner = document.createElement("div");
-    inner.className = "cardInner";
+    inner.className = "cardInner instanceCardInner";
 
     const thumb = document.createElement("div");
-    thumb.className = "thumb";
+    thumb.className = "thumb instanceThumb";
     const iconData = icons.get(i.id) || null;
-    if (iconData) {
-      const icon = document.createElement("img");
-      icon.src = iconData;
-      icon.alt = `${i.name ?? "Instance"} icon`;
-      icon.style.width = "100%";
-      icon.style.height = "100%";
-      icon.style.objectFit = "cover";
-      icon.style.borderRadius = "14px";
-      thumb.appendChild(icon);
-    }
+    const icon = document.createElement("img");
+    icon.src =
+      iconData ||
+      fallbackPackIconDataUrl(i.name || "Instance", instanceType === "custom" ? "green" : "blue");
+    icon.alt = `${i.name ?? "Instance"} icon`;
+    icon.style.width = "100%";
+    icon.style.height = "100%";
+    icon.style.objectFit = "cover";
+    icon.style.borderRadius = "16px";
+    thumb.appendChild(icon);
 
     const meta = document.createElement("div");
-    meta.className = "cardMeta";
+    meta.className = "cardMeta instanceCardMeta";
+
+    const titleRow = document.createElement("div");
+    titleRow.className = "instanceCardTitleRow";
 
     const title = document.createElement("strong");
     title.textContent = i.name ?? "Instance";
+    title.title = i.name ?? "Instance";
+    titleRow.appendChild(title);
+
+    if (isRunning) {
+      const chip = document.createElement("span");
+      chip.className = "instanceStatusChip instanceStatusChipRunning";
+      chip.textContent = "Running";
+      titleRow.appendChild(chip);
+    }
 
     const badges = document.createElement("div");
-    badges.className = "badges";
-
-    const displayLoader = getInstanceDisplayLoader(i);
-
-    const b1 = document.createElement("div");
-    b1.className = "badge";
-    b1.textContent = `${displayLoader}`;
-
-    const b2 = document.createElement("div");
-    b2.className = "badge";
-    b2.textContent = `${i.mcVersion ?? ""}`;
-
-    badges.appendChild(b1);
-    badges.appendChild(b2);
+    badges.className = "badges instanceBadgeRow";
+    const badgeDefs: Array<{ label: string; className: string }> = [];
+    if (sourceLabel !== "Fishbattery") badgeDefs.push({ label: sourceLabel, className: "instanceBadgeSource" });
+    else if (instanceType !== "custom") badgeDefs.push({ label: getInstanceTypeLabel(i), className: "instanceBadgeNeutral" });
+    for (const badgeInfo of badgeDefs) {
+      const badge = document.createElement("span");
+      badge.className = `instanceBadge ${badgeInfo.className}`;
+      badge.textContent = badgeInfo.label;
+      badges.appendChild(badge);
+    }
 
     const subtext = document.createElement("small");
     subtext.className = "instanceSubtext";
-    subtext.textContent = `${displayLoader} | Minecraft ${i.mcVersion ?? "unknown"}`;
+    const metaBits = [`${humanLoader} ${i.mcVersion ?? "unknown"}`];
+    if (i?.syncEnabled === false) metaBits.push("Local only");
+    subtext.textContent = metaBits.join(" • ");
 
-    meta.appendChild(title);
+    meta.appendChild(titleRow);
     meta.appendChild(subtext);
-    meta.appendChild(badges);
+    if (badgeDefs.length) meta.appendChild(badges);
 
     const actions = document.createElement("div");
-    actions.className = "cardActions";
-
-    const btnEdit = document.createElement("button");
-    btnEdit.className = "iconBtn instanceEditBtn";
-    btnEdit.type = "button";
-    btnEdit.title = "Edit instance";
-    btnEdit.setAttribute("aria-label", `Edit ${i.name ?? "instance"}`);
-    btnEdit.innerHTML =
-      '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M19.14 12.94a7.9 7.9 0 0 0 .06-.94c0-.32-.02-.63-.06-.94l2.03-1.58a.5.5 0 0 0 .12-.63l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.4 7.4 0 0 0-1.63-.94l-.36-2.54a.5.5 0 0 0-.5-.42h-3.84a.5.5 0 0 0-.5.42l-.36 2.54c-.58.23-1.12.54-1.63.94l-2.39-.96a.5.5 0 0 0-.6.22L2.71 8.85a.5.5 0 0 0 .12.63l2.03 1.58c-.04.31-.06.62-.06.94s.02.63.06.94l-2.03 1.58a.5.5 0 0 0-.12.63l1.92 3.32a.5.5 0 0 0 .6.22l2.39-.96c.51.4 1.05.71 1.63.94l.36 2.54a.5.5 0 0 0 .5.42h3.84a.5.5 0 0 0 .5-.42l.36-2.54c.58-.23 1.12-.54 1.63-.94l2.39.96a.5.5 0 0 0 .6-.22l1.92-3.32a.5.5 0 0 0-.12-.63zM12 15.2A3.2 3.2 0 1 1 12 8.8a3.2 3.2 0 0 1 0 6.4z" fill="currentColor"/></svg>';
-    btnEdit.onclick = async (ev) => {
-      ev.stopPropagation();
-      await openInstanceWorkspace(i, "general");
-    };
-
-    const btnDeleteIcon = document.createElement("button");
-    btnDeleteIcon.className = "iconBtn instanceEditBtn instanceDeleteBtn danger";
-    btnDeleteIcon.type = "button";
-    btnDeleteIcon.title = "Delete instance";
-    btnDeleteIcon.setAttribute("aria-label", `Delete ${i.name ?? "instance"}`);
-    btnDeleteIcon.innerHTML =
-      '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M9 3.75h6a1 1 0 0 1 .9.56l.47.94H20a.75.75 0 0 1 0 1.5h-1.06l-.78 10.13A2.25 2.25 0 0 1 15.92 19H8.08a2.25 2.25 0 0 1-2.24-2.12L5.06 6.75H4a.75.75 0 0 1 0-1.5h3.16l.47-.94a1 1 0 0 1 .9-.56Zm-.12 2.5H15.13l-.25-.5h-5.76l-.25.5Zm-2.3.5.77 10.02a.75.75 0 0 0 .74.73h7.84a.75.75 0 0 0 .74-.73l.77-10.02H6.57ZM10 9a.75.75 0 0 1 .75.75v4.5a.75.75 0 0 1-1.5 0v-4.5A.75.75 0 0 1 10 9Zm4 .75a.75.75 0 0 0-1.5 0v4.5a.75.75 0 0 0 1.5 0v-4.5Z" fill="currentColor"/></svg>';
-    btnDeleteIcon.onclick = async (ev) => {
-      ev.stopPropagation();
-      const ok = await showLauncherConfirm(`Delete "${i.name ?? "Instance"}"? This will remove the entire instance folder.`);
-      if (!ok) return;
-      await backend.instancesRemove(i.id);
-      state.instances = await backend.instancesList();
-      await renderInstances();
-    };
+    actions.className = "cardActions instanceCardActions";
 
     const btnPlay = document.createElement("button");
-    btnPlay.className = "btn btnPrimary";
-    const isRunning = !!runningSnapshot.byId.get(String(i.id || ""));
-    btnPlay.textContent = isRunning ? "Stop" : "Play";
+    btnPlay.className = "instanceHoverPlay";
+    btnPlay.innerHTML = `
+      <span class="btnIcon btnIconMask" style="--btn-icon-url:url('${ICON_ASSETS.play}')"></span>
+      <span>${isRunning ? "Stop" : "Play"}</span>
+    `;
     btnPlay.onclick = async (ev) => {
       ev.stopPropagation();
       if (isRunning) {
         await backend.launchStop(i.id);
-        return;
+      } else {
+        await launchForInstance(i);
       }
-      if (state.instances?.activeInstanceId !== i.id) {
-        await backend.instancesSetActive(i.id);
-        state.instances = await backend.instancesList();
-        await renderInstances();
-      }
-      await launchForInstance(i);
+      await renderInstances();
+      if (selectedInstanceId === i.id && librarySurface !== "library") await renderInstancePage();
     };
 
-    const preferredServer = preferredServers.get(String(i.id || "")) ?? null;
-    const btnJoin = document.createElement("button");
-    btnJoin.className = "btn";
-    btnJoin.textContent = "Join Server";
-    btnJoin.disabled = !preferredServer;
-    btnJoin.title = preferredServer
-      ? `Join ${String(preferredServer.name || preferredServer.address || "preferred server")}`
-      : "No preferred server set for this instance";
-    btnJoin.onclick = async (ev) => {
+    const btnMore = document.createElement("button");
+    btnMore.className = "iconBtn instanceHoverMore";
+    btnMore.type = "button";
+    btnMore.title = "Instance settings";
+    btnMore.setAttribute("aria-label", `Open settings for ${i.name ?? "instance"}`);
+    setIconButtonAsset(btnMore, ICON_ASSETS.gear, `Open settings for ${i.name ?? "instance"}`);
+    btnMore.onclick = async (ev) => {
       ev.stopPropagation();
-      if (!preferredServer) return;
-      if (state.instances?.activeInstanceId !== i.id) {
-        await backend.instancesSetActive(i.id);
-        state.instances = await backend.instancesList();
-        await renderInstances();
-      }
-      await launchForInstance(i, String(preferredServer.address || "").trim());
+      await openInstanceWorkspace(i, "general");
     };
 
-    const btnExport = document.createElement("button");
-    btnExport.className = "btn";
-    btnExport.textContent = "Export";
-    btnExport.onclick = async (ev) => {
+    const btnDelete = document.createElement("button");
+    btnDelete.className = "iconBtn danger instanceHoverMore instanceDeleteBtn";
+    btnDelete.type = "button";
+    btnDelete.title = "Delete instance";
+    btnDelete.setAttribute("aria-label", `Delete ${i.name ?? "instance"}`);
+    setIconButtonAsset(btnDelete, ICON_ASSETS.trash, `Delete ${i.name ?? "instance"}`);
+    btnDelete.onclick = async (ev) => {
       ev.stopPropagation();
-      const res = await backend.instancesExport(i.id);
-      if (!res.ok || res.canceled) return;
-      appendLog(`[instance] Exported "${i.name}" -> ${res.path}`);
-      alert(`Instance exported:\n${res.path}`);
+      const yes = await showLauncherConfirm(`Delete instance "${i.name ?? "Instance"}"?`);
+      if (!yes) return;
+      await backend.instancesRemove(i.id);
+      if (String(selectedInstanceId || "") === String(i.id)) {
+        selectedInstanceId = null;
+        selectedInstanceSnapshot = null;
+        setLibrarySurface("library");
+        setView("library");
+      }
+      if (String(lastLaunchedInstanceId || "") === String(i.id)) {
+        lastLaunchedInstanceId = null;
+      }
+      state.instances = await backend.instancesList();
+      await renderInstances();
     };
 
-    actions.appendChild(btnPlay);
-    actions.appendChild(btnJoin);
-    actions.appendChild(btnExport);
-
-    card.appendChild(btnEdit);
-    card.appendChild(btnDeleteIcon);
+    actions.append(btnPlay, btnDelete, btnMore);
     inner.appendChild(thumb);
     inner.appendChild(meta);
     inner.appendChild(actions);
@@ -8922,44 +11915,70 @@ async function renderInstances() {
     return card;
   };
 
-  const vanillaInstances = items.filter((i: any) => getInstanceDisplayLoader(i) === "vanilla");
-  const moddedInstances = items.filter((i: any) => getInstanceDisplayLoader(i) !== "vanilla");
   const nextContent = document.createDocumentFragment();
+  if (instanceGroupMode === "none") {
+    for (const instance of items) {
+      nextContent.appendChild(createInstanceCard(instance));
+    }
+  } else {
+    const grouped = new Map<string, any[]>();
+    for (const instance of items) {
+      const label = getInstanceGroupLabel(instance, instanceGroupMode);
+      if (!grouped.has(label)) grouped.set(label, []);
+      grouped.get(label)!.push(instance);
+    }
 
-  const appendGroup = (label: string, groupItems: any[]) => {
-    const group = document.createElement("section");
-    group.className = "instanceGroup";
+    const sortedGroups = Array.from(grouped.entries()).sort(([left], [right]) => {
+      if (instanceGroupMode === "type") {
+        const order = ["Custom instances", "Modpack instances", "Imported instances"];
+        return order.indexOf(left) - order.indexOf(right);
+      }
+      if (instanceGroupMode === "sync") {
+        const order = ["Cloud sync enabled", "Local only"];
+        return order.indexOf(left) - order.indexOf(right);
+      }
+      if (instanceGroupMode === "version") {
+        return compareMcVersions(left.replace("Minecraft ", ""), right.replace("Minecraft ", ""));
+      }
+      return left.localeCompare(right, undefined, { sensitivity: "base", numeric: true });
+    });
 
-    const header = document.createElement("div");
-    header.className = "instanceGroupHeader";
-    const title = document.createElement("strong");
-    title.textContent = label;
-    const line = document.createElement("div");
-    line.className = "instanceGroupLine";
-    header.append(title, line);
+    for (const [label, groupItems] of sortedGroups) {
+      const group = document.createElement("section");
+      group.className = "instanceGroup";
 
-    const grid = document.createElement("div");
-    grid.className = "grid instanceGroupGrid";
-    if (!groupItems.length) {
-      const empty = document.createElement("div");
-      empty.className = "instanceGroupEmpty";
-      empty.textContent = label === "Default instances" ? "No default instances yet." : "No modded instances yet.";
-      grid.appendChild(empty);
-    } else {
+      const header = document.createElement("div");
+      header.className = "instanceGroupHeader";
+      const titleWrap = document.createElement("div");
+      titleWrap.className = "instanceGroupHeading";
+      const title = document.createElement("strong");
+      title.textContent = label;
+      const count = document.createElement("span");
+      count.className = "instanceGroupCount";
+      count.textContent = `${groupItems.length} item${groupItems.length === 1 ? "" : "s"}`;
+      titleWrap.append(title, count);
+      const line = document.createElement("div");
+      line.className = "instanceGroupLine";
+      header.append(titleWrap, line);
+
+      const grid = document.createElement("div");
+      grid.className = "grid instanceGroupGrid";
       for (const instance of groupItems) {
         grid.appendChild(createInstanceCard(instance));
       }
+
+      group.append(header, grid);
+      nextContent.appendChild(group);
     }
-
-    group.append(header, grid);
-    nextContent.appendChild(group);
-  };
-
-  appendGroup("Default instances", vanillaInstances);
-  appendGroup("Modded instances", moddedInstances);
+  }
   if (generation !== renderInstancesGeneration) return;
   instancesGrid.innerHTML = "";
   instancesGrid.appendChild(nextContent);
+  if (selectedInstanceId && librarySurface === "instance") {
+    await renderInstancePage();
+  } else if (selectedInstanceId && librarySurface === "discover") {
+    await renderDiscoverPage();
+  }
 }
 
 // Fill instance account dropdown.
@@ -9214,10 +12233,12 @@ function setCreateSource(next: "custom" | "import" | "modrinth" | "curseforge" |
 
   if (isCustom) {
     createSourceHint.textContent = "Build a custom instance with manual version + loader selection.";
+    updateCreateFlowHeader();
     return;
   }
   if (isImport) {
     createSourceHint.textContent = "Import an existing instance/pack archive.";
+    updateCreateFlowHeader();
     void guarded(async () => {
       await Promise.all([refreshExternalProfiles("modrinth"), refreshExternalProfiles("curseforge")]);
     });
@@ -9274,6 +12295,7 @@ function setCreateSource(next: "custom" | "import" | "modrinth" | "curseforge" |
       await runProviderSearch();
     });
   }
+  updateCreateFlowHeader();
 }
 
 // Fallback pack icon data url.
@@ -9644,6 +12666,9 @@ async function refreshAll() {
     appendLog(`[startup] sidebar preview failed: ${String(err?.message ?? err)}`);
   }
   await renderInstances();
+  void renderHomeView(true).catch((err: any) => {
+    appendLog(`[startup] home quick actions failed: ${String(err?.message ?? err)}`);
+  });
   try {
     await renderCapesView(false);
   } catch (err: any) {
@@ -9781,7 +12806,11 @@ consentSettings.onclick = () => {
 
 // ---------------- Event wiring ----------------
 // Primary nav and account interactions.
-navLibrary.onclick = () => setView("library");
+navHome.onclick = () => setView("home");
+navLibrary.onclick = () => {
+  setLibrarySurface("library");
+  setView("library");
+};
 navCapes.onclick = () => setView("capes");
 navPlayit.onclick = () => setView("playit");
 navSettings.onclick = () => setView("settings");
@@ -9801,6 +12830,219 @@ accountAdd.onclick = () =>
   });
 
 searchInstances.oninput = () => renderInstances();
+sortInstances.onchange = () => {
+  instanceSortMode = (sortInstances.value || "recent") as InstanceSortMode;
+  saveUiPreferences({ librarySortMode: instanceSortMode });
+  void renderInstances();
+};
+groupInstances.onchange = () => {
+  instanceGroupMode = (groupInstances.value || "type") as InstanceGroupMode;
+  saveUiPreferences({ libraryGroupMode: instanceGroupMode });
+  void renderInstances();
+};
+filterInstances.onchange = () => {
+  instanceFilterMode = (filterInstances.value || "all") as InstanceFilterMode;
+  saveUiPreferences({ libraryFilterMode: instanceFilterMode });
+  void renderInstances();
+};
+instanceBackBtn.onclick = () => {
+  setLibrarySurface("library");
+  setView("library");
+};
+discoverBackBtn.onclick = () => {
+  setLibrarySurface("instance");
+  setView("library");
+  void renderInstancePage();
+};
+instanceTabContent.onclick = () => {
+  setInstanceTab("content");
+  void renderInstancePage();
+};
+instanceTabWorlds.onclick = () => {
+  setInstanceTab("worlds");
+  void renderInstancePage();
+};
+instanceTabLogs.onclick = () => {
+  setInstanceTab("logs");
+  void renderInstancePage();
+};
+instanceInstalledSearch.oninput = () => {
+  const inst = getSelectedInstance();
+  if (!inst) return;
+  void renderInstanceInstalledList(inst.id);
+};
+instanceWorldsSearch.oninput = () => {
+  const inst = getSelectedInstance();
+  if (!inst) return;
+  void renderInstanceWorldsPage(inst);
+};
+instanceLogsSearch.oninput = () => renderSessionLogs();
+instanceFilterAll.onclick = () => {
+  setInstanceContentFilter("all");
+  saveUiPreferences({ instanceContentFilter });
+  const inst = getSelectedInstance();
+  if (inst) void renderInstanceInstalledList(inst.id);
+};
+instanceFilterMods.onclick = () => {
+  setInstanceContentFilter("mods");
+  saveUiPreferences({ instanceContentFilter });
+  const inst = getSelectedInstance();
+  if (inst) void renderInstanceInstalledList(inst.id);
+};
+instanceFilterResourcepacks.onclick = () => {
+  setInstanceContentFilter("resourcepacks");
+  saveUiPreferences({ instanceContentFilter });
+  const inst = getSelectedInstance();
+  if (inst) void renderInstanceInstalledList(inst.id);
+};
+instanceFilterShaderpacks.onclick = () => {
+  setInstanceContentFilter("shaderpacks");
+  saveUiPreferences({ instanceContentFilter });
+  const inst = getSelectedInstance();
+  if (inst) void renderInstanceInstalledList(inst.id);
+};
+instanceFilterUpdates.onclick = () => {
+  setInstanceContentFilter("updates");
+  saveUiPreferences({ instanceContentFilter });
+  const inst = getSelectedInstance();
+  if (inst) void renderInstanceInstalledList(inst.id);
+};
+instanceWorldsFilterAll.onclick = () => {
+  setInstanceWorldsFilter("all");
+  saveUiPreferences({ instanceWorldsFilter });
+  const inst = getSelectedInstance();
+  if (inst) void renderInstanceWorldsPage(inst);
+};
+instanceWorldsFilterSingle.onclick = () => {
+  setInstanceWorldsFilter("singleplayer");
+  saveUiPreferences({ instanceWorldsFilter });
+  const inst = getSelectedInstance();
+  if (inst) void renderInstanceWorldsPage(inst);
+};
+instanceWorldsFilterServers.onclick = () => {
+  setInstanceWorldsFilter("servers");
+  saveUiPreferences({ instanceWorldsFilter });
+  const inst = getSelectedInstance();
+  if (inst) void renderInstanceWorldsPage(inst);
+};
+instanceLogLevelAll.onclick = () => {
+  setLogFilterMode("all");
+  saveUiPreferences({ logFilterMode });
+  renderSessionLogs();
+};
+instanceLogLevelInfo.onclick = () => {
+  setLogFilterMode("info");
+  saveUiPreferences({ logFilterMode });
+  renderSessionLogs();
+};
+instanceLogLevelWarn.onclick = () => {
+  setLogFilterMode("warn");
+  saveUiPreferences({ logFilterMode });
+  renderSessionLogs();
+};
+instanceLogLevelError.onclick = () => {
+  setLogFilterMode("error");
+  saveUiPreferences({ logFilterMode });
+  renderSessionLogs();
+};
+instanceLogLevelDebug.onclick = () => {
+  setLogFilterMode("debug");
+  saveUiPreferences({ logFilterMode });
+  renderSessionLogs();
+};
+discoverKindMods.onclick = () => {
+  setDiscoverKind("mods");
+  saveUiPreferences({ discoverKind, discoverCategory });
+  resetDiscoverPaging();
+  void renderDiscoverPage();
+};
+discoverKindResourcepacks.onclick = () => {
+  setDiscoverKind("resourcepacks");
+  discoverPlatform = "modrinth";
+  saveUiPreferences({ discoverKind, discoverPlatform, discoverCategory });
+  resetDiscoverPaging();
+  void renderDiscoverPage();
+};
+discoverKindShaderpacks.onclick = () => {
+  setDiscoverKind("shaderpacks");
+  discoverPlatform = "modrinth";
+  saveUiPreferences({ discoverKind, discoverPlatform, discoverCategory });
+  resetDiscoverPaging();
+  void renderDiscoverPage();
+};
+discoverPlatformSelect.onchange = () => {
+  discoverPlatform = (discoverPlatformSelect.value || "all") as DiscoverPlatform;
+  saveUiPreferences({ discoverPlatform });
+  resetDiscoverPaging();
+  void renderDiscoverPage();
+};
+discoverSearchInput.onkeydown = (e) => {
+  if (e.key !== "Enter") return;
+  e.preventDefault();
+  resetDiscoverPaging();
+  void renderDiscoverPage();
+};
+discoverSearchInput.oninput = () => {
+  window.clearTimeout((discoverSearchInput as any)._debounceTimer);
+  (discoverSearchInput as any)._debounceTimer = window.setTimeout(() => {
+    resetDiscoverPaging();
+    void renderDiscoverPage();
+  }, 180);
+};
+discoverSortSelect.onchange = () => {
+  discoverSortMode = (discoverSortSelect.value || "relevance") as DiscoverSortMode;
+  saveUiPreferences({ discoverSortMode });
+  resetDiscoverPaging();
+  void renderDiscoverPage();
+};
+discoverPageSizeSelect.onchange = () => {
+  discoverPageSize = Math.max(20, Math.min(30, Number(discoverPageSizeSelect.value || 20))) || 20;
+  saveUiPreferences({ discoverPageSize });
+  resetDiscoverPaging();
+  void renderDiscoverPage();
+};
+discoverHideInstalled.onchange = () => {
+  discoverHideInstalledState = discoverHideInstalled.checked;
+  saveUiPreferences({ discoverHideInstalled: discoverHideInstalledState });
+  void renderDiscoverPage();
+};
+discoverVersionSelect.onchange = () => {
+  discoverVersionFilter = String(discoverVersionSelect.value || "");
+  saveUiPreferences({ discoverVersionFilter });
+  resetDiscoverPaging();
+  void renderDiscoverPage();
+};
+discoverLoaderSelect.onchange = () => {
+  discoverLoaderFilter = DISCOVER_LOADER_FILTER_SET.has(discoverLoaderSelect.value as DiscoverLoaderFilter)
+    ? (discoverLoaderSelect.value as DiscoverLoaderFilter)
+    : "";
+  saveUiPreferences({ discoverLoaderFilter });
+  resetDiscoverPaging();
+  void renderDiscoverPage();
+};
+instanceRefreshWorldsBtn.onclick = () => {
+  const inst = getSelectedInstance();
+  if (!inst) return;
+  void guarded(async () => {
+    await backend.serversRefreshStatus(inst.id, true);
+    await renderInstanceWorldsPage(inst);
+  });
+};
+instanceAddServerBtn.onclick = () => {
+  const inst = getSelectedInstance();
+  if (!inst) return;
+  void guarded(async () => {
+    const name = await showLauncherPrompt("Server name", "", "Add saved server");
+    if (!name) return;
+    const address = await showLauncherPrompt("Server address", "", "Add saved server");
+    if (!address) return;
+    await backend.serversUpsert(inst.id, {
+      name: name.trim(),
+      address: address.trim()
+    });
+    await renderInstanceWorldsPage(inst);
+  });
+};
 // Create modal filters never allow both release/snapshot toggles to be off.
 createFilterReleases.onclick = () => {
   createIncludeReleases = !createIncludeReleases;
@@ -9851,6 +13093,19 @@ createSourceCurseForge.onclick = () => setCreateSource("curseforge");
 createSourceTechnic.onclick = () => setCreateSource("technic");
 createSourceATLauncher.onclick = () => setCreateSource("atlauncher");
 createSourceFTB.onclick = () => setCreateSource("ftb");
+createEntryCustom.onclick = () => {
+  setCreateSource("custom");
+  setCreateFlowStage("details");
+};
+createEntryModpack.onclick = () => {
+  setCreateSource("modrinth");
+  setCreateFlowStage("details");
+};
+createEntryImport.onclick = () => {
+  setCreateSource("import");
+  setCreateFlowStage("details");
+};
+btnCreateFlowBack.onclick = () => setCreateFlowStage("select");
 btnModrinthSearch.onclick = () =>
   guarded(async () => {
     await runModrinthSearch();
@@ -9901,6 +13156,9 @@ btnCreateImportNow.onclick = () =>
         update?.("Preparing loader/runtime...");
         await ensureFabricApiForFabricInstance(res.instance.id, res.instance.mcVersion, res.instance.loader as LoaderKind);
       }
+      if (res.instance?.id) {
+        await backend.instancesUpdate(res.instance.id, buildInstanceOriginPatch("imported", "archive", "Imported archive"));
+      }
       if (selectedCreateIconPath && res.instance?.id) {
         update?.("Applying icon...");
         try {
@@ -9934,6 +13192,14 @@ btnProviderImportArchive.onclick = () =>
     });
     if (!res.ok || res.canceled) return;
     if (res.result?.instance?.id) {
+      await backend.instancesUpdate(
+        res.result.instance.id,
+        buildInstanceOriginPatch(
+          provider === "auto" ? "imported" : "modpack",
+          provider === "auto" ? "archive" : provider,
+          provider === "auto" ? "Imported archive" : titleCaseWords(provider)
+        )
+      );
       // Prefer user-selected icon override; fallback to provider icon/fallback badge.
       if (selectedCreateIconPath) {
         try {
@@ -9988,6 +13254,12 @@ async function importSelectedExternalProfile(source: "modrinth" | "curseforge") 
         update?.("Preparing loader/runtime...");
         await ensureFabricApiForFabricInstance(res.instance.id, res.instance.mcVersion, res.instance.loader as LoaderKind);
       }
+      if (res.instance?.id) {
+        await backend.instancesUpdate(
+          res.instance.id,
+          buildInstanceOriginPatch("imported", source, source === "modrinth" ? "Modrinth profile" : "CurseForge profile")
+        );
+      }
       if (selectedCreateIconPath && res.instance?.id) {
         update?.("Applying icon...");
         try {
@@ -10038,7 +13310,13 @@ btnImportInstanceArchiveIntoCurrent.onclick = () =>
       if (!res.ok || res.canceled) return;
       update?.("Refreshing current instance...");
       await refreshEditedInstanceWorkspace("installed");
-      appendLog(`[instance-import] Merged "${res.instance?.name ?? "instance export"}" into current instance.`);
+      if (res.importKind === "pack") {
+        appendLog(
+          `[pack-import] Applied ${res.detectedFormat ?? "archive"} archive into "${res.instance?.name ?? "instance"}".`
+        );
+      } else {
+        appendLog(`[instance-import] Merged "${res.instance?.name ?? "instance export"}" into current instance.`);
+      }
       if (res.lockfileApplied) {
         appendLog(
           `[lockfile] Applied during merge: ${res.lockfileResult?.appliedMods ?? 0} mods, ${res.lockfileResult?.appliedPacks ?? 0} packs.`
@@ -10133,7 +13411,10 @@ instanceIconPreviewFrame.onwheel = (ev: WheelEvent) => {
   renderIconTransformUi();
 };
 
-btnCreate.onclick = async () => {
+async function openCreateInstanceModal(
+  initialSource: "custom" | "import" | "modrinth" | "curseforge" | "technic" | "atlauncher" | "ftb" = "custom",
+  initialStage: CreateFlowStage = "select"
+) {
   modalMode = "create";
   editInstanceId = null;
   editServerId = null;
@@ -10173,30 +13454,18 @@ btnCreate.onclick = async () => {
 
   await fillInstanceAccountDropdown(null);
   await renderServerEntries(null);
+  setCreateSource(initialSource);
   openModal();
+  setCreateFlowStage(initialStage);
+}
+
+btnCreate.onclick = async () => {
+  await openCreateInstanceModal("custom", "select");
 };
 
 btnImport.onclick = () =>
   guarded(async () => {
-    await withGlobalActionProgress("Importing modpack", "Selecting archive...", async (update) => {
-      const res = await backend.instancesImport();
-      if (!res.ok || res.canceled) return;
-      update?.("Refreshing library...");
-      state.instances = await backend.instancesList();
-      await renderInstances();
-      appendLog(`[instance] Imported "${res.instance?.name ?? "instance"}"`);
-      if (res.lockfileApplied) {
-        appendLog(
-          `[lockfile] Applied during import: ${res.lockfileResult?.appliedMods ?? 0} mods, ${res.lockfileResult?.appliedPacks ?? 0} packs.`
-        );
-        if (res.lockfileResult?.issues?.length) {
-          appendLog(`[lockfile] Apply issues: ${res.lockfileResult.issues.join(" | ")}`);
-        }
-        if (res.lockfileResult?.drift && !res.lockfileResult.drift.clean) {
-          appendLog(`[lockfile] Drift after import: ${res.lockfileResult.drift.issues.map((x) => `${x.id}: ${x.message}`).join(" | ")}`);
-        }
-      }
-    });
+    await openCreateInstanceModal("import", "details");
   });
 
 btnQuickLaunchLatestVanilla.onclick = () =>
@@ -10218,6 +13487,9 @@ modalCreate.onclick = () =>
           if (res.instance?.id && res.instance?.mcVersion && res.instance?.loader) {
             update?.("Preparing loader/runtime...");
             await ensureFabricApiForFabricInstance(res.instance.id, res.instance.mcVersion, res.instance.loader as LoaderKind);
+          }
+          if (res.instance?.id) {
+            await backend.instancesUpdate(res.instance.id, buildInstanceOriginPatch("imported", "archive", "Imported archive"));
           }
           if (selectedCreateIconPath && res.instance?.id) {
             update?.("Applying icon...");
@@ -10277,6 +13549,10 @@ modalCreate.onclick = () =>
                 );
               }
               if (installed?.instance?.id) {
+                await backend.instancesUpdate(
+                  installed.instance.id,
+                  buildInstanceOriginPatch("modpack", createSource, titleCaseWords(createSource))
+                );
                 update("Applying icon");
                 if (selectedCreateIconPath) {
                   try {
@@ -10329,6 +13605,7 @@ modalCreate.onclick = () =>
               await ensureFabricApiForFabricInstance(res.instance.id, res.instance.mcVersion, res.instance.loader as LoaderKind);
             }
             if (res.instance?.id) {
+              await backend.instancesUpdate(res.instance.id, buildInstanceOriginPatch("modpack", "modrinth", "Modrinth"));
               update("Applying icon");
               if (selectedCreateIconPath) {
                 try {
@@ -10402,6 +13679,7 @@ modalCreate.onclick = () =>
               });
               if (created.instance?.id) {
                 await backend.instancesUpdate(created.instance.id, {
+                  ...buildInstanceOriginPatch("custom", "fishbattery", "Fishbattery preset"),
                   accountId: instanceAccount.value || null,
                   memoryMb: Number(newMem.value || 4096),
                   instancePreset: selectedPreset,
@@ -10458,7 +13736,8 @@ modalCreate.onclick = () =>
           memoryMb: Number(newMem.value || 4096),
           accountId: instanceAccount.value || null,
           instancePreset: selectedPreset,
-          syncEnabled: modalInstanceSyncEnabled
+          syncEnabled: modalInstanceSyncEnabled,
+          ...buildInstanceOriginPatch("custom", "fishbattery", "Fishbattery")
         };
 
         if (loader !== "vanilla") {
@@ -10618,53 +13897,34 @@ btnJoinPreferred?.addEventListener("click", () =>
       return;
     }
 
-    if (state.instances?.activeInstanceId !== target.instance.id) {
-      await backend.instancesSetActive(target.instance.id);
-      state.instances = await backend.instancesList();
-      await renderInstances();
-    }
-
     await launchForInstance(target.instance, String(target.server.address || "").trim());
   })
 );
 
 btnClearLogs.onclick = () => {
-  logsEl.textContent = "";
   launchLogBuffer = [];
   renderLaunchDiagnosis(null);
   setStatus("");
-};
-btnToggleDebugLogs.onclick = () => {
-  debugLogsVisible = !debugLogsVisible;
-  renderDebugLogsVisibility();
+  renderSessionLogs();
 };
 btnAnalyzeLogs.onclick = () =>
   guarded(async () => {
-    const active = state.instances?.activeInstanceId ?? null;
-    await runLaunchDiagnosis(active);
+    const targetInstanceId = getPreferredInstanceId();
+    await runLaunchDiagnosis(targetInstanceId);
   });
 
 btnApplyDiagnosisFix.onclick = () =>
   guarded(async () => {
-    const active = state.instances?.activeInstanceId ?? null;
+    const active = getPreferredInstanceId();
     if (!active || !latestDiagnosis?.fixAction || latestDiagnosis.fixAction === "none") return;
     const result = await backend.launchApplyFix(active, latestDiagnosis.fixAction);
     appendLog(`[diagnostics] ${result.message}`);
     await runLaunchDiagnosis(active);
   });
 
-btnToggleDiagnosisDetails.onclick = () => {
-  diagnosisDetailsOpen = !diagnosisDetailsOpen;
-  if (!latestDiagnosis) {
-    launchDiagnosisDetails.style.display = "none";
-    return;
-  }
-  renderLaunchDiagnosis(latestDiagnosis);
-};
-
 btnCopyDiagnosisReport.onclick = () =>
   guarded(async () => {
-    const active = state.instances?.activeInstanceId ?? null;
+    const active = getPreferredInstanceId();
     const diag = latestDiagnosis;
     const lines = launchLogBuffer.slice(-120);
     const report = [
@@ -10876,7 +14136,7 @@ modalUploadLocalMod.onclick = () => guarded(async () => pickAndAdd("mods"));
 modalOpenInstanceFolder.onclick = () =>
   guarded(async () => {
     if (!editInstanceId) return;
-    await backend.instancesOpenFolder(editInstanceId);
+    await backend.instancesOpenSubfolder(editInstanceId, "mods");
   });
 
 btnUploadResourcepack.onclick = () => guarded(async () => pickAndAdd("resourcepacks"));
@@ -10885,18 +14145,18 @@ btnUploadShaderpack.onclick = () => guarded(async () => pickAndAdd("shaderpacks"
 btnOpenInstanceFolder2.onclick = () =>
   guarded(async () => {
     if (!editInstanceId) return;
-    await backend.instancesOpenFolder(editInstanceId);
+    await backend.instancesOpenSubfolder(editInstanceId, "resourcepacks");
   });
 
 btnOpenInstanceFolder3.onclick = () =>
   guarded(async () => {
     if (!editInstanceId) return;
-    await backend.instancesOpenFolder(editInstanceId);
+    await backend.instancesOpenSubfolder(editInstanceId, "shaderpacks");
   });
 
 backend.onLaunchLog((line) => {
   appendLog(line);
-  const active = state.instances?.activeInstanceId ?? null;
+  const active = getLaunchContextInstanceId();
   const lower = String(line || "").toLowerCase();
   const detectedPort = parsePlayitLanPortFromLog(line);
   if (detectedPort > 0) {
@@ -10976,6 +14236,22 @@ document.addEventListener("click", (e) => {
   if (accountDropdown.contains(t)) return;
   if (accountBtn.contains(t)) return;
   accountDropdown.classList.remove("open");
+});
+
+document.addEventListener("click", (e) => {
+  const t = e.target as HTMLElement;
+  if (!t) return;
+  if (!instanceUploadFilesDropdown.classList.contains("open")) return;
+  if (instanceUploadMenu.contains(t)) return;
+  setInstanceUploadMenuOpen(false);
+});
+
+document.addEventListener("click", (e) => {
+  const t = e.target as HTMLElement;
+  if (!t) return;
+  if (!activeInstanceContentMenu || !activeInstanceContentMenuButton) return;
+  if (activeInstanceContentMenu.contains(t) || activeInstanceContentMenuButton.contains(t)) return;
+  setActiveInstanceContentMenu(null, null, false);
 });
 
 winBtnMin.onclick = () => {
@@ -11142,11 +14418,17 @@ window.addEventListener("unhandledrejection", (event) => {
   forceRevealStartupShell(`Unhandled rejection: ${message}`);
 });
 
-applySettingsToDom(getSettings());
+const initialSettings = getSettings();
+applySettingsToDom(initialSettings);
+applyUiPreferencesFromSettings(initialSettings);
+void applyNativeWindowSettings(initialSettings);
 setSettingsTab("general");
 renderModalInstanceSyncToggle();
 renderIconTransformUi();
 setIconPreviewSource(null);
+setLibrarySurface("library");
+setView("home");
+setInstanceTab("content");
 renderDebugLogsVisibility();
 void bootLauncher();
 ensureRunningStatusPoll();

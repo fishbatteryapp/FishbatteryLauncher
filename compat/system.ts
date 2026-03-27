@@ -40,6 +40,8 @@ const phase1Commands: Record<string, (...args: unknown[]) => Promise<unknown>> =
     invoke("window_drag_move", { cursorX, cursorY, anchorRatio }),
   windowDragEnd: (cursorY: number) => invoke("window_drag_end", { cursorY }),
   windowToggleFullscreen: () => invoke("window_toggle_fullscreen"),
+  windowSetFullscreen: (enabled: boolean) => invoke("window_set_fullscreen", { enabled }),
+  windowSetSize: (width: number, height: number) => invoke("window_set_size", { width, height }),
   windowClose: () => invoke("window_close"),
   windowShow: () => invoke("window_show"),
   windowSetTitleBarTheme: (color: string, symbolColor: string) =>
@@ -89,11 +91,11 @@ const phase4Commands: Record<string, (...args: unknown[]) => Promise<unknown>> =
   modsFixDuplicates: (instanceId: string) => invoke("mods_fix_duplicates", { instanceId }),
   instancesList: () => invoke("instances_list"),
   instancesCreate: (cfg: unknown) => invoke("instances_create", { cfg }),
-  instancesSetActive: (id: string | null) => invoke("instances_set_active", { id }),
   instancesUpdate: (id: string, patch: unknown) => invoke("instances_update", { id, patch }),
   instancesRemove: (id: string) => invoke("instances_remove", { id }),
   instancesDuplicate: (id: string) => invoke("instances_duplicate", { id }),
   instancesOpenFolder: (id: string) => invoke("instances_open_folder", { id }),
+  instanceWorldsList: (instanceId: string) => invoke("instance_worlds_list", { instanceId }),
   instancesExport: (id: string) => invoke("instances_export", { id }),
   instancesImport: () => invoke("instances_import"),
   externalProfilesList: (source: "modrinth" | "curseforge") => invoke("external_profiles_list", { source }),
@@ -113,10 +115,19 @@ const phase4Commands: Record<string, (...args: unknown[]) => Promise<unknown>> =
   instancesGetIcon: (instanceId: string) => invoke("instances_get_icon", { instanceId }),
   instancesClearIcon: (instanceId: string) => invoke("instances_clear_icon", { instanceId }),
   contentPickFiles: (kind: "mods" | "resourcepacks" | "shaderpacks") => invoke("content_pick_files", { kind }),
+  instancesOpenSubfolder: (
+    id: string,
+    folder: "root" | "instance" | "mods" | "resourcepacks" | "shaderpacks" | "saves" | "worlds"
+  ) => invoke("instances_open_subfolder", { id, folder }),
+  instanceWorldOpenFolder: (instanceId: string, worldId: string) =>
+    invoke("instance_world_open_folder", { instanceId, worldId }),
   contentAdd: (instanceId: string, kind: "mods" | "resourcepacks" | "shaderpacks", filePaths: string[]) =>
     invoke("content_add", { instanceId, kind, filePaths }),
   contentList: (instanceId: string, kind: "mods" | "resourcepacks" | "shaderpacks") =>
     invoke("content_list", { instanceId, kind }),
+  contentCheckUpdates: (instanceId: string) => invoke("instance_content_check_updates", { instanceId }),
+  contentRevealFile: (instanceId: string, kind: "mods" | "resourcepacks" | "shaderpacks", name: string) =>
+    invoke("content_reveal_file", { instanceId, kind, name }),
   localModsMetadata: (instanceId: string, names: string[]) =>
     invoke("local_mods_metadata", { instanceId, names }),
   localPacksMetadata: (instanceId: string, kind: "resourcepacks" | "shaderpacks", names: string[]) =>
@@ -136,6 +147,8 @@ const phase4Commands: Record<string, (...args: unknown[]) => Promise<unknown>> =
   serversRemove: (instanceId: string, serverId: string) => invoke("servers_remove", { instanceId, serverId }),
   serversSetPreferred: (instanceId: string, serverId: string | null) =>
     invoke("servers_set_preferred", { instanceId, serverId }),
+  serversRefreshStatus: (instanceId: string, force?: boolean) =>
+    invoke("servers_refresh_status", { instanceId, force }),
   serversExportProfile: (instanceId: string, serverId: string) =>
     invoke("servers_export_profile", { instanceId, serverId }),
   serversImportProfile: (instanceId: string) => invoke("servers_import_profile", { instanceId }),
@@ -145,17 +158,34 @@ const phase4Commands: Record<string, (...args: unknown[]) => Promise<unknown>> =
     query: string,
     mcVersion?: string,
     loader?: "vanilla" | "fabric" | "quilt" | "forge" | "neoforge",
-    limit?: number
-  ) => invoke("modrinth_mods_search", { instanceId, query, mcVersion, loader, limit }),
+    limit?: number,
+    offset?: number,
+    index?: "relevance" | "downloads" | "updated" | "name",
+    category?: string
+  ) => invoke("modrinth_mods_search", { instanceId, query, mcVersion, loader, limit, offset, index, category }),
   modrinthModsInstall: (instanceId: string, projectId: string, versionId?: string) =>
     invoke("modrinth_mods_install", { instanceId, projectId, versionId }),
+  curseforgeModsSearch: (
+    instanceId: string,
+    query: string,
+    mcVersion?: string,
+    loader?: "vanilla" | "fabric" | "quilt" | "forge" | "neoforge",
+    limit?: number,
+    offset?: number,
+    category?: string
+  ) => invoke("curseforge_mods_search", { instanceId, query, mcVersion, loader, limit, offset, category }),
+  curseforgeModsInstall: (instanceId: string, projectId: string, fileId?: string) =>
+    invoke("curseforge_mods_install", { instanceId, projectId, fileId }),
   modrinthContentSearch: (
     instanceId: string,
     kind: "resourcepack" | "shaderpack",
     query: string,
     mcVersion?: string,
-    limit?: number
-  ) => invoke("modrinth_content_search", { instanceId, kind, query, mcVersion, limit }),
+    limit?: number,
+    offset?: number,
+    index?: "relevance" | "downloads" | "updated" | "name",
+    category?: string
+  ) => invoke("modrinth_content_search", { instanceId, kind, query, mcVersion, limit, offset, index, category }),
   modrinthContentInstall: (
     instanceId: string,
     kind: "resourcepack" | "shaderpack",
