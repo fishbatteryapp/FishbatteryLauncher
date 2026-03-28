@@ -992,35 +992,35 @@ body{
 
 .homePanelRoot{
   display: grid;
-  gap: 18px;
+  gap: 14px;
 }
 
 .homeHero{
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 18px;
-  align-items: end;
-  padding: 20px 22px;
+  gap: 14px;
+  align-items: center;
+  padding: 16px 18px;
   border: 1px solid rgba(255,255,255,.08);
-  border-radius: 24px;
+  border-radius: 20px;
   background:
-    radial-gradient(600px 220px at 0% 0%, rgba(var(--accent-rgb), .12), transparent 58%),
+    radial-gradient(520px 180px at 0% 0%, rgba(var(--accent-rgb), .10), transparent 58%),
     linear-gradient(180deg, rgba(255,255,255,.035), rgba(255,255,255,.015)),
     rgba(8, 18, 27, .92);
 }
 
 .homeHeroCopy h1{
-  margin: 6px 0 0;
-  font-size: 34px;
+  margin: 4px 0 0;
+  font-size: 30px;
   line-height: 1.02;
   letter-spacing: -.03em;
 }
 
 .homeHeroCopy p{
-  margin: 10px 0 0;
-  max-width: 760px;
+  margin: 8px 0 0;
+  max-width: 620px;
   color: var(--muted);
-  font-size: 14px;
+  font-size: 13px;
 }
 
 .homeEyebrow{
@@ -1032,33 +1032,39 @@ body{
 
 .homeHeroActions{
   display: flex;
-  gap: 10px;
+  gap: 8px;
   flex-wrap: wrap;
   justify-content: flex-end;
 }
 
+.homeHeroActionBtn,
+.homeSectionActionBtn{
+  padding: 8px 11px;
+  font-size: 13px;
+}
+
 .homeLoading,
 .homeEmpty{
-  padding: 16px 18px;
+  padding: 14px 16px;
   border: 1px dashed rgba(255,255,255,.09);
-  border-radius: 18px;
+  border-radius: 16px;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 12px;
   background: rgba(255,255,255,.02);
 }
 
 .homeSectionGrid{
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
+  gap: 12px;
 }
 
 .homeSection{
   display: grid;
-  gap: 14px;
-  padding: 18px;
+  gap: 10px;
+  padding: 14px;
   border: 1px solid rgba(255,255,255,.08);
-  border-radius: 22px;
+  border-radius: 18px;
   background:
     linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.015)),
     rgba(9, 17, 26, .92);
@@ -1070,21 +1076,21 @@ body{
 
 .homeSectionHeader{
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 10px;
 }
 
 .homeSectionTitle{
   margin: 0;
-  font-size: 20px;
+  font-size: 18px;
   letter-spacing: -.02em;
 }
 
 .homeSectionSub{
-  margin-top: 4px;
+  margin-top: 2px;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .homeSectionBody{
@@ -1097,15 +1103,16 @@ body{
 .homeStyleGrid,
 .homeDiscoverGrid{
   display: grid;
-  gap: 12px;
+  gap: 10px;
+  justify-content: start;
 }
 
 .homeInstanceList{
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(240px, 340px));
 }
 
 .homeRecentList{
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(260px, 420px));
 }
 
 .homeInstanceCard,
@@ -1128,22 +1135,22 @@ body{
 .homeRecentCard{
   display: grid;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
 }
 
 .homeInstanceCard{
-  grid-template-columns: 58px minmax(0, 1fr) auto;
-  padding: 14px;
+  grid-template-columns: 52px minmax(0, 1fr) auto;
+  padding: 12px;
 }
 
 .homeCompactRow{
   grid-template-columns: 44px minmax(0, 1fr) auto;
-  padding: 12px;
+  padding: 11px;
 }
 
 .homeRecentCard{
-  grid-template-columns: 44px minmax(0, 1fr) auto;
-  padding: 14px;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
+  padding: 12px;
 }
 
 .homeInstanceCard:hover,
@@ -1165,13 +1172,13 @@ body{
 }
 
 .homeInstanceCardIcon{
-  width: 58px;
-  height: 58px;
+  width: 52px;
+  height: 52px;
 }
 
 .homeCompactThumb{
-  width: 44px;
-  height: 44px;
+  width: 40px;
+  height: 40px;
 }
 
 .homeCompactThumb img,
@@ -1194,13 +1201,13 @@ body{
 .homeCompactMeta strong,
 .homeStyleTile strong,
 .homeDiscoverCard strong{
-  font-size: 16px;
+  font-size: 15px;
   line-height: 1.15;
 }
 
 .homeCardSub{
   color: var(--muted);
-  font-size: 12px;
+  font-size: 11px;
   line-height: 1.35;
 }
 
@@ -1251,29 +1258,29 @@ body{
 }
 
 .homeDiscoverGrid{
-  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
 }
 
 .homeDiscoverCard{
   display: grid;
-  gap: 10px;
-  padding: 12px;
+  gap: 8px;
+  padding: 10px;
 }
 
 .homeDiscoverArt{
-  aspect-ratio: 16 / 9;
+  aspect-ratio: 16 / 8.25;
 }
 
 .homeDiscoverDesc{
   display: -webkit-box;
-  -webkit-line-clamp: 3;
+  -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
 
 .homeDiscoverAction{
   color: var(--accent);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
 }
 
@@ -4310,6 +4317,22 @@ select optgroup {
   color: rgba(231, 242, 249, .88);
   font-size: 15px;
   font-weight: 700;
+}
+
+.instanceThumbAssetIcon{
+  width: 24px;
+  height: 24px;
+  display: inline-block;
+  background: currentColor;
+  opacity: .94;
+  -webkit-mask-image: var(--thumb-icon-url);
+  mask-image: var(--thumb-icon-url);
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  mask-size: contain;
 }
 
 .instanceWorldThumbSingle{

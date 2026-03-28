@@ -210,10 +210,23 @@ function setButtonAssetIcon(btn: HTMLButtonElement | null, src: string) {
   `;
 }
 
+type ActionButtonIconKey = keyof typeof ICON_ASSETS | "join";
+
+function setActionButtonIconKey(btn: HTMLButtonElement | null, iconKey: ActionButtonIconKey) {
+  if (!btn) return;
+  btn.dataset.iconKey = iconKey;
+}
+
 function setIconButtonAsset(btn: HTMLButtonElement | null, src: string, label = "") {
   if (!btn) return;
   if (label) btn.setAttribute("aria-label", label);
   btn.innerHTML = `<span class="btnIcon btnIconMask" style="--btn-icon-url:url('${src}')"></span>`;
+}
+
+function setThumbAssetIcon(target: HTMLElement | null, src: string, label = "") {
+  if (!target) return;
+  if (label) target.setAttribute("aria-label", label);
+  target.innerHTML = `<span class="instanceThumbAssetIcon" style="--thumb-icon-url:url('${src}')"></span>`;
 }
 
 const TRASH_ICON_PATH =
@@ -229,6 +242,7 @@ const ICON_ASSETS = {
   forward: "/Icons/forward-icon.svg",
   browse: "/Icons/discover-icon.svg",
   capes: "/Icons/closet-icon.svg",
+  cloudSync: "/Icons/cloud-sync-icon.svg",
   download: "/Icons/download-icon.svg",
   dotsVertical: "/Icons/vertical-dots-icon.svg",
   folder: "/Icons/folder-icon.svg",
@@ -239,6 +253,7 @@ const ICON_ASSETS = {
   multiplayer: "/Icons/multiplayer-icon.svg",
   play: "/Icons/play-icon.svg",
   plus: "/Icons/plus-icon.svg",
+  preferred: "/Icons/preferred-icon.svg",
   refresh: "/Icons/refresh-icon.svg",
   signOut: "/Icons/sign-out-icon.svg",
   stop: "/Icons/stop-icon.svg",
@@ -246,10 +261,16 @@ const ICON_ASSETS = {
   upload: "/Icons/upload-icon.svg",
   warning: "/Icons/warning-icon.svg",
   copy: "/Icons/copy-icon.svg",
+  discord: "/Icons/discord-icon.svg",
   web: "/Icons/web-icon.svg"
 } as const;
 
 function applyActionButtonIcons() {
+  const setDynamicButtonIcon = (id: string, iconKey: ActionButtonIconKey) => {
+    const btn = document.getElementById(id) as HTMLButtonElement | null;
+    if (!btn) return;
+    setActionButtonIconKey(btn, iconKey);
+  };
   setButtonAssetIcon(btnQuickLaunchLatestVanilla as HTMLButtonElement, ICON_ASSETS.play);
   setButtonAssetIcon(navHome as HTMLButtonElement, ICON_ASSETS.home);
   setButtonAssetIcon(btnCreate, ICON_ASSETS.plus);
@@ -275,6 +296,34 @@ function applyActionButtonIcons() {
   setButtonAssetIcon(navCapes as HTMLButtonElement, ICON_ASSETS.capes);
   setButtonAssetIcon(navPlayit as HTMLButtonElement, ICON_ASSETS.multiplayer);
   setButtonAssetIcon(navSettings as HTMLButtonElement, ICON_ASSETS.gear);
+  setDynamicButtonIcon("settingsThemePickBackgroundBtn", "upload");
+  setDynamicButtonIcon("settingsThemeClearBackgroundBtn", "trash");
+  setDynamicButtonIcon("settingsThemeResetBtn", "refresh");
+  setDynamicButtonIcon("settingsInstallCheckUpdatesBtn", "refresh");
+  setDynamicButtonIcon("settingsInstallDownloadUpdateBtn", "download");
+  setDynamicButtonIcon("settingsInstallRestartBtn", "forward");
+  setDynamicButtonIcon("settingsInstallSyncNowBtn", "cloudSync");
+  setDynamicButtonIcon("settingsInstallRunHealthBtn", "warning");
+  setDynamicButtonIcon("settingsInstallExportDiagnosticsBtn", "download");
+  setDynamicButtonIcon("settingsInstallRefreshLockBtn", "refresh");
+  setDynamicButtonIcon("settingsInstallCheckLockBtn", "warning");
+  setDynamicButtonIcon("settingsWindowApplySizeBtn", "forward");
+  setDynamicButtonIcon("settingsProfileShareBtn", "copy");
+  setDynamicButtonIcon("settingsProfileExportImageBtn", "download");
+  setDynamicButtonIcon("settingsProfileDiscordBtn", "discord");
+  setDynamicButtonIcon("settingsPlayitSetupCodeBtn", "web");
+  setDynamicButtonIcon("settingsPlayitManageBtn", "web");
+  document.querySelectorAll("button[data-icon-key]").forEach((node) => {
+    const btn = node as HTMLButtonElement;
+    const iconKey = String(btn.dataset.iconKey || "") as ActionButtonIconKey;
+    if (!iconKey) return;
+    if (iconKey === "join") {
+      setButtonIcon(btn, JOIN_BUTTON_ICON_PATH);
+      return;
+    }
+    const iconSrc = ICON_ASSETS[iconKey as keyof typeof ICON_ASSETS];
+    if (iconSrc) setButtonAssetIcon(btn, iconSrc);
+  });
 }
 applyActionButtonIcons();
 
@@ -5218,7 +5267,7 @@ function createHomeSection(
 
   if (action) {
     const btn = document.createElement("button");
-    btn.className = "btn";
+    btn.className = "btn homeSectionActionBtn";
     btn.type = "button";
     btn.textContent = action.label;
     btn.onclick = action.onClick;
@@ -5569,19 +5618,19 @@ async function renderHomeView(force = false) {
   const heroActions = document.createElement("div");
   heroActions.className = "homeHeroActions";
   const heroPlay = document.createElement("button");
-  heroPlay.className = "btn btnPrimary";
+  heroPlay.className = "btn btnPrimary homeHeroActionBtn";
   heroPlay.type = "button";
   heroPlay.textContent = "Play latest version";
   setButtonAssetIcon(heroPlay, ICON_ASSETS.play);
   heroPlay.onclick = () => btnQuickLaunchLatestVanilla.click();
   const heroCreate = document.createElement("button");
-  heroCreate.className = "btn";
+  heroCreate.className = "btn homeHeroActionBtn";
   heroCreate.type = "button";
   heroCreate.textContent = "Create instance";
   setButtonAssetIcon(heroCreate, ICON_ASSETS.plus);
   heroCreate.onclick = () => btnCreate.click();
   const heroImport = document.createElement("button");
-  heroImport.className = "btn";
+  heroImport.className = "btn homeHeroActionBtn";
   heroImport.type = "button";
   heroImport.textContent = "Import modpack";
   setButtonAssetIcon(heroImport, ICON_ASSETS.download);
@@ -5705,7 +5754,11 @@ async function renderHomeView(force = false) {
         img.alt = `${item.server?.name || item.server?.address || "Server"} icon`;
         thumb.appendChild(img);
       } else {
-        renderInstanceIconInto(thumb, item.instance, data.instanceIcons.get(String(item.instance?.id || "")) || null);
+        setThumbAssetIcon(
+          thumb,
+          item.kind === "server" ? ICON_ASSETS.multiplayer : ICON_ASSETS.folder,
+          item.kind === "server" ? "Server" : "World"
+        );
       }
 
       const meta = document.createElement("div");
@@ -5797,7 +5850,11 @@ async function renderHomeView(force = false) {
         img.alt = `${item.cloudWorld?.worldName || "World"} icon`;
         thumb.appendChild(img);
       } else {
-        renderInstanceIconInto(thumb, item.instance, data.instanceIcons.get(String(item.instance?.id || "")) || null);
+        setThumbAssetIcon(
+          thumb,
+          item.localWorld ? ICON_ASSETS.folder : ICON_ASSETS.cloudSync,
+          item.localWorld ? "World" : "Cloud world"
+        );
       }
 
       const meta = document.createElement("div");
@@ -7996,6 +8053,7 @@ function renderSettingsPanels() {
     wrap.style.justifyContent = "flex-end";
 
     const pick = document.createElement("button");
+    pick.id = "settingsThemePickBackgroundBtn";
     pick.className = "btn";
     pick.textContent = s.customBackgroundDataUrl ? "Replace image" : "Choose image";
     pick.onclick = () =>
@@ -8006,6 +8064,7 @@ function renderSettingsPanels() {
       });
 
     const clear = document.createElement("button");
+    clear.id = "settingsThemeClearBackgroundBtn";
     clear.className = "btn";
     clear.textContent = "Clear";
     clear.disabled = !s.customBackgroundDataUrl;
@@ -8020,6 +8079,7 @@ function renderSettingsPanels() {
   {
     const { row } = makeRow("Reset theme", "Restore theme settings to defaults.");
     const btn = document.createElement("button");
+    btn.id = "settingsThemeResetBtn";
     btn.className = "btn";
     btn.textContent = "Reset to defaults";
     btn.onclick = () =>
@@ -8275,6 +8335,7 @@ function renderSettingsPanels() {
     actions.style.gap = "8px";
 
     const btnCheck = document.createElement("button");
+    btnCheck.id = "settingsInstallCheckUpdatesBtn";
     btnCheck.className = "btn";
     btnCheck.textContent = "Check for updates";
     btnCheck.disabled = updaterState.status === "checking" || updaterState.status === "downloading";
@@ -8285,6 +8346,7 @@ function renderSettingsPanels() {
       });
 
     const btnDownload = document.createElement("button");
+    btnDownload.id = "settingsInstallDownloadUpdateBtn";
     btnDownload.className = "btn";
     btnDownload.textContent =
       updaterState.status === "downloading" ? "Downloading..." : "Download update";
@@ -8301,6 +8363,7 @@ function renderSettingsPanels() {
       });
 
     const btnInstall = document.createElement("button");
+    btnInstall.id = "settingsInstallRestartBtn";
     btnInstall.className = "btn btnPrimary";
     btnInstall.textContent = "Restart and install";
     btnInstall.disabled = updaterState.status !== "downloaded";
@@ -8318,6 +8381,7 @@ function renderSettingsPanels() {
     actions.appendChild(btnDownload);
     actions.appendChild(btnInstall);
     const btnSyncNow = document.createElement("button");
+    btnSyncNow.id = "settingsInstallSyncNowBtn";
     btnSyncNow.className = "btn";
     btnSyncNow.textContent = "Sync now";
     btnSyncNow.disabled = !s.cloudSyncEnabled || !state.launcherAccount?.activeAccountId;
@@ -8360,6 +8424,7 @@ function renderSettingsPanels() {
     preActions.style.justifyContent = "flex-end";
 
     const btnRunPreflight = document.createElement("button");
+    btnRunPreflight.id = "settingsInstallRunHealthBtn";
     btnRunPreflight.className = "btn";
     btnRunPreflight.textContent = "Run health check";
     btnRunPreflight.onclick = () =>
@@ -8413,6 +8478,7 @@ function renderSettingsPanels() {
     diagWrap.style.marginTop = "10px";
 
     const btnDiagnostics = document.createElement("button");
+    btnDiagnostics.id = "settingsInstallExportDiagnosticsBtn";
     btnDiagnostics.className = "btn";
     btnDiagnostics.textContent = "Export diagnostics";
     btnDiagnostics.onclick = () =>
@@ -8433,6 +8499,7 @@ function renderSettingsPanels() {
     lockWrap.style.marginTop = "8px";
 
     const btnGenLock = document.createElement("button");
+    btnGenLock.id = "settingsInstallRefreshLockBtn";
     btnGenLock.className = "btn";
     btnGenLock.textContent = "Refresh lockfile";
     btnGenLock.disabled = !currentInstance;
@@ -8450,6 +8517,7 @@ function renderSettingsPanels() {
       });
 
     const btnCheckLock = document.createElement("button");
+    btnCheckLock.id = "settingsInstallCheckLockBtn";
     btnCheckLock.className = "btn";
     btnCheckLock.textContent = "Check lock drift";
     btnCheckLock.disabled = !currentInstance;
@@ -8542,6 +8610,7 @@ function renderSettingsPanels() {
     };
 
     const applyBtn = document.createElement("button");
+    applyBtn.id = "settingsWindowApplySizeBtn";
     applyBtn.className = "btn";
     applyBtn.textContent = "Apply";
     applyBtn.onclick = () => void applyWindowSize();
@@ -8603,6 +8672,7 @@ function renderSettingsPanels() {
     panelEl.style.display = isActive ? "" : "none";
     panelEl.classList.toggle("setPanelActive", isActive);
   }
+  applyActionButtonIcons();
 }
 
 // Render profile settings panel.
@@ -8704,6 +8774,7 @@ async function renderProfileSettingsPanel() {
     shareRow.style.marginTop = "10px";
 
     const btnShare = document.createElement("button");
+    btnShare.id = "settingsProfileShareBtn";
     btnShare.className = "btn btnPrimary";
     btnShare.textContent = "Share Profile";
     btnShare.onclick = async () => {
@@ -8765,6 +8836,7 @@ async function renderProfileSettingsPanel() {
     };
 
     const btnExport = document.createElement("button");
+    btnExport.id = "settingsProfileExportImageBtn";
     btnExport.className = "btn";
     btnExport.textContent = "Export Image";
     btnExport.onclick = () => {
@@ -8782,6 +8854,7 @@ async function renderProfileSettingsPanel() {
     };
 
     const btnDiscord = document.createElement("button");
+    btnDiscord.id = "settingsProfileDiscordBtn";
     btnDiscord.className = "btn";
     btnDiscord.textContent = "Join Discord";
     btnDiscord.onclick = () => {
@@ -8849,6 +8922,7 @@ async function renderProfileSettingsPanel() {
     failed.textContent = `Profile summary failed to load: ${String(err?.message ?? err)}`;
     settingsPanelProfile.appendChild(failed);
   }
+  applyActionButtonIcons();
 }
 
 // Set settings tab.
@@ -8946,16 +9020,20 @@ function renderPlayitPanel() {
   linkActions.style.flexWrap = "wrap";
 
   const btnGetSetupCode = document.createElement("button");
+  btnGetSetupCode.id = "settingsPlayitSetupCodeBtn";
   btnGetSetupCode.className = "btn";
   btnGetSetupCode.textContent = "Get setup code";
+  setActionButtonIconKey(btnGetSetupCode, "web");
   btnGetSetupCode.onclick = () =>
     guarded(async () => {
       await openPlayitUrl("https://playit.gg/l/setup-third-party", "Playit setup page");
     });
 
   const btnOpenPlayitAccount = document.createElement("button");
+  btnOpenPlayitAccount.id = "settingsPlayitManageBtn";
   btnOpenPlayitAccount.className = "btn";
   btnOpenPlayitAccount.textContent = "Manage Playit account";
+  setActionButtonIconKey(btnOpenPlayitAccount, "web");
   btnOpenPlayitAccount.onclick = () =>
     guarded(async () => {
       await openPlayitUrl("https://playit.gg/account/agents", "Playit account page");
@@ -9125,6 +9203,7 @@ function renderPlayitPanel() {
   const btnCreateTunnel = document.createElement("button");
   btnCreateTunnel.className = "btn btnPrimary";
   btnCreateTunnel.textContent = "Create tunnel";
+  setActionButtonIconKey(btnCreateTunnel, "plus");
   btnCreateTunnel.disabled = !playitState.linked || !String(playitTunnelPortDraft || "").trim();
   btnCreateTunnel.onclick = () =>
     guarded(async () => {
@@ -9219,6 +9298,7 @@ function renderPlayitPanel() {
       const btnCopy = document.createElement("button");
       btnCopy.className = "btn";
       btnCopy.textContent = "Copy";
+      setActionButtonIconKey(btnCopy, "copy");
       btnCopy.disabled = !tunnel.joinAddress;
       btnCopy.onclick = () =>
         guarded(async () => {
@@ -9229,6 +9309,7 @@ function renderPlayitPanel() {
       const btnDelete = document.createElement("button");
       btnDelete.className = "btn";
       btnDelete.textContent = "Delete";
+      setActionButtonIconKey(btnDelete, "trash");
       btnDelete.onclick = () =>
         guarded(async () => {
           await backend.playitDeleteTunnel(tunnel.id);
@@ -9249,6 +9330,7 @@ function renderPlayitPanel() {
   }
 
     playitPanelRoot.appendChild(shell);
+    applyActionButtonIcons();
   } catch (err: any) {
     const message = String(err?.message ?? err ?? "Playit panel failed to render.");
     clearPanel(playitPanelRoot);
@@ -10057,7 +10139,7 @@ async function renderInstanceWorldsPage(inst: any) {
     if (world.iconDataUrl) {
       renderInstanceIconInto(thumb, { name: world.name, libraryType: "custom" }, world.iconDataUrl);
     } else {
-      thumb.textContent = "SP";
+      setThumbAssetIcon(thumb, ICON_ASSETS.folder, "Singleplayer world");
     }
 
     const meta = document.createElement("div");
@@ -10085,6 +10167,7 @@ async function renderInstanceWorldsPage(inst: any) {
     const openBtn = document.createElement("button");
     openBtn.className = "btn";
     openBtn.textContent = "Open folder";
+    setActionButtonIconKey(openBtn, "folder");
     openBtn.onclick = () => void backend.instanceWorldOpenFolder(inst.id, String(world.id || world.folderName || ""));
     actions.appendChild(openBtn);
     const syncBtn = document.createElement("button");
@@ -10096,6 +10179,7 @@ async function renderInstanceWorldsPage(inst: any) {
         : cloudItem
           ? "Update cloud sync"
           : "Sync to cloud";
+    setActionButtonIconKey(syncBtn, "cloudSync");
     syncBtn.disabled =
       isSyncing ||
       isRemovingSync ||
@@ -10113,8 +10197,8 @@ async function renderInstanceWorldsPage(inst: any) {
     if (cloudItem) {
       const removeBtn = document.createElement("button");
       removeBtn.className = "btn btnDanger";
-      setButtonAssetIcon(removeBtn, ICON_ASSETS.trash);
       removeBtn.textContent = isRemovingSync ? "Removing..." : "Remove sync";
+      setActionButtonIconKey(removeBtn, "trash");
       removeBtn.disabled = isRemovingSync;
       removeBtn.onclick = () =>
         void guarded(async () => {
@@ -10135,7 +10219,7 @@ async function renderInstanceWorldsPage(inst: any) {
 
     const thumb = document.createElement("div");
     thumb.className = "instanceWorldThumb instanceWorldThumbSingle";
-    thumb.textContent = "CL";
+    setThumbAssetIcon(thumb, ICON_ASSETS.cloudSync, "Cloud-synced world");
 
     const meta = document.createElement("div");
     meta.className = "instanceWorldMeta";
@@ -10158,6 +10242,7 @@ async function renderInstanceWorldsPage(inst: any) {
     const downloadBtn = document.createElement("button");
     downloadBtn.className = "btn btnPrimary";
     downloadBtn.textContent = "Download";
+    setActionButtonIconKey(downloadBtn, "download");
     downloadBtn.disabled = isRemovingSync;
     downloadBtn.onclick = () =>
       void guarded(async () => {
@@ -10167,8 +10252,8 @@ async function renderInstanceWorldsPage(inst: any) {
 
     const removeBtn = document.createElement("button");
     removeBtn.className = "btn btnDanger";
-    setButtonAssetIcon(removeBtn, ICON_ASSETS.trash);
     removeBtn.textContent = isRemovingSync ? "Removing..." : "Remove sync";
+    setActionButtonIconKey(removeBtn, "trash");
     removeBtn.disabled = isRemovingSync;
     removeBtn.onclick = () =>
       void guarded(async () => {
@@ -10192,7 +10277,7 @@ async function renderInstanceWorldsPage(inst: any) {
     if (server.iconDataUrl) {
       renderInstanceIconInto(thumb, { name: server.name || server.address || "Server", libraryType: "modpack" }, server.iconDataUrl);
     } else {
-      thumb.textContent = String(server.name || server.address || "SV").slice(0, 2).toUpperCase();
+      setThumbAssetIcon(thumb, ICON_ASSETS.multiplayer, "Server");
     }
 
     const meta = document.createElement("div");
@@ -10230,12 +10315,13 @@ async function renderInstanceWorldsPage(inst: any) {
     const joinBtn = document.createElement("button");
     joinBtn.className = "btn btnPrimary";
     joinBtn.textContent = "Join";
-    setButtonIcon(joinBtn, JOIN_BUTTON_ICON_PATH);
+    setActionButtonIconKey(joinBtn, "join");
     joinBtn.onclick = () => void guarded(async () => launchForInstance(inst, String(server.address || "").trim()));
 
     const preferBtn = document.createElement("button");
     preferBtn.className = "btn";
     preferBtn.textContent = data.preferredServerId === server.id ? "Preferred" : "Set preferred";
+    setActionButtonIconKey(preferBtn, "preferred");
     preferBtn.onclick = () =>
       void guarded(async () => {
         await backend.serversSetPreferred(inst.id, server.id);
@@ -10246,6 +10332,8 @@ async function renderInstanceWorldsPage(inst: any) {
     row.append(identity, actions);
     instanceWorldsListPage.appendChild(row);
   }
+
+  applyActionButtonIcons();
 
   if (!instanceWorldsListPage.childElementCount) {
     const empty = document.createElement("div");
@@ -11902,6 +11990,9 @@ async function openLauncherAuthDialog(mode: "login" | "register"): Promise<Launc
       btn.className = "btn";
       btn.textContent = label;
       btn.style.width = "100%";
+      if (String(label || "").trim().toLowerCase() === "discord") {
+        setButtonAssetIcon(btn, ICON_ASSETS.discord);
+      }
       if (!enabled) {
         btn.disabled = true;
         btn.style.opacity = "0.6";
