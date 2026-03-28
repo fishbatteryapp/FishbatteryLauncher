@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.7.0 - 2026-03-28
+
+### Added
+- Added a major launcher UI overhaul across Quick Actions, instance pages, worlds, settings, icons, and overall navigation to make the app faster to scan and cleaner to use.
+- Added dedicated cloud world sync with manual world picking, automatic picked-world uploads every 5 minutes when changes are detected, cross-device world downloads, synced-world Home shortcuts, usage/limit summaries, and remove-sync controls.
+- Added extended bundled Java 25 runtime support in release builds for newer Minecraft setups.
+
+### Changed
+- Expanded launcher support for newer Minecraft versions, including refreshed latest-version flows centered around Minecraft `1.21.11`.
+- Refined Quick Actions into a denser, less bloated layout while keeping recent instances, recent worlds and servers, synced worlds, and discover sections intact.
+- Updated Premium messaging across the launcher and website to clearly advertise up to `10` cloud-synced worlds with `40 GB` total storage.
+- Updated cloud sync handling on the service side, including dedicated world-sync storage and newer sync-state handling. If you experience missing sync data, disabled sync actions, or unusual cross-device sync behavior after updating, please open a support ticket in the Fishbattery Discord so we can help quickly.
+
+### Fixed
+- Fixed cloud world sync action states so sync/remove actions now show clearer in-progress feedback and refresh correctly after changes.
+- Fixed multiple world and server action rows to use the correct iconography and more consistent button behavior across the refreshed UI.
+
 ## v0.6.3 - 2026-03-25
 
 ### Fixed
