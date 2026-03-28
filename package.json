@@ -21,7 +21,7 @@
     "@tauri-apps/cli": "2.10.0",
     "extract-zip": "^2.0.1",
     "tar": "^7.5.1",
-    "typescript": "^5.6.3",
+    "typescript": "^6.0.2",
     "vite": "^6.0.0"
   }
 }
