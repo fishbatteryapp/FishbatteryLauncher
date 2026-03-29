@@ -29,6 +29,16 @@ type CloudSyncState = {
   lastSnapshotHash: string | null;
 };
 
+type ComparableCloudSyncSnapshot = {
+  settings: Record<string, unknown>;
+  activeInstanceId: string | null;
+  instances: unknown[];
+  modsStateByInstance: Record<string, unknown>;
+  packsStateByInstance: Record<string, unknown>;
+  settingsUpdatedAt: number;
+  instancesUpdatedAt: number;
+};
+
 type SyncNowInput = {
   settings: Record<string, unknown>;
   policy?: SyncConflictPolicy;
@@ -223,13 +233,40 @@ async function collectFullLocalSnapshot(settings: Record<string, unknown>): Prom
 }
 
 function hashSnapshot(snapshot: CloudSyncSnapshot): string {
-  const str = JSON.stringify(snapshot);
+  const str = JSON.stringify(toComparableSnapshot(snapshot));
   let hash = 2166136261;
   for (let i = 0; i < str.length; i += 1) {
     hash ^= str.charCodeAt(i);
     hash += (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
   }
   return `h${(hash >>> 0).toString(16)}`;
+}
+
+function toComparableSnapshot(snapshot: CloudSyncSnapshot): ComparableCloudSyncSnapshot {
+  return {
+    settings: snapshot.settings && typeof snapshot.settings === "object" ? snapshot.settings : {},
+    activeInstanceId: snapshot.activeInstanceId == null ? null : String(snapshot.activeInstanceId),
+    instances: Array.isArray(snapshot.instances) ? snapshot.instances : [],
+    modsStateByInstance:
+      snapshot.modsStateByInstance && typeof snapshot.modsStateByInstance === "object"
+        ? snapshot.modsStateByInstance
+        : {},
+    packsStateByInstance:
+      snapshot.packsStateByInstance && typeof snapshot.packsStateByInstance === "object"
+        ? snapshot.packsStateByInstance
+        : {},
+    settingsUpdatedAt: numberOr(snapshot.settingsUpdatedAt, 0),
+    instancesUpdatedAt: numberOr(snapshot.instancesUpdatedAt, 0)
+  };
+}
+
+function snapshotHasSyncData(snapshot: CloudSyncSnapshot): boolean {
+  return (
+    !!String(snapshot.activeInstanceId || "").trim() ||
+    (Array.isArray(snapshot.instances) && snapshot.instances.length > 0) ||
+    Object.keys(snapshot.modsStateByInstance || {}).length > 0 ||
+    Object.keys(snapshot.packsStateByInstance || {}).length > 0
+  );
 }
 
 async function fetchRemoteSyncState(): Promise<CloudSyncRemote> {
@@ -363,6 +400,53 @@ export async function cloudSyncSyncNow(input: SyncNowInput): Promise<SyncNowResu
       meta.lastRemoteRevision != null && remote.revision !== meta.lastRemoteRevision;
     const localChangedSinceLastSync =
       meta.lastSnapshotHash != null ? meta.lastSnapshotHash !== localHash : true;
+    const hasSyncBaseline = meta.lastRemoteRevision != null || meta.lastSnapshotHash != null;
+
+    if (!hasSyncBaseline) {
+      const remoteHasSyncData = snapshotHasSyncData(remote.payload);
+      const localHasSyncData = snapshotHasSyncData(localSnapshot);
+
+      if (remoteHasSyncData && !localHasSyncData) {
+        const applied = await applyRemoteSnapshot(remote.payload);
+        const next: CloudSyncState = {
+          ...meta,
+          lastSyncedAt: Date.now(),
+          lastStatus: "pulled",
+          lastError: null,
+          lastRemoteRevision: remote.revision,
+          lastSnapshotHash: remoteHash
+        };
+        writeLocalSyncState(next);
+        return {
+          ok: true,
+          status: "pulled",
+          message: "Pulled existing cloud state onto this device.",
+          lastSyncedAt: next.lastSyncedAt,
+          lastRemoteRevision: next.lastRemoteRevision,
+          settingsPatch: applied.settingsPatch
+        };
+      }
+
+      if (!remoteHasSyncData && localHasSyncData) {
+        const pushed = await pushRemoteSyncState(localSnapshot, remote.revision);
+        const next: CloudSyncState = {
+          ...meta,
+          lastSyncedAt: Date.now(),
+          lastStatus: "pushed",
+          lastError: null,
+          lastRemoteRevision: pushed.revision,
+          lastSnapshotHash: localHash
+        };
+        writeLocalSyncState(next);
+        return {
+          ok: true,
+          status: "pushed",
+          message: "Uploaded this device state as the initial cloud snapshot.",
+          lastSyncedAt: next.lastSyncedAt,
+          lastRemoteRevision: next.lastRemoteRevision
+        };
+      }
+    }
 
     if (remoteChangedSinceLastSync && !localChangedSinceLastSync) {
       const applied = await applyRemoteSnapshot(remote.payload);

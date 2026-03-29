@@ -956,6 +956,7 @@ body{
   grid-column: 1;
   padding: 16px;
   overflow: auto;
+  overflow-x: hidden;
   min-height: 0;
   opacity: 0;
   transform: translateY(16px) scale(.992);
@@ -1011,7 +1012,7 @@ body{
 
 .homeHeroCopy h1{
   margin: 4px 0 0;
-  font-size: 30px;
+  font-size: clamp(24px, 4vw, 30px);
   line-height: 1.02;
   letter-spacing: -.03em;
 }
@@ -2393,6 +2394,10 @@ pre{
 
 /* ---- Responsive layout ---- */
 @media (max-width: 1250px){
+  .app{
+    grid-template-columns: 236px 1fr;
+  }
+
   .grid{
     grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   }
@@ -2410,6 +2415,15 @@ pre{
 
   .libraryTopbarTools{
     flex-wrap: wrap;
+  }
+
+  .account{
+    flex: 1 1 260px;
+  }
+
+  .accountBtn{
+    width: 100%;
+    min-width: 0;
   }
 
   .sectionTitle{
@@ -2452,6 +2466,60 @@ pre{
   .createCustomTop,
   .createConfigGrid{
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 980px){
+  .topbar{
+    align-items: stretch;
+  }
+
+  .libraryTopbarTools,
+  .libraryToolbarControls,
+  .topActions,
+  .homeHeroActions,
+  .instanceHeroActions,
+  .instanceToolbarActions,
+  .instanceFilterActions{
+    width: 100%;
+  }
+
+  .topActions,
+  .homeHeroActions,
+  .instanceHeroActions,
+  .instanceToolbarActions,
+  .instanceFilterActions{
+    justify-content: flex-start;
+  }
+
+  .topActions .btn,
+  .homeHeroActions .btn,
+  .instanceHeroActions .btn,
+  .instanceToolbarActions .btn,
+  .instanceFilterActions .btn{
+    flex: 1 1 170px;
+    justify-content: center;
+  }
+
+  .instanceToolbar .search,
+  .libraryTopbarTools .search{
+    flex-basis: 100%;
+  }
+
+  .discoverPageHeader{
+    grid-template-columns: 1fr;
+  }
+
+  .discoverPageHeader .instancePageHeaderTop{
+    grid-column: 1;
+    grid-row: 1;
+    justify-self: start;
+  }
+
+  .discoverInstanceSummary{
+    grid-column: 1;
+    grid-row: 2;
+    padding-right: 0;
   }
 }
 
@@ -2502,12 +2570,15 @@ pre{
 
   .nav{
     flex-direction: row;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 4px;
   }
 
   .nav button{
-    flex: 1 1 120px;
-    justify-content: center;
+    flex: 0 0 auto;
+    min-width: max-content;
+    justify-content: flex-start;
   }
 
   .sidebarSponsored{
@@ -2520,6 +2591,10 @@ pre{
 
   .sidebarFooterSlot{
     margin-top: 0;
+  }
+
+  .sidebarFooterStack{
+    display: none;
   }
 
   .content{
@@ -2555,6 +2630,12 @@ pre{
     width: calc(100vw - 16px);
     height: calc(100vh - 16px);
     max-height: calc(100vh - 16px);
+  }
+
+  .instancePageTabs,
+  .discoverTypeTabs{
+    width: 100%;
+    overflow-x: auto;
   }
 }
 
@@ -2595,7 +2676,7 @@ pre{
 
   .toolbarSelect,
   .toolbarSelectCompact{
-    flex: 1 1 160px;
+    flex: 1 1 100%;
     min-width: 0;
   }
 
@@ -2619,6 +2700,24 @@ pre{
 
   .grid{
     grid-template-columns: 1fr;
+  }
+
+  .topActions .btn,
+  .homeHeroActions .btn,
+  .instanceHeroActions .btn,
+  .instanceToolbarActions .btn,
+  .instanceFilterActions .btn{
+    flex-basis: 100%;
+  }
+
+  .instanceHero,
+  .discoverInstanceSummary,
+  .instancePageHeaderTop{
+    align-items: flex-start;
+  }
+
+  .filterChipRow::before{
+    display: none;
   }
 
   .settingsLayout{
@@ -3812,6 +3911,8 @@ select optgroup {
   font-weight: 700;
   min-width: 0;
   flex: 1 1 120px;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .instanceCard--compact .instanceSubtext{
@@ -4050,13 +4151,14 @@ select optgroup {
 
 .instanceHeroMeta h2{
   margin: 0;
-  font-size: 32px;
+  font-size: clamp(26px, 3.2vw, 32px);
   line-height: 1.05;
   letter-spacing: -.03em;
+  overflow-wrap: anywhere;
 }
 
 .discoverInstanceSummary .instanceHeroMeta h2{
-  font-size: 24px;
+  font-size: clamp(22px, 2.6vw, 24px);
   line-height: 1.08;
 }
 
@@ -4369,6 +4471,7 @@ select optgroup {
 .instanceWorldMeta strong{
   font-size: 15px;
   line-height: 1.2;
+  overflow-wrap: anywhere;
 }
 
 .instanceInstalledDescription{

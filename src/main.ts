@@ -12,7 +12,6 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import { backend } from "@/compat";
 import { CATALOG } from "../shared/modrinthCatalog";
 import { PACK_CATALOG } from "../shared/modrinthPackCatalog";
-import * as skinview3d from "skinview3d";
 import defaultSkinSteve from "./default-skins/steve.png";
 import defaultSkinAlex from "./default-skins/alex.png";
 import defaultSkinAri from "./default-skins/ari.png";
@@ -22,6 +21,8 @@ import defaultSkinMakena from "./default-skins/makena.png";
 import defaultSkinNoor from "./default-skins/noor.png";
 import defaultSkinSunny from "./default-skins/sunny.png";
 import defaultSkinZuri from "./default-skins/zuri.png";
+
+type Skinview3dModule = typeof import("skinview3d");
 
 const OCEAN_THEME_DEFAULT_BG = "/ocean-theme-default.jpg";
 
@@ -235,6 +236,7 @@ const JOIN_BUTTON_ICON_PATH = "M4 6h16v10H4zM2 4h20v14H2zM6 20h12v2H6z";
 const VANILLA_BUTTON_ICON_DATA_URL =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAACXBIWXMAAAsTAAALEwEAmpwYAAABBklEQVR4nOWUMQrCQBBFH5g6dtraewELwc4beBDtBS+gYO0FxFYQK01vbSlewMbawEpgFsIym2wWLcQPA8nw57/dkF34F/WBBXCRWkjvI6FXwHjqBqyBYWhoG5groQ9gA4ylNtIre64ym1YBjp7QRPEmHtihCvASky/UJwszkuGVXUWsTN28NbS+DbgD08DQNAbgGnuKt+itgGcMYARkpX4O7ICB03P9wQCrTIa1XfkOXyOAUcpdbRRAW7lRyuerBYSWlQv6GGDk/Ay1gHPE9zaO71QF6ALb0i9oFbKbXGY7BKg4RMvSe1XwUw6cdhiDdVeCi96s7v5vch1PgL1U8dzkOv9hvQHB1L4BlVIn0wAAAABJRU5ErkJggg==";
 const STARTUP_REVEAL_TIMEOUT_MS = 2500;
+let skinview3dModulePromise: Promise<Skinview3dModule> | null = null;
 const ICON_ASSETS = {
   back: "/Icons/back-icon.svg",
   block: "/Icons/disable-icon.svg",
@@ -264,6 +266,13 @@ const ICON_ASSETS = {
   discord: "/Icons/discord-icon.svg",
   web: "/Icons/web-icon.svg"
 } as const;
+
+function loadSkinview3d() {
+  if (!skinview3dModulePromise) {
+    skinview3dModulePromise = import("skinview3d");
+  }
+  return skinview3dModulePromise;
+}
 
 function applyActionButtonIcons() {
   const setDynamicButtonIcon = (id: string, iconKey: ActionButtonIconKey) => {
@@ -666,6 +675,7 @@ let launchLogBuffer: string[] = [];
 let startupReady = false;
 let startupRevealStarted = false;
 let startupEmergencyRevealTimer: number | null = null;
+let startupDeferredWorkScheduled = false;
 let latestDiagnosis: any = null;
 let activeContentView: HTMLElement | null = null;
 let contentTransitionToken = 0;
@@ -2804,6 +2814,20 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: str
   }
 }
 
+function scheduleDeferredStartupTask(
+  label: string,
+  task: () => Promise<void> | void,
+  delayMs = 0
+) {
+  window.setTimeout(() => {
+    void Promise.resolve()
+      .then(task)
+      .catch((err: any) => {
+        appendLog(`[startup] ${label} failed: ${String(err?.message ?? err)}`);
+      });
+  }, delayMs);
+}
+
 async function applyNativeWindowSettings(s: AppSettings, opts?: { restoreFullscreen?: boolean }) {
   const { width, height } = normalizeStoredWindowSize(s.winW, s.winH);
   const restoreFullscreen = opts?.restoreFullscreen !== false;
@@ -4778,7 +4802,8 @@ async function buildCharacterRenderDataUrl(
   const canvas = document.createElement("canvas");
   canvas.width = mode === "cape" ? 160 : 176;
   canvas.height = mode === "cape" ? 156 : 176;
-  const viewer = new (skinview3d as any).SkinViewer({
+  const skinview3d = await loadSkinview3d();
+  const viewer = new skinview3d.SkinViewer({
     canvas,
     width: canvas.width,
     height: canvas.height,
@@ -4854,7 +4879,8 @@ async function renderInteractiveCharacterPreview(
 
   const width = Math.max(96, hostEl.clientWidth || 96);
   const height = Math.max(128, hostEl.clientHeight || 128);
-  const viewer = new (skinview3d as any).SkinViewer({
+  const skinview3d = await loadSkinview3d();
+  const viewer = new skinview3d.SkinViewer({
     canvas,
     width,
     height
@@ -13839,137 +13865,165 @@ async function runProviderSearch() {
 }
 
 // ---------------- Data refresh ----------------
-async function refreshAll() {
-  setStatus("Loading...");
-  setStartupProgress("Checking versions, accounts, and services...");
+function queueDeferredStartupWork() {
+  if (startupDeferredWorkScheduled) return;
+  startupDeferredWorkScheduled = true;
 
-  // 1) Pull immutable/version metadata first (used by create modal and compatibility UI).
-  try {
-    const manifest = await backend.versionsList();
-    state.versions = manifest?.versions ?? [];
-  } catch (err: any) {
-    state.versions = [];
-    appendLog(`[startup] versionsList failed: ${String(err?.message ?? err)}`);
-  }
+  scheduleDeferredStartupTask("subscription refresh", async () => {
+    await refreshLauncherSubscription();
+    await renderAccounts();
+  }, 20);
 
-  // 2) Hydrate account/session-facing state before rendering top-level panels.
-  const s = getSettings();
-  try {
-    await backend.updaterSetChannel(s.updateChannel);
-  } catch (err: any) {
-    appendLog(`[startup] updaterSetChannel failed: ${String(err?.message ?? err)}`);
-  }
-  try {
-    state.accounts = await backend.accountsList();
-  } catch (err: any) {
-    state.accounts = { activeId: null, accounts: [] };
-    appendLog(`[startup] accountsList failed: ${String(err?.message ?? err)}`);
-  }
-  try {
-    state.launcherAccount = await backend.launcherAccountGetState();
-  } catch (err: any) {
-    state.launcherAccount = {
-      configured: false,
-      signedIn: false,
-      activeAccountId: null,
-      activeAccount: null,
-      accounts: [],
-      updatedAt: null,
-      error: String(err?.message ?? err ?? "Failed to load launcher account state")
-    };
-  }
-  await refreshLauncherSubscription();
-  try {
-    // Keep a local snapshot of sync status so settings panel can render without waiting on manual sync.
-    const remoteSyncState = await backend.cloudSyncGetState();
-    cloudSyncState = {
-      lastSyncedAt: remoteSyncState?.lastSyncedAt ?? null,
-      lastStatus: remoteSyncState?.lastStatus ?? "idle",
-      lastError: remoteSyncState?.lastError ?? null,
-      lastRemoteRevision: remoteSyncState?.lastRemoteRevision ?? null
-    };
-  } catch {
-    cloudSyncState = {
-      lastSyncedAt: null,
-      lastStatus: "error",
-      lastError: "Could not load cloud sync state.",
-      lastRemoteRevision: null
-    };
-  }
-  await refreshPlayitState(true);
-  try {
-    state.instances = await backend.instancesList();
-  } catch (err: any) {
-    state.instances = { activeInstanceId: null, instances: [] };
-    appendLog(`[startup] instancesList failed: ${String(err?.message ?? err)}`);
-  }
-  try {
-    updaterState = await backend.updaterGetState();
-  } catch (err: any) {
-    appendLog(`[startup] updaterGetState failed: ${String(err?.message ?? err)}`);
-  }
-  try {
-    preflightState = await backend.preflightGetLast();
-  } catch (err: any) {
-    preflightState = null;
-    appendLog(`[startup] preflightGetLast failed: ${String(err?.message ?? err)}`);
+  scheduleDeferredStartupTask("home quick actions", async () => {
+    await renderHomeView(true);
+  }, 40);
+
+  scheduleDeferredStartupTask("library render", async () => {
+    await renderInstances();
+  }, 80);
+
+  if (window.innerWidth > 860) {
+    scheduleDeferredStartupTask("sidebar preview", async () => {
+      await refreshSidebarCharacterPreview(false);
+    }, 140);
   }
 
-  // 3) Render all visible top-level sections from freshly loaded state.
-  setStartupProgress("Rendering your library...");
-  await renderAccounts();
-  try {
-    await refreshSidebarCharacterPreview(false);
-  } catch (err: any) {
-    appendLog(`[startup] sidebar preview failed: ${String(err?.message ?? err)}`);
-  }
-  await renderInstances();
-  void renderHomeView(true).catch((err: any) => {
-    appendLog(`[startup] home quick actions failed: ${String(err?.message ?? err)}`);
-  });
-  try {
-    await renderCapesView(false);
-  } catch (err: any) {
-    appendLog(`[startup] capes preview failed: ${String(err?.message ?? err)}`);
-  }
-  await loadSponsoredBannersFromFeed();
-  await renderSponsoredBannerState();
-  renderConsentBannerState();
-  ensureSponsoredRotation();
-  ensureCloudSyncTimer();
-  setStatus("");
+  scheduleDeferredStartupTask("sponsored surfaces", async () => {
+    await loadSponsoredBannersFromFeed();
+    await renderSponsoredBannerState();
+    ensureSponsoredRotation();
+  }, 220);
+
+  scheduleDeferredStartupTask("consent banner", () => {
+    renderConsentBannerState();
+    ensureCloudSyncTimer();
+  }, 40);
 
   if (!preflightState) {
-    try {
-      // Run preflight once when no cached result exists.
+    scheduleDeferredStartupTask("preflight", async () => {
       preflightState = await backend.preflightRun();
       appendLog(`[preflight] ${preflightSummaryText(preflightState)}`);
-    } catch (err: any) {
-      appendLog(`[preflight] Failed: ${String(err?.message ?? err)}`);
-    }
+    }, 260);
   }
 
   if (!hasAutoCheckedUpdates) {
     hasAutoCheckedUpdates = true;
-    try {
-      // Non-blocking startup update check.
+    scheduleDeferredStartupTask("update check", async () => {
       await backend.updaterCheck();
-    } catch {
-      // Keep startup silent if update check fails.
-    }
+    }, 320);
   }
 
   if (getSettings().cloudSyncEnabled && state.launcherAccount?.activeAccountId) {
-    void guarded(async () => {
-      try {
-        // Best-effort initial cloud sync keeps local launcher state aligned after startup.
-        await runCloudSync(false);
-        renderSettingsPanels();
-      } catch (err: any) {
-        appendLog(`[cloud-sync] ${String(err?.message ?? err)}`);
-      }
-    });
+    scheduleDeferredStartupTask("initial cloud sync", async () => {
+      await runCloudSync(false);
+      renderSettingsPanels();
+    }, 420);
   }
+
+  if (activeView === "capes") {
+    scheduleDeferredStartupTask("capes view", async () => {
+      await renderCapesView(false);
+    }, 120);
+  }
+}
+
+async function refreshAll() {
+  setStatus("Loading...");
+  setStartupProgress("Checking versions, accounts, and services...");
+
+  const s = getSettings();
+
+  await Promise.allSettled([
+    (async () => {
+      try {
+        const manifest = await backend.versionsList();
+        state.versions = manifest?.versions ?? [];
+      } catch (err: any) {
+        state.versions = [];
+        appendLog(`[startup] versionsList failed: ${String(err?.message ?? err)}`);
+      }
+    })(),
+    (async () => {
+      try {
+        await backend.updaterSetChannel(s.updateChannel);
+      } catch (err: any) {
+        appendLog(`[startup] updaterSetChannel failed: ${String(err?.message ?? err)}`);
+      }
+    })(),
+    (async () => {
+      try {
+        state.accounts = await backend.accountsList();
+      } catch (err: any) {
+        state.accounts = { activeId: null, accounts: [] };
+        appendLog(`[startup] accountsList failed: ${String(err?.message ?? err)}`);
+      }
+    })(),
+    (async () => {
+      try {
+        state.launcherAccount = await backend.launcherAccountGetState();
+      } catch (err: any) {
+        state.launcherAccount = {
+          configured: false,
+          signedIn: false,
+          activeAccountId: null,
+          activeAccount: null,
+          accounts: [],
+          updatedAt: null,
+          error: String(err?.message ?? err ?? "Failed to load launcher account state")
+        };
+      }
+    })(),
+    (async () => {
+      try {
+        const remoteSyncState = await backend.cloudSyncGetState();
+        cloudSyncState = {
+          lastSyncedAt: remoteSyncState?.lastSyncedAt ?? null,
+          lastStatus: remoteSyncState?.lastStatus ?? "idle",
+          lastError: remoteSyncState?.lastError ?? null,
+          lastRemoteRevision: remoteSyncState?.lastRemoteRevision ?? null
+        };
+      } catch {
+        cloudSyncState = {
+          lastSyncedAt: null,
+          lastStatus: "error",
+          lastError: "Could not load cloud sync state.",
+          lastRemoteRevision: null
+        };
+      }
+    })(),
+    (async () => {
+      await refreshPlayitState(true);
+    })(),
+    (async () => {
+      try {
+        state.instances = await backend.instancesList();
+      } catch (err: any) {
+        state.instances = { activeInstanceId: null, instances: [] };
+        appendLog(`[startup] instancesList failed: ${String(err?.message ?? err)}`);
+      }
+    })(),
+    (async () => {
+      try {
+        updaterState = await backend.updaterGetState();
+      } catch (err: any) {
+        appendLog(`[startup] updaterGetState failed: ${String(err?.message ?? err)}`);
+      }
+    })(),
+    (async () => {
+      try {
+        preflightState = await backend.preflightGetLast();
+      } catch (err: any) {
+        preflightState = null;
+        appendLog(`[startup] preflightGetLast failed: ${String(err?.message ?? err)}`);
+      }
+    })()
+  ]);
+
+  setStartupProgress("Rendering quick actions...");
+  await renderAccounts();
+  renderConsentBannerState();
+  queueDeferredStartupWork();
+  setStatus("");
 
   const syncTitleBar = () => {
     const computed = getComputedStyle(document.documentElement);
