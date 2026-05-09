@@ -15,7 +15,7 @@
   "dependencies": {
     "@tauri-apps/api": "2.10.1",
     "msmc": "^5.0.5",
-    "skinview3d": "^3.2.0"
+    "skinview3d": "^3.4.2"
   },
   "devDependencies": {
     "@tauri-apps/cli": "2.10.0",
